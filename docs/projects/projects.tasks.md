@@ -62,7 +62,7 @@ Vertical slices for adding the `project` attribution concept to the `pmdr` CLI: 
 
 ### `today-grouped` — `pmdr today` groups by project
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `pmdr today` prints groups by project with per-project pomodoro count and total time, followed by a grand total. `pmdr today --project <name>` filters to a single group. `pmdr today --json` returns `{ groups: [{ project, pomodoros, totalMs, entries: [...] }], total: { pomodoros, totalMs } }`. Legacy entries without `project` appear under `(unassigned)`.
 

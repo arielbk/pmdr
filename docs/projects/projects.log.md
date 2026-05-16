@@ -70,6 +70,28 @@
 
 ---
 
+## today-grouped — 2026-05-16
+
+**Slice:** `today-grouped` — `pmdr today` groups by project
+
+**Status:** done
+
+**What was implemented:**
+- `TodayGroup` interface: `{ project, pomodoros, totalMs, entries }`
+- `TodayGroupedResult` interface: `{ groups: TodayGroup[], total: { pomodoros, totalMs } }`
+- `getTodayGrouped({ store, now, project? })`: calls `store.readToday(now)` (which groups and finalizes), optionally filters to a single project, computes per-group and grand totals
+- `formatTodayGrouped(result)`: renders each group as `<project>: N pomodoros, Xm` followed by indented timestamps, with a `Total: N pomodoros, Xm` grand total line
+- Updated `today` command: added `--project <name>` arg; text output uses `formatTodayGrouped`; JSON output shape is now `{ groups, total }` per spec
+- Preserved legacy `getToday`, `filterToday`, `TodayResult`, `formatToday` exports so existing tests continue to pass
+
+**Tests:** 13 unit tests in `src/__tests__/today-grouped.test.ts` — all pass (142 total across all test files)
+
+**Feedback loop result:** `vitest run` — 142/142 tests pass; `tsc --noEmit` — no errors
+
+**Notes:** `readToday()` in `state.ts` was already implemented by the `log-with-project` slice and returns `Record<string, CompletionRecord[]>` grouped by project, so this slice is a thin consumer of that API.
+
+---
+
 ## project-add-list — 2026-05-16
 
 **Slice:** `project-add-list` — `pmdr project add` and `pmdr project list`
