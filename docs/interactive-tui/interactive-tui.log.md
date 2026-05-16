@@ -2,6 +2,23 @@
 
 ---
 
+## timer-keybindings — 2026-05-16
+
+**Slice:** `timer-keybindings`
+**Status:** done
+
+**What was done:**
+- Updated `apps/cli/src/tui/App.tsx`: added `space` and `s` handlers inside the existing `useInput` block. Pressing `space` reads current paused state from the machine and calls `machine.pause(now)` or `machine.resume(now)`, then immediately calls `setViewState(machine.getState(now))` so the view updates without waiting for the next 500 ms interval tick. Pressing `s` calls `machine.skip(now)` then immediately updates viewState.
+- `q` / `Ctrl+C` were already wired; no change needed there.
+- Created `apps/cli/src/__tests__/timer-keybindings.test.tsx` with 5 tests: space pauses (gray ANSI), space-space resumes (red ANSI), s transitions focus→break, s while paused still skips to break, q does not throw.
+- Discovered that ink v7's `useInput` dispatches state updates via `reconciler.discreteUpdates`, which defers the React re-render to a microtask. Tests needed `await Promise.resolve()` after each `stdin.write()` to flush the render before asserting.
+
+**Feedback loop result:**
+- `pnpm --filter cli test` — 203/203 tests pass (198 prior + 5 new) ✓
+- `pnpm --filter cli check-types` — no type errors ✓
+
+---
+
 ## countdown-view — 2026-05-16
 
 **Slice:** `countdown-view`

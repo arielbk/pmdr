@@ -1,23 +1,43 @@
-import React from "react";
-import { Box, Text, useApp, useInput } from "ink";
+import React, { useEffect, useMemo, useState } from "react";
+import { useApp, useInput } from "ink";
+import { createPhaseStateMachine } from "./phase-state-machine.js";
+import CountdownView from "./CountdownView.js";
+import type { DerivedPhaseState } from "./phase-state-machine.js";
 
 export default function App() {
   const { exit } = useApp();
+  const machine = useMemo(() => createPhaseStateMachine(Date.now()), []);
+
+  const [viewState, setViewState] = useState<DerivedPhaseState>(() =>
+    machine.getState(Date.now()),
+  );
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      machine.tick(now);
+      setViewState(machine.getState(now));
+    }, 500);
+    return () => clearInterval(interval);
+  }, [machine]);
 
   useInput((input, key) => {
-    if (input === "q" || key.ctrl && input === "c") {
+    const now = Date.now();
+    if (input === "q" || (key.ctrl && input === "c")) {
       exit();
+    } else if (input === " ") {
+      const state = machine.getState(now);
+      if (state.paused) {
+        machine.resume(now);
+      } else {
+        machine.pause(now);
+      }
+      setViewState(machine.getState(now));
+    } else if (input === "s") {
+      machine.skip(now);
+      setViewState(machine.getState(now));
     }
   });
 
-  return (
-    <Box flexDirection="column" flexGrow={1}>
-      <Box flexGrow={1} alignItems="center" justifyContent="center">
-        <Text dimColor>PMDR — Interactive TUI</Text>
-      </Box>
-      <Box justifyContent="center">
-        <Text dimColor>space pause · s skip · p project · q quit · ? help</Text>
-      </Box>
-    </Box>
-  );
+  return <CountdownView {...viewState} />;
 }

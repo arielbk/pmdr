@@ -42,7 +42,7 @@ Adds a fullscreen Ink-based TUI for human users when `pmdr` is run with no subco
 
 ### `timer-keybindings` — Pause, skip, quit keys
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** Inside the TUI: `space` toggles pause/resume (countdown freezes and dims), `s` skips to the next phase (logs completion of current block, transitions immediately), `q` and `Ctrl+C` quit cleanly back to the shell.
 
