@@ -104,7 +104,7 @@ Vertical slices for adding the `project` attribution concept to the `pmdr` CLI: 
 
 ### `start-picker` — Clack picker for the interactive TTY case
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** `pmdr start` with no `--project` in a TTY shows a Clack single-select picker listing non-archived projects in creation order plus a final "new…" option. Selecting "new…" opens a free-form text input. The chosen name is passed through `upsertProject` and the timer starts as if `--project` had been supplied. `pmdr start --no-interactive` forces the no-TTY error path even when stdout is a TTY.
 

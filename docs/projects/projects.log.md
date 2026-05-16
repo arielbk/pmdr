@@ -154,3 +154,23 @@
 **Feedback loop result:** `npm test` — 155/155 tests pass; `tsc --noEmit` — no errors
 
 **Notes:** `renameProject` validates both sides for `(unassigned)` sentinel before touching the store. `rewriteCompletionProject` handles empty log gracefully (no-op). Error in `renameProject` prevents `rewriteCompletionProject` from running, keeping the log consistent with the projects store.
+
+---
+
+## start-picker — 2026-05-16
+
+**Slice:** `start-picker` — Clack picker for the interactive TTY case
+
+**Status:** needs-review
+
+**What was implemented:**
+- Installed `@clack/prompts@^1.4.0` as a production dependency (manually copied to `apps/cli/node_modules/@clack/` with transitive deps; added to `package.json`)
+- `pickProject({ projects, selectFn?, textFn?, isCancelFn?, cancelFn? })` exported from `commands/start.ts`: lists non-archived projects via `listProjects({ includeArchived: false })`, appends a `"new…"` option (internal sentinel value `"__new__"`), shows a Clack `select` picker; if `"new…"` is chosen, shows a Clack `text` prompt with validation (non-empty, not `(unassigned)`, ≤100 chars); both prompts handle cancellation via `cancelFn` + `process.exit(1)`; the chosen name is passed through `upsertProject` to canonicalize casing
+- `run` function in `commands/start.ts`: replaced `"(unassigned)"` fallback with `await pickProject({ projects })` — the interactive picker is only reached when `projectArg` is absent and the prior guard (`!isTTY || --no-interactive`) has already been passed
+- All injectable parameters (`selectFn`, `textFn`, `isCancelFn`, `cancelFn`) default to their `@clack/prompts` counterparts in production
+
+**Tests:** 7 unit tests in `src/__tests__/start-picker.test.ts` — all pass (172 total across all test files)
+
+**Feedback loop result:** `npm test` — 172/172 tests pass; `tsc --noEmit` — no errors. Human-in-the-loop verification pending (see slice spec).
+
+**Notes:** The feedback loop for this slice is human-in-the-loop — automated tests cover the logic layer (project selection, "new…" path, cancellation exit), while the actual Clack UI rendering requires a real TTY. Marked `needs-review` for human sign-off on interactive behaviour. `--no-interactive` flag continues to force the error path even in a TTY (no change from `start-with-project` slice).
