@@ -82,6 +82,19 @@ export function createStateModule(stateDir: string) {
     }
   }
 
+  function readCompletions(): CompletionRecord[] {
+    try {
+      const raw = readFileSync(completionsFile, "utf8");
+      return raw
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as CompletionRecord);
+    } catch {
+      return [];
+    }
+  }
+
   function appendCompletion(record: CompletionRecord): void {
     mkdirSync(stateDir, { recursive: true });
     const line = JSON.stringify(record) + "\n";
@@ -101,7 +114,7 @@ export function createStateModule(stateDir: string) {
     clearState();
   }
 
-  return { readState, writeState, clearState, appendCompletion, finalizeIfExpired };
+  return { readState, writeState, clearState, readCompletions, appendCompletion, finalizeIfExpired };
 }
 
 const _prod = createStateModule(join(homedir(), ".local", "state", "pmdr"));
@@ -109,6 +122,7 @@ const _prod = createStateModule(join(homedir(), ".local", "state", "pmdr"));
 export const readState = (): StateRecord | null => _prod.readState();
 export const writeState = (s: StateRecord): void => _prod.writeState(s);
 export const clearState = (): void => _prod.clearState();
+export const readCompletions = (): CompletionRecord[] => _prod.readCompletions();
 export const appendCompletion = (r: CompletionRecord): void =>
   _prod.appendCompletion(r);
 export const finalizeIfExpired = (now: number): void =>

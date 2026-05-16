@@ -76,7 +76,7 @@ Vertical slices for shipping the v1 `pmdr` CLI as `apps/cli`: scaffold + Citty, 
 
 ### `today-command` — `pmdr today [--json]`
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `pmdr today` prints `N pomodoros today` followed by the local-time list of completion timestamps. `pmdr today --json` prints `{ count, completions: [{ completedAt, durationMs }, ...] }`.
 

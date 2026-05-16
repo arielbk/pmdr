@@ -96,3 +96,24 @@
 - `vitest run` → 63/63 tests pass (19 state + 11 status + 18 start + 15 pause-resume-stop) ✓
 - `tsc --noEmit` → no type errors ✓
 - `tsup build` → compiles cleanly ✓
+
+---
+
+## today-command — 2026-05-16
+
+**Slice:** `today-command`
+**Status:** done
+
+**What was done:**
+- Added `readCompletions()` to `createStateModule` in `apps/cli/src/state.ts`: reads `completions.jsonl`, returns `CompletionRecord[]` (returns `[]` if file absent).
+- Rewrote `apps/cli/src/commands/today.ts` with:
+  - Exported `filterToday(completions, now)` — pure filter using local-date boundary (year/month/day comparison on `new Date(completedAt)` vs `new Date(now)`).
+  - Exported `getToday({ store, now })` that calls `store.finalizeIfExpired(now)` (lazy-completion path), reads all completions, filters to today, returns `{ count, completions }`.
+  - Exported `formatToday(result)` that prints `N pomodoro(s) today` with an indented HH:MM timestamp line per completion. Hours are unpadded; minutes are zero-padded.
+  - The citty command prints JSON (`JSON.stringify(result)`) on `--json`, otherwise `formatToday(result)`.
+- Created `apps/cli/src/__tests__/today.test.ts` with 15 tests covering: `filterToday` (empty input, same-date inclusion, previous-date exclusion, future-date exclusion, mixed boundary list), `formatToday` (zero count, singular/plural label, multi-line indented list, minute padding), and `getToday` (no completions file, all-today completions, yesterday exclusion, expired-timer finalization, JSON shape).
+
+**Feedback loop result:**
+- `vitest run` → 78/78 tests pass (19 state + 18 start + 11 status + 15 pause-resume-stop + 15 today) ✓
+- `tsc --noEmit` → no type errors ✓
+- `tsup build` → compiles cleanly ✓
