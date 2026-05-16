@@ -20,7 +20,7 @@ Vertical slices for shipping the v1 `pmdr` CLI as `apps/cli`: scaffold + Citty, 
 
 ### `state-module` — state file + derivation + lazy completion
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** A module exposing `readState()`, `writeState(s)`, `clearState()`, `deriveState({ file, now })` → `{ kind: "idle" | "running" | "paused" | "expired", remainingMs }`, `appendCompletion({ completedAt, durationMs })`, and `finalizeIfExpired(now)` that consumes any expired record into the log and clears the state file.
 

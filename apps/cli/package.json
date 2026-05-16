@@ -10,7 +10,8 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "lint": "eslint src",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "citty": "^0.2.2"
@@ -19,6 +20,7 @@
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "tsup": "^8.0.0",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "vitest": "^2.0.0"
   }
 }
