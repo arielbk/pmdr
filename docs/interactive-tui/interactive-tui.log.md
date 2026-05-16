@@ -2,6 +2,24 @@
 
 ---
 
+## project-picker-overlay — 2026-05-16
+
+**Slice:** `project-picker-overlay`
+**Status:** done
+
+**What was done:**
+- Created `apps/cli/src/tui/ProjectPickerOverlay.tsx`: a self-contained overlay component that accepts `projects: ProjectRecord[]`, `onSelect(name: string)`, and `onClose()` props. Arrow keys navigate the list; Enter selects the highlighted entry (or, if "new…" is highlighted, enters text-input mode); Escape closes the overlay. Text-input mode is hand-rolled via `useInput` — printable characters append to state, `\x7f`/backspace removes the last char, Enter confirms, Escape returns to the list. The component handles both `key.escape` and the raw `input === "\x1B"` case to work correctly in Ink's testing environment.
+- Updated `apps/cli/src/tui/App.tsx`: added `showProjectPicker`, `currentProject`, and `pickerProjects` state; added a `p` key handler (active only when overlay is closed) that fetches projects and opens the picker; wires `handleProjectSelect` (calls `upsertProjectFn`, `machine.setProject`, sets `currentProject`) and `handlePickerClose`; passes `currentProject` to `CountdownView`; conditionally renders `ProjectPickerOverlay` on top of the countdown view. The App now accepts optional `getProjects` and `upsertProjectFn` props for test injection, defaulting to the real `listProjects` / `upsertProject` implementations. App's `useInput` is set `isActive: !showProjectPicker` so keystrokes don't leak through to the timer while the overlay is open.
+- Created `apps/cli/src/__tests__/project-picker-overlay.test.tsx` with 15 tests: list rendering (shows projects, "new…", "Applies from next block" hint, initial highlight), navigation (down arrow, up arrow clamping), selection (Enter selects, down+Enter selects second, Escape closes), new-project flow (selecting "new…" shows prompt, typing+Enter calls onSelect, backspace removes chars, Escape returns to list), App-level integration (pressing `p` opens overlay, selecting project shows name in countdown, overlay closes).
+- Navigation tests use `frame.includes("> alpha")` / `frame.includes("> beta")` rather than `lastIndexOf` because when alpha is highlighted both `lastIndexOf(">", alphaIdx)` and `lastIndexOf(">", betaIdx)` return the same position.
+- Escape tests use `vi.runAllTimers()` after `stdin.write("\x1B")` to advance Ink's internal escape-detection debounce timeout; the component also checks `input === "\x1B"` as a fallback for environments where `key.escape` isn't set by the time the handler fires.
+
+**Feedback loop result:**
+- `pnpm --filter cli test` — 218/218 tests pass (203 prior + 15 new) ✓
+- `pnpm --filter cli check-types` — no type errors ✓
+
+---
+
 ## timer-keybindings — 2026-05-16
 
 **Slice:** `timer-keybindings`

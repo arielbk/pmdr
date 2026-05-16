@@ -54,7 +54,7 @@ Adds a fullscreen Ink-based TUI for human users when `pmdr` is run with no subco
 
 ### `project-picker-overlay` — Project switch overlay
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** Pressing `p` opens an overlay listing all non-archived projects plus a "new…" entry; selecting one sets the project for the *next* block (overlay hint reads "Applies from next block"); the current timer continues ticking underneath the overlay; selecting "new…" prompts for a name and creates it via `createProjectsModule`.
 
