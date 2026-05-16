@@ -30,7 +30,7 @@ Adds a fullscreen Ink-based TUI for human users when `pmdr` is run with no subco
 
 ### `countdown-view` — Fullscreen countdown layout
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** Bare `pmdr` shows: phase label (`FOCUS`/`BREAK`) top-center, dim project name below it, `<BigText>` countdown in ANSI red (focus) or green (break) or dim (paused), completed-blocks dots row, bottom hint line `space pause · s skip · p project · q quit · ? help`.
 

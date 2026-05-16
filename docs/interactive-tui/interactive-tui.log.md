@@ -2,6 +2,28 @@
 
 ---
 
+## countdown-view — 2026-05-16
+
+**Slice:** `countdown-view`
+**Status:** needs-review (Human checkpoint: yes)
+
+**What was done:**
+- Installed `ink-big-text`, `figlet`, and `@types/figlet` as dependencies.
+- Created `apps/cli/src/tui/CountdownView.tsx`: renders a fullscreen countdown layout with:
+  - Phase label (`FOCUS`/`BREAK`) centered at top (bold `<Text>`)
+  - Dim project name row below the label
+  - `<BigText>` countdown (formatted as `MM:SS`) with `colors: ['red']` for focus, `['green']` for break, `['gray']` for paused
+  - Completed-blocks dots row (`○` when zero, `● ● …` otherwise), dimmed when paused
+  - Bottom hint bar: `space pause · s skip · p project · q quit · ? help`
+- Updated `apps/cli/src/tui/App.tsx`: replaced placeholder frame with `CountdownView`; wires up `createPhaseStateMachine`, a `setInterval` tick every 500 ms via `useEffect`, and derived `viewState` via `useState`; `q` / `Ctrl+C` still exits.
+- Created `apps/cli/src/__tests__/countdown-view.test.tsx` with 6 smoke tests covering: FOCUS label renders, BREAK label renders, red ANSI color for focus, green ANSI color for break, project name renders, hint line key bindings.
+
+**Feedback loop result:**
+- `pnpm --filter cli test` — 198/198 tests pass (192 prior + 6 new) ✓
+- `pnpm --filter cli check-types` — no type errors ✓
+
+---
+
 ## phase-state-machine — 2026-05-16
 
 **Slice:** `phase-state-machine`
