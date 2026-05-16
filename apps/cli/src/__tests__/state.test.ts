@@ -170,14 +170,14 @@ describe("filesystem operations", () => {
   });
 
   it("appendCompletion creates and appends to completions.jsonl", () => {
-    store.appendCompletion({ completedAt: 1000, durationMs: 60_000 });
-    store.appendCompletion({ completedAt: 2000, durationMs: 60_000 });
+    store.appendCompletion({ completedAt: 1000, durationMs: 60_000, project: "(unassigned)" });
+    store.appendCompletion({ completedAt: 2000, durationMs: 60_000, project: "(unassigned)" });
 
     const raw = readFileSync(join(tmpDir, "completions.jsonl"), "utf8");
     const lines = raw.trim().split("\n");
     expect(lines).toHaveLength(2);
-    expect(JSON.parse(lines[0]!)).toEqual({ completedAt: 1000, durationMs: 60_000 });
-    expect(JSON.parse(lines[1]!)).toEqual({ completedAt: 2000, durationMs: 60_000 });
+    expect(JSON.parse(lines[0]!)).toMatchObject({ completedAt: 1000, durationMs: 60_000 });
+    expect(JSON.parse(lines[1]!)).toMatchObject({ completedAt: 2000, durationMs: 60_000 });
   });
 });
 

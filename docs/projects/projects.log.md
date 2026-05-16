@@ -27,6 +27,27 @@
 
 ---
 
+## log-with-project — 2026-05-16
+
+**Slice:** `log-with-project` — log entries carry a project
+
+**Status:** done
+
+**What was implemented:**
+- `CompletionRecord` in `state.ts`: added optional `project?: string` field (backward-compat for reading legacy log entries)
+- `CompletionWrite` type: exported type alias with `project: string` required — calling `appendCompletion` without `project` is a TypeScript type error
+- `appendCompletion(record: CompletionWrite)`: updated to require `project`; existing `finalizeIfExpired` caller passes `"(unassigned)"` as interim default (will be overridden by `start-with-project`)
+- `readToday(now: number): Record<string, CompletionRecord[]>`: new method on `createStateModule` — calls `finalizeIfExpired`, filters to local-date boundary, groups by `entry.project ?? "(unassigned)"`. Also exported as module-level prod singleton.
+- Updated existing `appendCompletion` callers in `state.test.ts` and `today.test.ts` to pass `project: "(unassigned)"`
+
+**Tests:** 10 unit tests in `src/__tests__/log-with-project.test.ts` — all pass (122 total across all test files)
+
+**Feedback loop result:** `vitest run` — 122/122 tests pass; `tsc --noEmit` — no errors
+
+**Notes:** `readToday` result is `Record<string, CompletionRecord[]>` keyed by project name; `today-grouped` and `start-with-project` slices will consume this. Legacy JSONL entries with no `project` field land under `"(unassigned)"` key.
+
+---
+
 ## project-add-list — 2026-05-16
 
 **Slice:** `project-add-list` — `pmdr project add` and `pmdr project list`

@@ -27,7 +27,14 @@ export interface DerivedState {
 export interface CompletionRecord {
   completedAt: number;
   durationMs: number;
+  project?: string;
 }
+
+export type CompletionWrite = {
+  completedAt: number;
+  durationMs: number;
+  project: string;
+};
 
 export function deriveState({
   file,
@@ -95,7 +102,7 @@ export function createStateModule(stateDir: string) {
     }
   }
 
-  function appendCompletion(record: CompletionRecord): void {
+  function appendCompletion(record: CompletionWrite): void {
     mkdirSync(stateDir, { recursive: true });
     const line = JSON.stringify(record) + "\n";
     appendFileSync(completionsFile, line, "utf8");
@@ -110,11 +117,32 @@ export function createStateModule(stateDir: string) {
 
     const completedAt =
       file.startedAt + file.durationMs + file.accumulatedPauseMs;
-    appendCompletion({ completedAt, durationMs: file.durationMs });
+    appendCompletion({ completedAt, durationMs: file.durationMs, project: "(unassigned)" });
     clearState();
   }
 
-  return { readState, writeState, clearState, readCompletions, appendCompletion, finalizeIfExpired };
+  function readToday(now: number): Record<string, CompletionRecord[]> {
+    finalizeIfExpired(now);
+    const all = readCompletions();
+    const nowD = new Date(now);
+    const todayEntries = all.filter((c) => {
+      const d = new Date(c.completedAt);
+      return (
+        d.getFullYear() === nowD.getFullYear() &&
+        d.getMonth() === nowD.getMonth() &&
+        d.getDate() === nowD.getDate()
+      );
+    });
+    const groups: Record<string, CompletionRecord[]> = {};
+    for (const entry of todayEntries) {
+      const key = entry.project ?? "(unassigned)";
+      if (!groups[key]) groups[key] = [];
+      groups[key]!.push(entry);
+    }
+    return groups;
+  }
+
+  return { readState, writeState, clearState, readCompletions, appendCompletion, finalizeIfExpired, readToday };
 }
 
 const _prod = createStateModule(join(homedir(), ".local", "state", "pmdr"));
@@ -123,7 +151,9 @@ export const readState = (): StateRecord | null => _prod.readState();
 export const writeState = (s: StateRecord): void => _prod.writeState(s);
 export const clearState = (): void => _prod.clearState();
 export const readCompletions = (): CompletionRecord[] => _prod.readCompletions();
-export const appendCompletion = (r: CompletionRecord): void =>
+export const appendCompletion = (r: CompletionWrite): void =>
   _prod.appendCompletion(r);
+export const readToday = (now: number): Record<string, CompletionRecord[]> =>
+  _prod.readToday(now);
 export const finalizeIfExpired = (now: number): void =>
   _prod.finalizeIfExpired(now);

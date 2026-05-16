@@ -34,7 +34,7 @@ Vertical slices for adding the `project` attribution concept to the `pmdr` CLI: 
 
 ### `log-with-project` — log entries carry a project
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `appendCompletion({ completedAt, durationMs, project })` requires the `project` field. `readToday()` returns entries grouped by project name; entries from the existing log (no `project` field) group under the reserved `(unassigned)` key.
 
