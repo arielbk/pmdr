@@ -76,7 +76,7 @@ Vertical slices for adding the `project` attribution concept to the `pmdr` CLI: 
 
 ### `project-rename` — `pmdr project rename <old> <new>`
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `pmdr project rename <old> <new>` updates `projects.json` (case-insensitive match on `<old>`, canonical-casing write of `<new>`) and rewrites every entry in `log.jsonl` whose `project` matches `<old>` case-insensitively to `<new>`. Errors if `<old>` does not exist; errors if `<new>` already exists as a distinct project (use case-insensitive collision check). Reserved sentinel `(unassigned)` is not a valid `<old>` or `<new>`.
 

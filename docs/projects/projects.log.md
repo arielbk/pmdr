@@ -112,3 +112,23 @@
 **Feedback loop result:** `vitest run` — 112/112 tests pass; `tsc --noEmit` — no errors; manual: duplicate add errors, canonical casing preserved, JSON output parses cleanly
 
 **Notes:** esbuild linux-arm64 binary installed manually (same issue as projects-module iteration).
+
+---
+
+## project-rename — 2026-05-16
+
+**Slice:** `project-rename` — `pmdr project rename <old> <new>`
+
+**Status:** done
+
+**What was implemented:**
+- `renameProject(oldName, newName)` added to `createProjectsModule` in `projects.ts`: case-insensitive match on `old`, writes canonical casing of `new`, throws if `old` not found, throws on case-insensitive collision with a distinct project, rejects `(unassigned)` on either side; module-level export added
+- `rewriteCompletionProject(oldName, newName)` added to `createStateModule` in `state.ts`: reads all completions, rewrites entries where `project` matches `oldName` case-insensitively to `newName`'s canonical casing, atomically rewrites `completions.jsonl` via temp+rename; module-level export added
+- `renameProjectLogic(projectsStore, stateStore, oldName, newName)` exported from `commands/project.ts`: calls `renameProject` first (errors propagate without touching the log), then `rewriteCompletionProject`
+- `renameCmd` sub-command added to `commands/project.ts`, wired into `project` command as `rename`
+
+**Tests:** 13 unit tests in `src/__tests__/project-rename.test.ts` — all pass (155 total across all test files)
+
+**Feedback loop result:** `npm test` — 155/155 tests pass; `tsc --noEmit` — no errors
+
+**Notes:** `renameProject` validates both sides for `(unassigned)` sentinel before touching the store. `rewriteCompletionProject` handles empty log gracefully (no-op). Error in `renameProject` prevents `rewriteCompletionProject` from running, keeping the log consistent with the projects store.

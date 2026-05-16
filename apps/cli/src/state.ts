@@ -122,6 +122,26 @@ export function createStateModule(stateDir: string) {
     clearState();
   }
 
+  function rewriteCompletionProject(oldName: string, newName: string): void {
+    const completions = readCompletions();
+    const oldNorm = oldName.trim().toLowerCase();
+    const newTrimmed = newName.trim();
+    const updated = completions.map((c) => {
+      if ((c.project ?? "").toLowerCase() === oldNorm) {
+        return { ...c, project: newTrimmed };
+      }
+      return c;
+    });
+    mkdirSync(stateDir, { recursive: true });
+    const tmp = join(
+      tmpdir(),
+      `pmdr-completions-${randomBytes(6).toString("hex")}.jsonl`,
+    );
+    const content = updated.map((c) => JSON.stringify(c)).join("\n");
+    writeFileSync(tmp, content.length > 0 ? content + "\n" : "", "utf8");
+    renameSync(tmp, completionsFile);
+  }
+
   function readToday(now: number): Record<string, CompletionRecord[]> {
     finalizeIfExpired(now);
     const all = readCompletions();
@@ -143,7 +163,7 @@ export function createStateModule(stateDir: string) {
     return groups;
   }
 
-  return { readState, writeState, clearState, readCompletions, appendCompletion, finalizeIfExpired, readToday };
+  return { readState, writeState, clearState, readCompletions, appendCompletion, finalizeIfExpired, readToday, rewriteCompletionProject };
 }
 
 const _prod = createStateModule(join(homedir(), ".local", "state", "pmdr"));
@@ -158,3 +178,5 @@ export const readToday = (now: number): Record<string, CompletionRecord[]> =>
   _prod.readToday(now);
 export const finalizeIfExpired = (now: number): void =>
   _prod.finalizeIfExpired(now);
+export const rewriteCompletionProject = (oldName: string, newName: string): void =>
+  _prod.rewriteCompletionProject(oldName, newName);

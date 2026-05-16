@@ -98,7 +98,37 @@ export function createProjectsModule(stateDir: string) {
     return projects.filter((p) => !p.archived);
   }
 
-  return { readProjects, writeProjects, findProject, upsertProject, archiveProject, unarchiveProject, listProjects };
+  function renameProject(oldName: string, newName: string): ProjectRecord {
+    const oldTrimmed = oldName.trim();
+    const newTrimmed = newName.trim();
+
+    if (isUnassigned(oldTrimmed)) {
+      throw new Error(`"${UNASSIGNED}" is a reserved sentinel and cannot be renamed`);
+    }
+    if (isUnassigned(newTrimmed)) {
+      throw new Error(`"${UNASSIGNED}" is a reserved sentinel and cannot be used as a project name`);
+    }
+
+    const projects = readProjects();
+    const oldNorm = oldTrimmed.toLowerCase();
+    const newNorm = newTrimmed.toLowerCase();
+
+    const oldIdx = projects.findIndex((p) => p.name.toLowerCase() === oldNorm);
+    if (oldIdx === -1) {
+      throw new Error(`Project "${oldTrimmed}" not found`);
+    }
+
+    const collision = projects.find((p, i) => i !== oldIdx && p.name.toLowerCase() === newNorm);
+    if (collision) {
+      throw new Error(`Project "${collision.name}" already exists`);
+    }
+
+    projects[oldIdx]!.name = newTrimmed;
+    writeProjects(projects);
+    return projects[oldIdx]!;
+  }
+
+  return { readProjects, writeProjects, findProject, upsertProject, archiveProject, unarchiveProject, listProjects, renameProject };
 }
 
 const _prod = createProjectsModule(join(homedir(), ".local", "state", "pmdr"));
@@ -110,3 +140,4 @@ export const upsertProject = (name: string): ProjectRecord => _prod.upsertProjec
 export const archiveProject = (name: string): void => _prod.archiveProject(name);
 export const unarchiveProject = (name: string): void => _prod.unarchiveProject(name);
 export const listProjects = (opts: { includeArchived: boolean }): ProjectRecord[] => _prod.listProjects(opts);
+export const renameProject = (oldName: string, newName: string): ProjectRecord => _prod.renameProject(oldName, newName);

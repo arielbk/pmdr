@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createProjectsModule } from "../projects.js";
 import type { ProjectRecord } from "../projects.js";
+import { createStateModule } from "../state.js";
 
 const STATE_DIR = join(homedir(), ".local", "state", "pmdr");
 
@@ -44,6 +45,17 @@ export function formatProjectList(
       return `${r.name}${marker}`;
     })
     .join("\n");
+}
+
+export function renameProjectLogic(
+  projectsStore: ReturnType<typeof createProjectsModule>,
+  stateStore: ReturnType<typeof createStateModule>,
+  oldName: string,
+  newName: string,
+): ProjectRecord {
+  const record = projectsStore.renameProject(oldName, newName);
+  stateStore.rewriteCompletionProject(oldName, newName);
+  return record;
 }
 
 // ─── sub-commands ─────────────────────────────────────────────────────────────
@@ -99,6 +111,26 @@ const listCmd = defineCommand({
   },
 });
 
+const renameCmd = defineCommand({
+  meta: { description: "Rename a project" },
+  args: {
+    old: { type: "positional", required: true, description: "Current project name" },
+    new: { type: "positional", required: true, description: "New project name" },
+  },
+  run({ args }) {
+    const projectsStore = createProjectsModule(STATE_DIR);
+    const stateStore = createStateModule(STATE_DIR);
+    let record: ProjectRecord;
+    try {
+      record = renameProjectLogic(projectsStore, stateStore, args.old as string, args.new as string);
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    console.log(`Renamed project to "${record.name}"`);
+  },
+});
+
 // ─── project command ──────────────────────────────────────────────────────────
 
 export default defineCommand({
@@ -106,5 +138,6 @@ export default defineCommand({
   subCommands: {
     add: addCmd,
     list: listCmd,
+    rename: renameCmd,
   },
 });
