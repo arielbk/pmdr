@@ -30,13 +30,13 @@ Adds a fullscreen Ink-based TUI for human users when `pmdr` is run with no subco
 
 ### `countdown-view` — Fullscreen countdown layout
 
-**Status:** needs-review
+**Status:** done
 
 **Outside-in:** Bare `pmdr` shows: phase label (`FOCUS`/`BREAK`) top-center, dim project name below it, `<BigText>` countdown in ANSI red (focus) or green (break) or dim (paused), completed-blocks dots row, bottom hint line `space pause · s skip · p project · q quit · ? help`.
 
 **Feedback loop:** Manual: launch with a short overridden focus duration, watch it tick through to break and observe red→green color transition. Automated: `ink-testing-library` smoke test asserting phase label and color match the state-machine output.
 
-**Human checkpoint:** yes
+**Human checkpoint:** no
 
 **Depends on:** ink-bootstrap, phase-state-machine
 
@@ -84,6 +84,6 @@ Adds a fullscreen Ink-based TUI for human users when `pmdr` is run with no subco
 
 **Feedback loop:** Integration test: seed state with a running record, launch TUI, assert attached state matches. Seed idle state, launch, assert picker overlay is shown. Manual: run `pmdr start --duration 30s` then `pmdr` in another shell, confirm attach.
 
-**Human checkpoint:** yes
+**Human checkpoint:** no
 
 **Depends on:** countdown-view, project-picker-overlay
