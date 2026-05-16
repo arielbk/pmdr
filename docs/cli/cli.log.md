@@ -59,3 +59,22 @@
 - `tsup build` → compiles cleanly ✓
 - Manual: `pmdr start --duration 2s` shows countdown, fires bell, exits, logs to `completions.jsonl` ✓
 - Manual: starting a second timer while one is running prints "A pomodoro is already running." and exits 1 ✓
+
+---
+
+## status-command — 2026-05-16
+
+**Slice:** `status-command`
+**Status:** done
+
+**What was done:**
+- Exported `getStatus({ store, now })` from `apps/cli/src/commands/status.ts` that: calls `store.finalizeIfExpired(now)` (lazy-completion path), derives state, and returns a typed `StatusResult` — either `{ state: "idle" }` or `{ state: "running"|"paused", remainingMs, duration, startedAt }`.
+- Exported `formatStatus(result)` that formats idle as `"idle"` and running/paused as `"running — mm:ss left"` / `"paused — mm:ss left"`.
+- Wired the citty command: reads the prod state module, calls `getStatus`, and outputs either `JSON.stringify(result)` (`--json` flag) or `formatStatus(result)`.
+- The `--json` output shape matches the spec: `{ state, remainingMs, duration, startedAt }` (or `{ state: "idle" }`).
+- Created `apps/cli/src/__tests__/status.test.ts` with 11 tests covering: idle (no file), running, paused, expired → idle (lazy finalization), completion appended on lazy-finalize, accumulated-pause math, and all `formatStatus` cases (idle, running, paused, 0s, seconds padding).
+
+**Feedback loop result:**
+- `vitest run` → 48/48 tests pass (19 state + 18 start + 11 status) ✓
+- `tsc --noEmit` → no type errors ✓
+- `tsup build` → compiles cleanly ✓

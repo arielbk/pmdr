@@ -48,7 +48,7 @@ Vertical slices for shipping the v1 `pmdr` CLI as `apps/cli`: scaffold + Citty, 
 
 ### `status-command` — `pmdr status [--json]`
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `pmdr status` prints a human line like `running — 18:42 left` / `paused — 18:42 left` / `idle`. `pmdr status --json` prints `{ state, remainingMs, duration, startedAt }` (or `{ state: "idle" }`).
 
