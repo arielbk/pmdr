@@ -1,32 +1,80 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useApp, useInput } from "ink";
 import { createPhaseStateMachine } from "./phase-state-machine.js";
 import CountdownView from "./CountdownView.js";
 import ProjectPickerOverlay from "./ProjectPickerOverlay.js";
 import HelpOverlay from "./HelpOverlay.js";
 import { listProjects, upsertProject } from "../projects.js";
-import type { DerivedPhaseState } from "./phase-state-machine.js";
+import { readState, deriveState } from "../state.js";
+import type { DerivedPhaseState, InitialMachineState } from "./phase-state-machine.js";
 import type { ProjectRecord } from "../projects.js";
+import type { StateRecord } from "../state.js";
 
 interface AppProps {
   getProjects?: () => ProjectRecord[];
   upsertProjectFn?: (name: string) => ProjectRecord;
+  readStateFn?: () => StateRecord | null;
+}
+
+interface AppInit {
+  machine: ReturnType<typeof createPhaseStateMachine>;
+  showProjectPicker: boolean;
+  pickerProjects: ProjectRecord[];
+  currentProject: string | undefined;
+}
+
+function buildAppInit(
+  readStateFn: () => StateRecord | null,
+  getProjects: () => ProjectRecord[],
+): AppInit {
+  const now = Date.now();
+  const record = readStateFn();
+  const kind = record ? deriveState({ file: record, now }).kind : "idle";
+
+  if (record && (kind === "running" || kind === "paused")) {
+    const seed: InitialMachineState = {
+      phase: "focus",
+      phaseStartedAt: record.startedAt,
+      phaseDurationMs: record.durationMs,
+      pausedAt: record.pausedAt,
+      accumulatedPauseMs: record.accumulatedPauseMs,
+      completedFocusBlocks: 0,
+      project: record.project,
+    };
+    return {
+      machine: createPhaseStateMachine(now, { initialState: seed }),
+      showProjectPicker: false,
+      pickerProjects: [],
+      currentProject: record.project,
+    };
+  }
+
+  return {
+    machine: createPhaseStateMachine(now),
+    showProjectPicker: true,
+    pickerProjects: getProjects(),
+    currentProject: undefined,
+  };
 }
 
 export default function App({
   getProjects = () => listProjects({ includeArchived: false }),
   upsertProjectFn = upsertProject,
+  readStateFn = readState,
 }: AppProps) {
   const { exit } = useApp();
-  const machine = useMemo(() => createPhaseStateMachine(Date.now()), []);
+
+  const [{ machine, showProjectPicker: initPicker, pickerProjects: initPickerProjects, currentProject: initProject }] = useState(
+    () => buildAppInit(readStateFn, getProjects),
+  );
 
   const [viewState, setViewState] = useState<DerivedPhaseState>(() =>
     machine.getState(Date.now()),
   );
-  const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [showProjectPicker, setShowProjectPicker] = useState(initPicker);
   const [showHelp, setShowHelp] = useState(false);
-  const [currentProject, setCurrentProject] = useState<string | undefined>(undefined);
-  const [pickerProjects, setPickerProjects] = useState<ProjectRecord[]>([]);
+  const [currentProject, setCurrentProject] = useState<string | undefined>(initProject);
+  const [pickerProjects, setPickerProjects] = useState<ProjectRecord[]>(initPickerProjects);
 
   useEffect(() => {
     const interval = setInterval(() => {

@@ -2,6 +2,24 @@
 
 ---
 
+## launch-attach-or-fresh — 2026-05-16
+
+**Slice:** `launch-attach-or-fresh`
+**Status:** done
+
+**What was done:**
+- Added `InitialMachineState` export to `apps/cli/src/tui/phase-state-machine.ts`: a type with `phase`, `phaseStartedAt`, `phaseDurationMs`, `pausedAt`, `accumulatedPauseMs`, `completedFocusBlocks`, and `project: string | undefined`. Added `initialState?: InitialMachineState` to `PhaseConfig` and wired it via `let s = config.initialState ?? { ...defaults }` so the machine can be seeded from an existing timer state.
+- Added `buildAppInit` helper function and `readStateFn` prop to `apps/cli/src/tui/App.tsx`. On mount, `buildAppInit` reads the current timer state via `readStateFn()` (defaults to the real `readState`), derives its kind via `deriveState`, and returns an `AppInit` object. If `running` or `paused`, the machine is seeded from the `StateRecord` (phase=focus, existing startedAt/durationMs/pausedAt/accumulatedPauseMs, and project). If `idle` or `expired`, the project picker is shown automatically with projects pre-loaded from `getProjects()`. Changed `const machine = useMemo(...)` to a `useState` lazy initializer via the `AppInit` object so all initial values (machine, showProjectPicker, pickerProjects, currentProject) are computed in one pass.
+- Updated `apps/cli/src/__tests__/help-overlay.test.tsx` and `apps/cli/src/__tests__/timer-keybindings.test.tsx`: the App-level integration tests previously rendered `<App />` without mocking `readStateFn`, which (with the new auto-picker-on-idle behavior) caused the project picker to block keystrokes in those tests. Added a `makeRunningRecord()` factory and injected `readStateFn={makeRunningRecord}` into all affected `<App>` renders to keep those tests isolated from the attach/idle feature.
+- Created `apps/cli/src/__tests__/launch-attach-or-fresh.test.tsx` with 7 tests: running attach shows FOCUS label and project name; running attach shows red ANSI color; running attach does not show project picker; paused attach shows gray ANSI color and project name; idle auto-opens project picker; idle picker lists available projects; escape on auto-opened picker closes it and reveals the timer.
+- Escape test uses `vi.advanceTimersByTime(100)` (not `vi.runAllTimers()`) to advance past Ink's escape-detection debounce without triggering the infinite-loop trap from App's `setInterval`.
+
+**Feedback loop result:**
+- `pnpm --filter cli test` — 234/234 tests pass (227 prior + 7 new) ✓
+- `pnpm --filter cli check-types` — no type errors ✓
+
+---
+
 ## help-overlay — 2026-05-16
 
 **Slice:** `help-overlay`

@@ -78,7 +78,7 @@ Adds a fullscreen Ink-based TUI for human users when `pmdr` is run with no subco
 
 ### `launch-attach-or-fresh` — Attach to running timer or start fresh
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** On `pmdr` launch: if `state.ts` reports a `running` or `paused` timer, the TUI attaches to it and renders from its current remaining time and project; if `idle`, the project picker overlay opens automatically before the first focus block starts.
 

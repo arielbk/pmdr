@@ -15,12 +15,23 @@ export interface DerivedPhaseState {
   paused: boolean;
 }
 
+export interface InitialMachineState {
+  phase: Phase;
+  phaseStartedAt: number;
+  phaseDurationMs: number;
+  pausedAt: number | null;
+  accumulatedPauseMs: number;
+  completedFocusBlocks: number;
+  project: string | undefined;
+}
+
 export interface PhaseConfig {
   focusDurationMs?: number;
   shortBreakDurationMs?: number;
   longBreakDurationMs?: number;
   longBreakAfter?: number;
   project?: string;
+  initialState?: InitialMachineState;
 }
 
 type Listener = (event: PhaseCompleteEvent) => void;
@@ -53,7 +64,7 @@ export function createPhaseStateMachine(
 
   const listeners: Listener[] = [];
 
-  let s: MachineState = {
+  let s: MachineState = config.initialState ?? {
     phase: "focus",
     phaseStartedAt: startNow,
     phaseDurationMs: focusDurationMs,

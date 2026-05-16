@@ -3,6 +3,14 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, cleanup } from "ink-testing-library";
 import HelpOverlay from "../tui/HelpOverlay.js";
 import App from "../tui/App.js";
+import type { StateRecord } from "../state.js";
+
+const makeRunningRecord = (): StateRecord => ({
+  startedAt: Date.now() - 60_000,
+  durationMs: 25 * 60 * 1000,
+  pausedAt: null,
+  accumulatedPauseMs: 0,
+});
 
 const flush = () => Promise.resolve();
 
@@ -64,14 +72,14 @@ describe("HelpOverlay — dismissal", () => {
 
 describe("App — help overlay integration", () => {
   it("pressing ? opens the help overlay", async () => {
-    const { lastFrame, stdin } = render(<App getProjects={() => []} />);
+    const { lastFrame, stdin } = render(<App readStateFn={makeRunningRecord} getProjects={() => []} />);
     stdin.write("?");
     await flush();
     expect(lastFrame()).toContain("Keybindings");
   });
 
   it("pressing ? again closes the help overlay", async () => {
-    const { lastFrame, stdin } = render(<App getProjects={() => []} />);
+    const { lastFrame, stdin } = render(<App readStateFn={makeRunningRecord} getProjects={() => []} />);
 
     stdin.write("?");
     await flush();
@@ -83,7 +91,7 @@ describe("App — help overlay integration", () => {
   });
 
   it("pressing esc closes the help overlay", async () => {
-    const { lastFrame, stdin } = render(<App getProjects={() => []} />);
+    const { lastFrame, stdin } = render(<App readStateFn={makeRunningRecord} getProjects={() => []} />);
 
     stdin.write("?");
     await flush();
@@ -98,7 +106,7 @@ describe("App — help overlay integration", () => {
   });
 
   it("timer continues ticking while help overlay is open", async () => {
-    const { lastFrame, stdin } = render(<App getProjects={() => []} />);
+    const { lastFrame, stdin } = render(<App readStateFn={makeRunningRecord} getProjects={() => []} />);
 
     stdin.write("?");
     await flush();
