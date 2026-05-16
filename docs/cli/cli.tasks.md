@@ -34,7 +34,7 @@ Vertical slices for shipping the v1 `pmdr` CLI as `apps/cli`: scaffold + Citty, 
 
 ### `start-command` — `pmdr start [--duration N]`
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `pmdr start` begins a 25-minute pomodoro and renders a live countdown. `pmdr start --duration 10s` (or similar short form) begins a shorter pomodoro for testing. Errors if a timer is already running or paused.
 
