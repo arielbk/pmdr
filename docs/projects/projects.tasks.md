@@ -90,7 +90,7 @@ Vertical slices for adding the `project` attribution concept to the `pmdr` CLI: 
 
 ### `project-archive` — `pmdr project archive` / `unarchive`
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `pmdr project archive <name>` sets `archived: true` on the project. `pmdr project unarchive <name>` flips it back. Archived projects are hidden from `pmdr project list` by default but shown with `--include-archived`. Historical log entries attributed to an archived project still render in `today` (archive is presentation-only on the project list).
 

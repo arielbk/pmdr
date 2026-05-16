@@ -115,6 +115,28 @@
 
 ---
 
+## project-archive — 2026-05-16
+
+**Slice:** `project-archive` — `pmdr project archive` / `unarchive`
+
+**Status:** done
+
+**What was implemented:**
+- `archiveProjectLogic(store, name)` exported from `commands/project.ts`: validates name is not `(unassigned)` sentinel, throws `not found` if project doesn't exist, calls `store.archiveProject`, returns updated record with `archived: true`
+- `unarchiveProjectLogic(store, name)` exported from `commands/project.ts`: same validation, calls `store.unarchiveProject`, returns updated record with `archived: false`
+- `archiveCmd` sub-command: `pmdr project archive <name>` — calls `archiveProjectLogic`, prints confirmation
+- `unarchiveCmd` sub-command: `pmdr project unarchive <name>` — calls `unarchiveProjectLogic`, prints confirmation
+- Both sub-commands wired into the `project` command's `subCommands` map
+- Archived project visibility is already handled by `listProjects({ includeArchived })` and `formatProjectList` (from `projects-module` and `project-add-list` slices); archive is presentation-only on the list — historical log entries still render in `pmdr today`
+
+**Tests:** 10 unit tests in `src/__tests__/project-archive.test.ts` — all pass (165 total across all test files)
+
+**Feedback loop result:** `npm test` — 165/165 tests pass; `tsc --noEmit` — no errors
+
+**Notes:** The underlying `archiveProject`/`unarchiveProject` in `projects.ts` are no-ops when the project doesn't exist; the command-level logic adds the "not found" error for the CLI surface. The `(unassigned)` sentinel guard is consistent with the other command-level logic functions.
+
+---
+
 ## project-rename — 2026-05-16
 
 **Slice:** `project-rename` — `pmdr project rename <old> <new>`

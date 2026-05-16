@@ -58,6 +58,38 @@ export function renameProjectLogic(
   return record;
 }
 
+export function archiveProjectLogic(
+  store: ReturnType<typeof createProjectsModule>,
+  name: string,
+): ProjectRecord {
+  const trimmed = name.trim();
+  if (trimmed.toLowerCase() === "(unassigned)") {
+    throw new Error('"(unassigned)" is a reserved sentinel and cannot be archived');
+  }
+  const existing = store.findProject(trimmed);
+  if (!existing) {
+    throw new Error(`Project "${trimmed}" not found`);
+  }
+  store.archiveProject(trimmed);
+  return { ...existing, archived: true };
+}
+
+export function unarchiveProjectLogic(
+  store: ReturnType<typeof createProjectsModule>,
+  name: string,
+): ProjectRecord {
+  const trimmed = name.trim();
+  if (trimmed.toLowerCase() === "(unassigned)") {
+    throw new Error('"(unassigned)" is a reserved sentinel and cannot be unarchived');
+  }
+  const existing = store.findProject(trimmed);
+  if (!existing) {
+    throw new Error(`Project "${trimmed}" not found`);
+  }
+  store.unarchiveProject(trimmed);
+  return { ...existing, archived: false };
+}
+
 // ─── sub-commands ─────────────────────────────────────────────────────────────
 
 const addCmd = defineCommand({
@@ -131,6 +163,42 @@ const renameCmd = defineCommand({
   },
 });
 
+const archiveCmd = defineCommand({
+  meta: { description: "Archive a project" },
+  args: {
+    name: { type: "positional", required: true, description: "Project name" },
+  },
+  run({ args }) {
+    const store = createProjectsModule(STATE_DIR);
+    let record: ProjectRecord;
+    try {
+      record = archiveProjectLogic(store, args.name as string);
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    console.log(`Archived project "${record.name}"`);
+  },
+});
+
+const unarchiveCmd = defineCommand({
+  meta: { description: "Unarchive a project" },
+  args: {
+    name: { type: "positional", required: true, description: "Project name" },
+  },
+  run({ args }) {
+    const store = createProjectsModule(STATE_DIR);
+    let record: ProjectRecord;
+    try {
+      record = unarchiveProjectLogic(store, args.name as string);
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    console.log(`Unarchived project "${record.name}"`);
+  },
+});
+
 // ─── project command ──────────────────────────────────────────────────────────
 
 export default defineCommand({
@@ -139,5 +207,7 @@ export default defineCommand({
     add: addCmd,
     list: listCmd,
     rename: renameCmd,
+    archive: archiveCmd,
+    unarchive: unarchiveCmd,
   },
 });
