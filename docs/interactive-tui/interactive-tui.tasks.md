@@ -18,7 +18,7 @@ Adds a fullscreen Ink-based TUI for human users when `pmdr` is run with no subco
 
 ### `phase-state-machine` — Focus/break phase state machine
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** A module exporting a state machine with `tick(now)`, `pause(now)`, `resume(now)`, `skip(now)` events; emits `phase-complete` events at boundaries; exposes derived `{ phase, remainingMs, completedFocusBlocks, paused }` for rendering.
 
