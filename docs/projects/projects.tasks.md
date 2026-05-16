@@ -20,7 +20,7 @@ Vertical slices for adding the `project` attribution concept to the `pmdr` CLI: 
 
 ### `project-add-list` — `pmdr project add` and `pmdr project list`
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `pmdr project add <name>` creates a project (errors on duplicate via case-insensitive lookup, errors on the `(unassigned)` sentinel, errors on names >100 chars). `pmdr project list` prints non-archived projects, one per line, in creation order. `pmdr project list --include-archived` includes archived ones with an `(archived)` marker. `pmdr project list --json` prints `{ projects: [{ name, archived, createdAt }] }`.
 
