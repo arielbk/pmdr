@@ -15,6 +15,7 @@ export interface StateRecord {
   durationMs: number;
   pausedAt: number | null;
   accumulatedPauseMs: number;
+  project?: string;
 }
 
 export type DerivedKind = "idle" | "running" | "paused" | "expired";
@@ -117,7 +118,7 @@ export function createStateModule(stateDir: string) {
 
     const completedAt =
       file.startedAt + file.durationMs + file.accumulatedPauseMs;
-    appendCompletion({ completedAt, durationMs: file.durationMs, project: "(unassigned)" });
+    appendCompletion({ completedAt, durationMs: file.durationMs, project: file.project ?? "(unassigned)" });
     clearState();
   }
 

@@ -48,7 +48,7 @@ Vertical slices for adding the `project` attribution concept to the `pmdr` CLI: 
 
 ### `start-with-project` — `pmdr start --project <name>` (non-interactive)
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `pmdr start --project <name>` starts a pomodoro attributed to `<name>`, auto-creating the project if it doesn't exist (via `upsertProject`). The state file shape gains a `project: string` field. `pmdr start` with no `--project` and no TTY exits with a clear error: `no --project specified and stdout is not a TTY`. Eager completion (renderer hits zero) and lazy completion (another command observes expired state) both write the log entry with the captured `project`.
 

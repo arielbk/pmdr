@@ -48,6 +48,28 @@
 
 ---
 
+## start-with-project — 2026-05-16
+
+**Slice:** `start-with-project` — `pmdr start --project <name>` (non-interactive)
+
+**Status:** done
+
+**What was implemented:**
+- `StateRecord` in `state.ts`: added optional `project?: string` field (backward-compat for reading legacy state files)
+- `finalizeIfExpired` in `state.ts`: now reads `file.project ?? "(unassigned)"` instead of hardcoded `"(unassigned)"` — both eager and lazy completion paths carry the project from state
+- `initTimer` in `commands/start.ts`: added required `project: string` parameter; writes project into state file
+- `start` command: added `--project <name>` arg; added `--no-interactive` flag; when no `--project` and (`!process.stdout.isTTY` or `--no-interactive`), exits with `no --project specified and stdout is not a TTY`; calls `upsertProject(projectArg)` to auto-create the project if it doesn't exist, using canonical casing
+- `pause.ts`: no changes needed — `store.writeState({ ...file!, pausedAt: now })` naturally preserves the `project` field via spread
+- Updated `__tests__/start.test.ts`: all `initTimer` calls updated to include `project: "test-proj"`
+
+**Tests:** 7 unit tests in `src/__tests__/start-with-project.test.ts` — all pass (129 total across all test files)
+
+**Feedback loop result:** `vitest run` — 129/129 tests pass; `tsc --noEmit` — no errors
+
+**Notes:** `project` on `StateRecord` is optional for backward compatibility with pre-existing state files; `finalizeIfExpired` falls back to `"(unassigned)"` for those. The `--no-interactive` flag forces the no-TTY error path even in a real TTY, as required by the slice spec.
+
+---
+
 ## project-add-list — 2026-05-16
 
 **Slice:** `project-add-list` — `pmdr project add` and `pmdr project list`

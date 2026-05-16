@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseDuration } from "../parse-duration.js";
 import { createStateModule, deriveState } from "../state.js";
+import { createProjectsModule } from "../projects.js";
 
 const DEFAULT_DURATION_MS = 25 * 60 * 1_000;
 const STATE_DIR = join(homedir(), ".local", "state", "pmdr");
@@ -11,8 +12,9 @@ export function initTimer(options: {
   store: ReturnType<typeof createStateModule>;
   durationMs: number;
   now: number;
+  project: string;
 }): void {
-  const { store, durationMs, now } = options;
+  const { store, durationMs, now, project } = options;
 
   store.finalizeIfExpired(now);
 
@@ -31,6 +33,7 @@ export function initTimer(options: {
     durationMs,
     pausedAt: null,
     accumulatedPauseMs: 0,
+    project,
   });
 }
 
@@ -91,6 +94,15 @@ export default defineCommand({
       type: "string",
       description: "Custom duration (e.g. 25m, 10s)",
     },
+    project: {
+      type: "string",
+      description: "Project to attribute this pomodoro to",
+    },
+    "no-interactive": {
+      type: "boolean",
+      description: "Force non-interactive mode (error if no --project)",
+      default: false,
+    },
   },
   async run({ args }) {
     let durationMs: number;
@@ -103,11 +115,24 @@ export default defineCommand({
       process.exit(1);
     }
 
+    const projectArg = args.project as string | undefined;
+    const noInteractive = args["no-interactive"] as boolean;
+
+    if (!projectArg && (!process.stdout.isTTY || noInteractive)) {
+      console.error("no --project specified and stdout is not a TTY");
+      process.exit(1);
+    }
+
+    const projects = createProjectsModule(STATE_DIR);
+    const project = projectArg
+      ? projects.upsertProject(projectArg).name
+      : "(unassigned)";
+
     const store = createStateModule(STATE_DIR);
     const now = Date.now();
 
     try {
-      initTimer({ store, durationMs, now });
+      initTimer({ store, durationMs, now, project });
     } catch (e) {
       console.error((e as Error).message);
       process.exit(1);
@@ -118,7 +143,7 @@ export default defineCommand({
       durationMs >= 60_000
         ? `${Number.isInteger(mins) ? mins : mins.toFixed(1)}m`
         : `${durationMs / 1_000}s`;
-    console.log(`Starting ${label} pomodoro...`);
+    console.log(`Starting ${label} pomodoro... [${project}]`);
 
     await runCountdown(store);
   },

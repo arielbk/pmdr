@@ -46,12 +46,13 @@ describe("initTimer", () => {
   });
 
   it("writes state when idle", () => {
-    initTimer({ store, durationMs: 10_000, now: NOW });
+    initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" });
     expect(store.readState()).toEqual({
       startedAt: NOW,
       durationMs: 10_000,
       pausedAt: null,
       accumulatedPauseMs: 0,
+      project: "test-proj",
     });
   });
 
@@ -62,7 +63,7 @@ describe("initTimer", () => {
       pausedAt: null,
       accumulatedPauseMs: 0,
     });
-    expect(() => initTimer({ store, durationMs: 10_000, now: NOW })).toThrow(
+    expect(() => initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" })).toThrow(
       /already running/i,
     );
   });
@@ -74,7 +75,7 @@ describe("initTimer", () => {
       pausedAt: NOW - 1_000,
       accumulatedPauseMs: 0,
     });
-    expect(() => initTimer({ store, durationMs: 10_000, now: NOW })).toThrow(
+    expect(() => initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" })).toThrow(
       /paused/i,
     );
   });
@@ -87,8 +88,8 @@ describe("initTimer", () => {
       accumulatedPauseMs: 0,
     });
     expect(() =>
-      initTimer({ store, durationMs: 10_000, now: NOW }),
+      initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" }),
     ).not.toThrow();
-    expect(store.readState()).toMatchObject({ durationMs: 10_000, startedAt: NOW });
+    expect(store.readState()).toMatchObject({ durationMs: 10_000, startedAt: NOW, project: "test-proj" });
   });
 });
