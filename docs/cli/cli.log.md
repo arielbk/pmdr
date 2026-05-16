@@ -78,3 +78,21 @@
 - `vitest run` → 48/48 tests pass (19 state + 18 start + 11 status) ✓
 - `tsc --noEmit` → no type errors ✓
 - `tsup build` → compiles cleanly ✓
+
+---
+
+## pause-resume-stop — 2026-05-16
+
+**Slice:** `pause-resume-stop`
+**Status:** done
+
+**What was done:**
+- Rewrote `apps/cli/src/commands/pause.ts`: exported `pauseTimer({ store, now })` that calls `finalizeIfExpired` (lazy completion), then errors if idle or already-paused, otherwise sets `pausedAt = now` and writes state. The citty command prints "Paused." or exits 1 with error message.
+- Rewrote `apps/cli/src/commands/resume.ts`: exported `resumeTimer({ store, now })` that calls `finalizeIfExpired`, then errors if idle or already-running, otherwise computes `pauseDurationMs = now - pausedAt`, adds it to `accumulatedPauseMs`, clears `pausedAt`, and writes state. The citty command prints "Resumed." or exits 1.
+- Rewrote `apps/cli/src/commands/stop.ts`: exported `stopTimer({ store })` (no `now` needed) that reads state and, if present, calls `clearState()` (no completion logged) and returns `true`; returns `false` on idle. The citty command prints "Stopped." only when a timer was actually stopped.
+- Created `apps/cli/src/__tests__/pause-resume-stop.test.ts` with 15 tests covering: all error paths (idle/already-paused for pause; idle/already-running for resume), correct state mutations (pausedAt set, accumulated pause math, second resume stacking), expired-timer lazy-finalization for pause and resume, and stop's no-log guarantee for both running and paused timers.
+
+**Feedback loop result:**
+- `vitest run` → 63/63 tests pass (19 state + 11 status + 18 start + 15 pause-resume-stop) ✓
+- `tsc --noEmit` → no type errors ✓
+- `tsup build` → compiles cleanly ✓

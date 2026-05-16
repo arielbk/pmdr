@@ -62,7 +62,7 @@ Vertical slices for shipping the v1 `pmdr` CLI as `apps/cli`: scaffold + Citty, 
 
 ### `pause-resume-stop` — three mutating commands
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `pmdr pause`, `pmdr resume`, `pmdr stop`. Each prints a short human confirmation. `pause` on an idle or already-paused timer errors. `resume` on a running or idle timer errors. `stop` on idle is a no-op.
 
