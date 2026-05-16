@@ -3,6 +3,7 @@ import { useApp, useInput } from "ink";
 import { createPhaseStateMachine } from "./phase-state-machine.js";
 import CountdownView from "./CountdownView.js";
 import ProjectPickerOverlay from "./ProjectPickerOverlay.js";
+import HelpOverlay from "./HelpOverlay.js";
 import { listProjects, upsertProject } from "../projects.js";
 import type { DerivedPhaseState } from "./phase-state-machine.js";
 import type { ProjectRecord } from "../projects.js";
@@ -23,6 +24,7 @@ export default function App({
     machine.getState(Date.now()),
   );
   const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [currentProject, setCurrentProject] = useState<string | undefined>(undefined);
   const [pickerProjects, setPickerProjects] = useState<ProjectRecord[]>([]);
 
@@ -54,9 +56,11 @@ export default function App({
       } else if (input === "p") {
         setPickerProjects(getProjects());
         setShowProjectPicker(true);
+      } else if (input === "?") {
+        setShowHelp(true);
       }
     },
-    { isActive: !showProjectPicker },
+    { isActive: !showProjectPicker && !showHelp },
   );
 
   function handleProjectSelect(name: string) {
@@ -80,6 +84,7 @@ export default function App({
           onClose={handlePickerClose}
         />
       )}
+      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
     </>
   );
 }

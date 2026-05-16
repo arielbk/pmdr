@@ -2,6 +2,23 @@
 
 ---
 
+## help-overlay — 2026-05-16
+
+**Slice:** `help-overlay`
+**Status:** done
+
+**What was done:**
+- Created `apps/cli/src/tui/HelpOverlay.tsx`: a self-contained overlay component that accepts an `onClose()` prop. Renders a rounded-border box with a "Keybindings" header, a fixed list of five bindings (`space`, `s`, `p`, `q`, `?`) with their descriptions, and a dim "? or esc to close" hint line. Its own `useInput` listens for `key.escape`, raw `\x1B`, or `?` and calls `onClose()` in all three cases — matching the escape-fallback pattern from `ProjectPickerOverlay`.
+- Updated `apps/cli/src/tui/App.tsx`: added `HelpOverlay` import, `showHelp` boolean state, `input === "?"` branch to the main `useInput` handler (setting `showHelp` to true), extended `isActive` guard to `!showProjectPicker && !showHelp` so main keybindings don't leak through the overlay, and conditionally renders `<HelpOverlay onClose={() => setShowHelp(false)} />` below the project picker in the JSX tree.
+- Created `apps/cli/src/__tests__/help-overlay.test.tsx` with 9 tests: rendering (shows all keybinding labels, descriptions, dismiss hint), dismissal at component level (pressing `?` calls onClose, pressing esc calls onClose using `vi.runAllTimers()`), and App-level integration (pressing `?` opens overlay, pressing `?` again closes it, pressing esc closes it, timer continues ticking while overlay is open).
+- App-level escape test uses `vi.advanceTimersByTime(100)` instead of `vi.runAllTimers()` to advance past Ink's escape-detection debounce without triggering the infinite-loop trap caused by App's `setInterval`.
+
+**Feedback loop result:**
+- `pnpm --filter cli test` — 227/227 tests pass (218 prior + 9 new) ✓
+- `pnpm --filter cli check-types` — no type errors ✓
+
+---
+
 ## project-picker-overlay — 2026-05-16
 
 **Slice:** `project-picker-overlay`

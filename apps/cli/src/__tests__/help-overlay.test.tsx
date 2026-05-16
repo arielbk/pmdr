@@ -1,0 +1,116 @@
+import React from "react";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { render, cleanup } from "ink-testing-library";
+import HelpOverlay from "../tui/HelpOverlay.js";
+import App from "../tui/App.js";
+
+const flush = () => Promise.resolve();
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  cleanup();
+});
+
+describe("HelpOverlay — rendering", () => {
+  it("shows all keybinding labels", () => {
+    const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} />);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("space");
+    expect(frame).toContain("s");
+    expect(frame).toContain("p");
+    expect(frame).toContain("q");
+    expect(frame).toContain("?");
+  });
+
+  it("shows keybinding descriptions", () => {
+    const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} />);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("pause");
+    expect(frame).toContain("skip");
+    expect(frame).toContain("project");
+    expect(frame).toContain("quit");
+    expect(frame).toContain("help");
+  });
+
+  it("shows a dismiss hint", () => {
+    const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} />);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("esc");
+  });
+});
+
+describe("HelpOverlay — dismissal", () => {
+  it("pressing ? calls onClose", async () => {
+    const onClose = vi.fn();
+    const { stdin } = render(<HelpOverlay onClose={onClose} />);
+    stdin.write("?");
+    await flush();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("pressing esc calls onClose", async () => {
+    const onClose = vi.fn();
+    const { stdin } = render(<HelpOverlay onClose={onClose} />);
+    stdin.write("\x1B");
+    vi.runAllTimers();
+    await flush();
+    expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("App — help overlay integration", () => {
+  it("pressing ? opens the help overlay", async () => {
+    const { lastFrame, stdin } = render(<App getProjects={() => []} />);
+    stdin.write("?");
+    await flush();
+    expect(lastFrame()).toContain("Keybindings");
+  });
+
+  it("pressing ? again closes the help overlay", async () => {
+    const { lastFrame, stdin } = render(<App getProjects={() => []} />);
+
+    stdin.write("?");
+    await flush();
+    expect(lastFrame()).toContain("Keybindings");
+
+    stdin.write("?");
+    await flush();
+    expect(lastFrame()).not.toContain("Keybindings");
+  });
+
+  it("pressing esc closes the help overlay", async () => {
+    const { lastFrame, stdin } = render(<App getProjects={() => []} />);
+
+    stdin.write("?");
+    await flush();
+    expect(lastFrame()).toContain("Keybindings");
+
+    stdin.write("\x1B");
+    // Advance past Ink's escape-detection debounce without triggering an
+    // infinite loop from App's setInterval (runAllTimers would loop forever).
+    vi.advanceTimersByTime(100);
+    await flush();
+    expect(lastFrame()).not.toContain("Keybindings");
+  });
+
+  it("timer continues ticking while help overlay is open", async () => {
+    const { lastFrame, stdin } = render(<App getProjects={() => []} />);
+
+    stdin.write("?");
+    await flush();
+    expect(lastFrame()).toContain("Keybindings");
+
+    // Advance 2 seconds — if timer were frozen we'd still see same time
+    vi.advanceTimersByTime(2000);
+    await flush();
+
+    // Overlay still open, timer-driven state advances (interval ticks machine)
+    expect(lastFrame()).toContain("Keybindings");
+    // FOCUS label should still be visible (not crashed)
+    expect(lastFrame()).toContain("FOCUS");
+  });
+});

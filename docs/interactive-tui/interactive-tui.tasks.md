@@ -66,7 +66,7 @@ Adds a fullscreen Ink-based TUI for human users when `pmdr` is run with no subco
 
 ### `help-overlay` — Keybinding help overlay
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** Pressing `?` toggles a centered overlay listing all keybindings (`space`, `s`, `p`, `q`, `?`); pressing `?` again or `esc` closes it; timer continues ticking underneath.
 
