@@ -39,3 +39,22 @@ Extended `StateRecord` with optional `phase: "focus" | "break"` and `completedFo
 - `finalizeIfExpired` is left in place (still exported) but unused by commands — leaving it for now to avoid touching unrelated removal scope; future cleanup slice may delete it
 - The advancement loop handles the edge where focus expires far enough in the past that the break would also have already expired by `now` — we walk both transitions in one call and end up idle with exactly one focus completion logged
 - Full suite: 247/247 passing; `tsc --noEmit` clean
+
+## status-reports-phase
+
+**Date:** 2026-05-17
+**Status:** done
+
+### What was done
+
+Surfaced phase and completed-block info in `pmdr status` JSON and text output. The JSON `StatusResult` running/paused variants now carry `phase: "focus" | "break"` and `completedFocusBlocks: number` (defaulted to `"focus"`/`0` for legacy records missing those fields). Text output replaced `running — 18:42 left` with phase-prefixed forms like `focus — 18:42 left (block 1/4)`, `focus paused — 18:42 left (block 3/4)`, and `break — 4:30 left (1/4 done)`; idle still renders as `idle`.
+
+**Files changed:**
+- `apps/cli/src/commands/status.ts` — extended `StatusResult` shape with `phase` and `completedFocusBlocks`; `getStatus` reads them off the file (defaulting); `formatStatus` formats focus/break prefixes with block counter suffix
+- `apps/cli/src/__tests__/status.test.ts` — `getStatus` tests now assert the new fields for focus-running, focus-paused, break-running, and legacy-record-defaulting cases; `formatStatus` tests cover focus-running, focus-paused, and break-running text forms
+
+### Observations
+
+- For the focus phase the suffix shows the *next* block index (`completedFocusBlocks + 1`) since that block is in progress; for the break phase it shows blocks completed so far (`completedFocusBlocks`)
+- The `state` field is kept untouched so existing scripts continue to parse running/paused/idle
+- Full suite: 250/250 passing; `tsc --noEmit` clean. ESLint was broken project-wide (v9 config-format migration not done) — unrelated to this slice

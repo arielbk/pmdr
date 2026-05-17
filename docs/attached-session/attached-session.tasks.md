@@ -20,7 +20,7 @@ Make the TUI a true attached view onto a persisted pomodoro session: extend `sta
 
 ### `status-reports-phase` — Surface phase and block count in `pmdr status`
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `pmdr status` text output includes a phase indicator and completed focus block count. `pmdr status --json` gains `phase` and `completedFocusBlocks` fields. Existing `state: "idle" | "running" | "paused"` field stays for backward compatibility.
 

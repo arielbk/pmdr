@@ -26,27 +26,33 @@ describe("getStatus", () => {
     expect(getStatus({ store, now: NOW })).toEqual({ state: "idle" });
   });
 
-  it("returns running with remainingMs, duration, startedAt", () => {
+  it("returns running with remainingMs, duration, startedAt, phase, completedFocusBlocks", () => {
     store.writeState({
       startedAt: NOW - 5_000,
       durationMs: 60_000,
       pausedAt: null,
       accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
     });
     expect(getStatus({ store, now: NOW })).toEqual({
       state: "running",
       remainingMs: 55_000,
       duration: 60_000,
       startedAt: NOW - 5_000,
+      phase: "focus",
+      completedFocusBlocks: 0,
     });
   });
 
-  it("returns paused with frozen remainingMs, duration, startedAt", () => {
+  it("returns paused with frozen remainingMs, duration, startedAt, phase, completedFocusBlocks", () => {
     store.writeState({
       startedAt: NOW - 10_000,
       durationMs: 60_000,
       pausedAt: NOW - 2_000,
       accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 2,
     });
     // nominalEnd = (NOW-10000) + 60000 + 0 = NOW+50000
     // frozen at pausedAt=NOW-2000 → remaining = (NOW+50000) - (NOW-2000) = 52000
@@ -55,6 +61,39 @@ describe("getStatus", () => {
       remainingMs: 52_000,
       duration: 60_000,
       startedAt: NOW - 10_000,
+      phase: "focus",
+      completedFocusBlocks: 2,
+    });
+  });
+
+  it("defaults missing phase/completedFocusBlocks to focus/0 for legacy records", () => {
+    store.writeState({
+      startedAt: NOW - 5_000,
+      durationMs: 60_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+    });
+    const result = getStatus({ store, now: NOW });
+    expect(result).toMatchObject({
+      state: "running",
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+  });
+
+  it("reports a break-running state with phase=break", () => {
+    store.writeState({
+      startedAt: NOW - 5_000,
+      durationMs: 5 * 60 * 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "break",
+      completedFocusBlocks: 1,
+    });
+    expect(getStatus({ store, now: NOW })).toMatchObject({
+      state: "running",
+      phase: "break",
+      completedFocusBlocks: 1,
     });
   });
 
@@ -111,25 +150,41 @@ describe("formatStatus", () => {
     expect(formatStatus(r)).toBe("idle");
   });
 
-  it("formats running with mm:ss remaining", () => {
+  it("formats focus running with mm:ss remaining and block count", () => {
     const r: StatusResult = {
       state: "running",
       remainingMs: 1_122_000,
       duration: 1_500_000,
       startedAt: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
     };
     // 1122000ms = 18m42s
-    expect(formatStatus(r)).toBe("running — 18:42 left");
+    expect(formatStatus(r)).toBe("focus — 18:42 left (block 1/4)");
   });
 
-  it("formats paused with mm:ss remaining", () => {
+  it("formats focus paused with mm:ss remaining and block count", () => {
     const r: StatusResult = {
       state: "paused",
       remainingMs: 1_122_000,
       duration: 1_500_000,
       startedAt: 0,
+      phase: "focus",
+      completedFocusBlocks: 2,
     };
-    expect(formatStatus(r)).toBe("paused — 18:42 left");
+    expect(formatStatus(r)).toBe("focus paused — 18:42 left (block 3/4)");
+  });
+
+  it("formats break running with mm:ss remaining and completed blocks", () => {
+    const r: StatusResult = {
+      state: "running",
+      remainingMs: 270_000, // 4m30s
+      duration: 300_000,
+      startedAt: 0,
+      phase: "break",
+      completedFocusBlocks: 1,
+    };
+    expect(formatStatus(r)).toBe("break — 4:30 left (1/4 done)");
   });
 
   it("formats 0s remaining as 0:00", () => {
@@ -138,8 +193,10 @@ describe("formatStatus", () => {
       remainingMs: 0,
       duration: 60_000,
       startedAt: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
     };
-    expect(formatStatus(r)).toBe("running — 0:00 left");
+    expect(formatStatus(r)).toBe("focus — 0:00 left (block 1/4)");
   });
 
   it("pads seconds below 10 with a leading zero", () => {
@@ -148,7 +205,9 @@ describe("formatStatus", () => {
       remainingMs: 65_000, // 1m5s
       duration: 60_000,
       startedAt: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
     };
-    expect(formatStatus(r)).toBe("running — 1:05 left");
+    expect(formatStatus(r)).toBe("focus — 1:05 left (block 1/4)");
   });
 });
