@@ -1,5 +1,5 @@
 import XCTest
-@testable import pmdr
+@testable import PmdrMenubarCore
 
 final class PmdrClientDecodingTests: XCTestCase {
     func test_decodes_idle_state() throws {
