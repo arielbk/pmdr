@@ -24,6 +24,8 @@ const DEFAULT_SHORT_BREAK_MS = 5 * 60 * 1000;
 const DEFAULT_LONG_BREAK_MS = 15 * 60 * 1000;
 const DEFAULT_LONG_BREAK_AFTER = 4;
 
+export const DEFAULT_FOCUS_GOAL = 8;
+
 function computeBreakDurationMs(completedFocusBlocks: number): number {
   return completedFocusBlocks % DEFAULT_LONG_BREAK_AFTER === 0
     ? DEFAULT_LONG_BREAK_MS

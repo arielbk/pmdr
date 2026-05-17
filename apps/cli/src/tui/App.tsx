@@ -128,7 +128,11 @@ export default function App({
         } catch {
           // ignore — read-only stores or already-empty state
         }
-        exit();
+        const after = store.readState();
+        setViewState(derivePhaseState(after, now));
+        setCurrentProject(after?.project);
+        setPickerProjects(getProjects());
+        setShowProjectPicker(true);
       } else if (input === "p") {
         setPickerProjects(getProjects());
         setShowProjectPicker(true);

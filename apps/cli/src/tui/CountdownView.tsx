@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import BigText from "ink-big-text";
 import type { DerivedPhaseState } from "./phase-state-machine.js";
+import { DEFAULT_FOCUS_GOAL } from "../state.js";
 
 interface CountdownViewProps extends DerivedPhaseState {
   project?: string;
@@ -14,10 +15,13 @@ function formatTime(ms: number): string {
   return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
-function blockDots(completed: number): string {
-  if (completed === 0) return "○";
-  return Array.from({ length: completed }, () => "●").join(" ");
-}
+const HINTS: Array<[string, string]> = [
+  ["space", "pause"],
+  ["p", "project"],
+  ["x", "stop"],
+  ["q", "detach"],
+  ["?", "help"],
+];
 
 export default function CountdownView({
   phase,
@@ -44,12 +48,27 @@ export default function CountdownView({
       </Box>
 
       <Box justifyContent="center">
-        <Text dimColor={paused}>{blockDots(completedFocusBlocks)}</Text>
+        <Text>
+          <Text color="green" dimColor={paused}>
+            {Array.from({ length: Math.min(completedFocusBlocks, DEFAULT_FOCUS_GOAL) }, () => "●").join(" ")}
+          </Text>
+          {completedFocusBlocks > 0 && completedFocusBlocks < DEFAULT_FOCUS_GOAL ? " " : ""}
+          <Text dimColor>
+            {Array.from({ length: Math.max(0, DEFAULT_FOCUS_GOAL - completedFocusBlocks) }, () => "○").join(" ")}
+          </Text>
+          <Text dimColor>{`  ${Math.min(completedFocusBlocks, DEFAULT_FOCUS_GOAL)}/${DEFAULT_FOCUS_GOAL}`}</Text>
+        </Text>
       </Box>
 
       <Box justifyContent="center">
-        <Text dimColor>
-          {"space pause · s skip · p project · q quit · ? help"}
+        <Text>
+          {HINTS.map(([key, desc], i) => (
+            <React.Fragment key={key}>
+              {i > 0 ? <Text dimColor>{"  ·  "}</Text> : null}
+              <Text color="cyan" bold>{key}</Text>
+              <Text dimColor>{` ${desc}`}</Text>
+            </React.Fragment>
+          ))}
         </Text>
       </Box>
     </Box>

@@ -87,6 +87,7 @@ describe("CountdownView — hint line", () => {
     );
     const frame = lastFrame() ?? "";
     expect(frame).toContain("space pause");
-    expect(frame).toContain("q quit");
+    expect(frame).toContain("q");
+    expect(frame).toContain("detach");
   });
 });

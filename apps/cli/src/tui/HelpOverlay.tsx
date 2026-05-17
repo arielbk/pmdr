@@ -7,9 +7,9 @@ interface HelpOverlayProps {
 
 const BINDINGS = [
   { key: "space", desc: "pause / resume" },
-  { key: "q / esc / ctrl+c", desc: "detach (timer keeps running)" },
-  { key: "x", desc: "stop session" },
   { key: "p", desc: "switch project" },
+  { key: "x", desc: "stop session (timer cleared, stay in TUI)" },
+  { key: "q / esc / ctrl+c", desc: "quit / detach (timer keeps running)" },
   { key: "?", desc: "toggle this help" },
 ] as const;
 

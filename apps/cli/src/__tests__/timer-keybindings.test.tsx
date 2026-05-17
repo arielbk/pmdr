@@ -138,15 +138,22 @@ describe("timer-keybindings — x stops session", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("pressing x clears state.json and calls exitFn", async () => {
+  it("pressing x clears state.json and stays in the TUI with the project picker", async () => {
     const mockExit = vi.fn();
-    const { stdin } = render(<App store={store} exitFn={mockExit} />);
+    const { lastFrame, stdin } = render(
+      <App
+        store={store}
+        exitFn={mockExit}
+        getProjects={() => [{ name: "demo", archived: false } as any]}
+      />,
+    );
 
     stdin.write("x");
     await flush();
 
     expect(store.readState()).toBeNull();
-    expect(mockExit).toHaveBeenCalled();
+    expect(mockExit).not.toHaveBeenCalled();
+    expect(lastFrame()).toContain("demo");
   });
 });
 

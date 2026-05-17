@@ -40,7 +40,7 @@ describe("HelpOverlay — rendering", () => {
     const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} />);
     const frame = lastFrame() ?? "";
     expect(frame).toContain("pause");
-    expect(frame).toContain("detach (timer keeps running)");
+    expect(frame).toContain("quit / detach (timer keeps running)");
     expect(frame).toContain("stop session");
     expect(frame).toContain("project");
     expect(frame).toContain("help");
