@@ -11,6 +11,9 @@ import { createStateModule, deriveState } from "../state.js";
 import { pauseTimer } from "../commands/pause.js";
 import { resumeTimer } from "../commands/resume.js";
 import { stopTimer } from "../commands/stop.js";
+import { initTimer } from "../commands/start.js";
+
+const DEFAULT_DURATION_MS = 25 * 60 * 1_000;
 import type { DerivedPhaseState } from "./phase-state-machine.js";
 import type { ProjectRecord } from "../projects.js";
 import type { StateRecord } from "../state.js";
@@ -138,10 +141,23 @@ export default function App({
 
   function handleProjectSelect(name: string) {
     const record = upsertProjectFn(name);
+    const now = Date.now();
     const file = store.readState();
     if (file) {
       store.writeState({ ...file, project: record.name });
+    } else {
+      try {
+        initTimer({
+          store,
+          durationMs: DEFAULT_DURATION_MS,
+          now,
+          project: record.name,
+        });
+      } catch {
+        // ignore — read-only stores in tests
+      }
     }
+    setViewState(derivePhaseState(store.readState(), now));
     setCurrentProject(record.name);
     setShowProjectPicker(false);
   }
