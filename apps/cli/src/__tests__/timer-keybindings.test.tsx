@@ -75,14 +75,14 @@ describe("timer-keybindings — space toggles pause/resume", () => {
   });
 });
 
-describe("timer-keybindings — s skips phase", () => {
+describe("timer-keybindings — s is no longer bound", () => {
   let tmpDir: string;
   let store: ReturnType<typeof createStateModule>;
   const NOW = 1_000_000;
 
   beforeEach(() => {
     vi.setSystemTime(NOW);
-    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-skip-test-"));
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-skip-removed-test-"));
     store = createStateModule(tmpDir);
     store.writeState({
       startedAt: NOW - 60_000,
@@ -98,7 +98,10 @@ describe("timer-keybindings — s skips phase", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("pressing s transitions from focus to break", async () => {
+  it("pressing s leaves the timer in focus and does not mutate state.json", async () => {
+    const stateJsonPath = join(tmpDir, "state.json");
+    const before = readFileSync(stateJsonPath, "utf8");
+
     const { lastFrame, stdin } = render(<App store={store} exitFn={vi.fn()} />);
 
     expect(lastFrame()).toContain("FOCUS");
@@ -106,19 +109,44 @@ describe("timer-keybindings — s skips phase", () => {
     stdin.write("s");
     await flush();
 
-    expect(lastFrame()).toContain("BREAK");
+    expect(lastFrame()).toContain("FOCUS");
+    expect(lastFrame()).not.toContain("BREAK");
+    expect(readFileSync(stateJsonPath, "utf8")).toBe(before);
+  });
+});
+
+describe("timer-keybindings — x stops session", () => {
+  let tmpDir: string;
+  let store: ReturnType<typeof createStateModule>;
+  const NOW = 1_000_000;
+
+  beforeEach(() => {
+    vi.setSystemTime(NOW);
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-stop-test-"));
+    store = createStateModule(tmpDir);
+    store.writeState({
+      startedAt: NOW - 60_000,
+      durationMs: 25 * 60 * 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
   });
 
-  it("pressing s while paused still skips to break", async () => {
-    const { lastFrame, stdin } = render(<App store={store} exitFn={vi.fn()} />);
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
 
-    stdin.write(" ");
+  it("pressing x clears state.json and calls exitFn", async () => {
+    const mockExit = vi.fn();
+    const { stdin } = render(<App store={store} exitFn={mockExit} />);
+
+    stdin.write("x");
     await flush();
 
-    stdin.write("s");
-    await flush();
-
-    expect(lastFrame()).toContain("BREAK");
+    expect(store.readState()).toBeNull();
+    expect(mockExit).toHaveBeenCalled();
   });
 });
 

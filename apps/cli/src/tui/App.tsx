@@ -10,6 +10,7 @@ import { listProjects, upsertProject } from "../projects.js";
 import { createStateModule, deriveState } from "../state.js";
 import { pauseTimer } from "../commands/pause.js";
 import { resumeTimer } from "../commands/resume.js";
+import { stopTimer } from "../commands/stop.js";
 import type { DerivedPhaseState } from "./phase-state-machine.js";
 import type { ProjectRecord } from "../projects.js";
 import type { StateRecord } from "../state.js";
@@ -38,32 +39,6 @@ function makeReadOnlyStore(readFn: () => StateRecord | null): Store {
     readToday: () => ({}),
     rewriteCompletionProject: () => {},
   } as unknown as Store;
-}
-
-function skipFocusToBreak(store: Store, now: number): void {
-  const file = store.readState();
-  if (!file) return;
-  const phase = file.phase ?? "focus";
-  if (phase !== "focus") return;
-  const completedFocusBlocks = file.completedFocusBlocks ?? 0;
-  store.appendCompletion({
-    completedAt: now,
-    durationMs: file.durationMs,
-    project: file.project ?? "(unassigned)",
-  });
-  const newCount = completedFocusBlocks + 1;
-  const shortBreakMs = 5 * 60 * 1000;
-  const longBreakMs = 15 * 60 * 1000;
-  const breakMs = newCount % 4 === 0 ? longBreakMs : shortBreakMs;
-  store.writeState({
-    startedAt: now,
-    durationMs: breakMs,
-    pausedAt: null,
-    accumulatedPauseMs: 0,
-    project: file.project,
-    phase: "break",
-    completedFocusBlocks: newCount,
-  });
 }
 
 export default function App({
@@ -144,11 +119,13 @@ export default function App({
         const after = store.readState();
         setViewState(derivePhaseState(after, now));
         setCurrentProject(after?.project);
-      } else if (input === "s") {
-        skipFocusToBreak(store, now);
-        const after = store.readState();
-        setViewState(derivePhaseState(after, now));
-        setCurrentProject(after?.project);
+      } else if (input === "x") {
+        try {
+          stopTimer({ store });
+        } catch {
+          // ignore — read-only stores or already-empty state
+        }
+        exit();
       } else if (input === "p") {
         setPickerProjects(getProjects());
         setShowProjectPicker(true);

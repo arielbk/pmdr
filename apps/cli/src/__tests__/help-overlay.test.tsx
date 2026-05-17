@@ -24,24 +24,32 @@ afterEach(() => {
 });
 
 describe("HelpOverlay — rendering", () => {
-  it("shows all keybinding labels", () => {
+  it("shows the detach, stop, project, and help keybindings", () => {
     const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} />);
     const frame = lastFrame() ?? "";
     expect(frame).toContain("space");
-    expect(frame).toContain("s");
-    expect(frame).toContain("p");
     expect(frame).toContain("q");
+    expect(frame).toContain("esc");
+    expect(frame).toContain("ctrl+c");
+    expect(frame).toContain("x");
+    expect(frame).toContain("p");
     expect(frame).toContain("?");
   });
 
-  it("shows keybinding descriptions", () => {
+  it("describes detach keys as keeping the timer running and x as stop session", () => {
     const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} />);
     const frame = lastFrame() ?? "";
     expect(frame).toContain("pause");
-    expect(frame).toContain("skip");
+    expect(frame).toContain("detach (timer keeps running)");
+    expect(frame).toContain("stop session");
     expect(frame).toContain("project");
-    expect(frame).toContain("quit");
     expect(frame).toContain("help");
+  });
+
+  it("does not list skip", () => {
+    const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} />);
+    const frame = lastFrame() ?? "";
+    expect(frame).not.toContain("skip");
   });
 
   it("shows a dismiss hint", () => {

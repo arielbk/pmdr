@@ -7,9 +7,9 @@ interface HelpOverlayProps {
 
 const BINDINGS = [
   { key: "space", desc: "pause / resume" },
-  { key: "s", desc: "skip to next phase" },
+  { key: "q / esc / ctrl+c", desc: "detach (timer keeps running)" },
+  { key: "x", desc: "stop session" },
   { key: "p", desc: "switch project" },
-  { key: "q", desc: "quit" },
   { key: "?", desc: "toggle this help" },
 ] as const;
 
@@ -27,7 +27,7 @@ export default function HelpOverlay({ onClose }: HelpOverlayProps) {
         {BINDINGS.map(({ key, desc }) => (
           <Text key={key}>
             {"  "}
-            {key.padEnd(6)}
+            {key.padEnd(18)}
             {"  "}
             {desc}
           </Text>

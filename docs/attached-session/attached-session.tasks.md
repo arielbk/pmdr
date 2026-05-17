@@ -62,7 +62,7 @@ Make the TUI a true attached view onto a persisted pomodoro session: extend `sta
 
 ### `tui-stop-and-help-cleanup` — Add `x` for stop, remove skip, refresh help
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** Pressing `x` in the TUI clears `state.json` (via `stopTimer`) then exits, equivalent to running `pmdr stop` from another shell. The `s` (skip) binding is removed entirely. `HelpOverlay`'s `BINDINGS` array reflects the new model: detach keys labelled "detach (timer keeps running)", `x` labelled "stop session", no skip entry.
 

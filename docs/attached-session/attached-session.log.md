@@ -83,3 +83,24 @@ The TUI now reads and writes through `state.json` instead of maintaining a separ
 - `pauseTimer` / `resumeTimer` may throw on idle/conflicting state (e.g. expired-and-advanced races); the space handler swallows those errors and just re-reads the file to refresh the view — same defensive shape as the existing `runCountdown` in `start.ts`
 - Project picker now persists to `state.json` when attached (`writeState({ ...file, project })`) — a small behavioural improvement that fell naturally out of the refactor (previously it only updated in-memory machine state)
 - Full suite: 233/233 passing (one obsolete test file of 20 cases removed, one new file of 1 case added); `tsc --noEmit` clean
+
+## tui-stop-and-help-cleanup
+
+**Date:** 2026-05-17
+**Status:** needs-review
+
+### What was done
+
+Added the `x` keybinding to the TUI: pressing `x` calls `stopTimer({ store })` (clearing `state.json`) and then `exit()`, mirroring `pmdr stop` from another shell. The `s` (skip) binding and its `skipFocusToBreak` helper were removed from `App.tsx` entirely — `s` is now an unhandled key. `HelpOverlay`'s `BINDINGS` array was rewritten to match the attached-session model: a single combined detach row (`q / esc / ctrl+c` → "detach (timer keeps running)"), a new `x` → "stop session" row, no `skip` entry. The key-column `padEnd` was widened from 6 to 18 to keep the combined-key row aligned with the others.
+
+**Files changed:**
+- `apps/cli/src/tui/App.tsx` — imported `stopTimer`; removed the `skipFocusToBreak` helper and the `s` branch from `useInput`; added `x` branch (`stopTimer` then `exit`)
+- `apps/cli/src/tui/HelpOverlay.tsx` — new `BINDINGS` array reflecting detach/stop semantics; widened key-column padding from 6 to 18
+- `apps/cli/src/__tests__/timer-keybindings.test.tsx` — replaced the `s skips phase` describe block with `s is no longer bound` (asserts press of `s` leaves `state.json` byte-identical and view still says FOCUS) and added `x stops session` describe block (asserts `store.readState()` is null and `exitFn` called)
+- `apps/cli/src/__tests__/help-overlay.test.tsx` — updated rendering tests to expect new detach-row labels (`ctrl+c`, `esc`, "detach (timer keeps running)") and `stop session`; added a negative assertion that `skip` is not present
+
+### Observations
+
+- `stopTimer` returns false on idle state and never throws on the live store, but the `try/catch` is left as defensive shape for read-only-store tests (whose `clearState` is a no-op)
+- Marked `needs-review` per the slice's `Human checkpoint: yes` — the manual step is to launch the TUI, press `?`, and confirm the help overlay reads correctly
+- Full suite: 234/234 passing; `tsc --noEmit` clean
