@@ -6,7 +6,7 @@ Make the TUI a true attached view onto a persisted pomodoro session: extend `sta
 
 ### `schema-and-phase-advancement` — Extend state schema and persist phase transitions
 
-**Status:** in-progress
+**Status:** done
 
 **Outside-in:** `advancePhaseIfExpired(now)` exported from `state.ts` — replaces `finalizeIfExpired` at all call sites. Reads `state.json`, and: if focus expired, appends a completion and writes a fresh break record (incrementing `completedFocusBlocks`, preserving project); if break expired, clears state; loops until stable. `StateRecord` gains `phase: "focus" | "break"` and `completedFocusBlocks: number`, both defaulted to `"focus"` / `0` when missing from old records.
 

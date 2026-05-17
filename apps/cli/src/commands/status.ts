@@ -20,7 +20,7 @@ export function getStatus(opts: {
 }): StatusResult {
   const { store, now } = opts;
 
-  store.finalizeIfExpired(now);
+  store.advancePhaseIfExpired(now);
 
   const file = store.readState();
   const derived = deriveState({ file, now });

@@ -53,6 +53,8 @@ describe("initTimer", () => {
       pausedAt: null,
       accumulatedPauseMs: 0,
       project: "test-proj",
+      phase: "focus",
+      completedFocusBlocks: 0,
     });
   });
 
@@ -80,7 +82,24 @@ describe("initTimer", () => {
     );
   });
 
-  it("finalizes an expired timer then starts a new one", () => {
+  it("advances a fully expired session (focus+break) to idle, then starts a new timer", () => {
+    // startedAt far back enough that both the focus AND the 5-min break have expired
+    // focus: expires at NOW-400_000+60_000 = NOW-340_000
+    // break: starts at NOW-340_000, lasts 300_000ms → expires at NOW-40_000
+    store.writeState({
+      startedAt: NOW - 400_000,
+      durationMs: 60_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+    });
+    expect(() =>
+      initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" }),
+    ).not.toThrow();
+    expect(store.readState()).toMatchObject({ durationMs: 10_000, startedAt: NOW, project: "test-proj", phase: "focus", completedFocusBlocks: 0 });
+  });
+
+  it("throws when break is running after focus expired", () => {
+    // focus expired 10s ago; 5-min break just started → break is still running
     store.writeState({
       startedAt: NOW - 70_000,
       durationMs: 60_000,
@@ -89,7 +108,6 @@ describe("initTimer", () => {
     });
     expect(() =>
       initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" }),
-    ).not.toThrow();
-    expect(store.readState()).toMatchObject({ durationMs: 10_000, startedAt: NOW, project: "test-proj" });
+    ).toThrow(/already running/i);
   });
 });

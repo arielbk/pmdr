@@ -17,7 +17,7 @@ export function initTimer(options: {
 }): void {
   const { store, durationMs, now, project } = options;
 
-  store.finalizeIfExpired(now);
+  store.advancePhaseIfExpired(now);
 
   const file = store.readState();
   const derived = deriveState({ file, now });
@@ -35,6 +35,8 @@ export function initTimer(options: {
     pausedAt: null,
     accumulatedPauseMs: 0,
     project,
+    phase: "focus",
+    completedFocusBlocks: 0,
   });
 }
 
@@ -134,7 +136,7 @@ async function runCountdown(
       }
 
       if (derived.kind === "expired") {
-        store.finalizeIfExpired(now);
+        store.advancePhaseIfExpired(now);
         clearInterval(interval);
         process.stdout.write("\r\x1b[K");
         process.stdout.write("Pomodoro complete!\x07\n");

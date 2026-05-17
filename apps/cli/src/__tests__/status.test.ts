@@ -58,7 +58,9 @@ describe("getStatus", () => {
     });
   });
 
-  it("finalizes an expired timer and returns idle", () => {
+  it("advances an expired focus to break and returns the running break state", () => {
+    // focus: expires at NOW-70_000+60_000 = NOW-10_000
+    // break: startedAt=NOW-10_000, durationMs=300_000 → still running at NOW
     store.writeState({
       startedAt: NOW - 70_000,
       durationMs: 60_000,
@@ -66,8 +68,10 @@ describe("getStatus", () => {
       accumulatedPauseMs: 0,
     });
     const result = getStatus({ store, now: NOW });
-    expect(result).toEqual({ state: "idle" });
-    expect(store.readState()).toBeNull();
+    expect(result.state).toBe("running");
+    const file = store.readState();
+    expect(file?.phase).toBe("break");
+    expect(file?.completedFocusBlocks).toBe(1);
   });
 
   it("appends a completion to log when lazy-finalizing an expired timer", () => {
