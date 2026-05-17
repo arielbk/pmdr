@@ -5,6 +5,7 @@ import resumeCmd from "./commands/resume.js";
 import stopCmd from "./commands/stop.js";
 import statusCmd from "./commands/status.js";
 import todayCmd from "./commands/today.js";
+import projectCmd from "./commands/project.js";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
@@ -23,6 +24,7 @@ const main = defineCommand({
     stop: stopCmd,
     status: statusCmd,
     today: todayCmd,
+    project: projectCmd,
   },
 });
 
