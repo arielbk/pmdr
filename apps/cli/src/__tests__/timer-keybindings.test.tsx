@@ -1,7 +1,11 @@
 import React from "react";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { render, cleanup } from "ink-testing-library";
 import App from "../tui/App.js";
+import { createStateModule } from "../state.js";
 import type { StateRecord } from "../state.js";
 
 const makeRunningRecord = (): StateRecord => ({
@@ -84,5 +88,78 @@ describe("timer-keybindings — q quits", () => {
     expect(lastFrame()).toContain("FOCUS");
 
     expect(() => stdin.write("q")).not.toThrow();
+  });
+});
+
+describe("timer-keybindings — detach keys call exit() and leave state.json untouched", () => {
+  let tmpDir: string;
+  let store: ReturnType<typeof createStateModule>;
+
+  const NOW = 1_000_000;
+
+  beforeEach(() => {
+    vi.setSystemTime(NOW);
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-detach-test-"));
+    store = createStateModule(tmpDir);
+    const record: StateRecord = {
+      startedAt: NOW - 60_000,
+      durationMs: 25 * 60 * 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+    };
+    store.writeState(record);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("pressing q calls exitFn and does not mutate state.json", async () => {
+    const mockExit = vi.fn();
+    const stateJsonPath = join(tmpDir, "state.json");
+    const before = readFileSync(stateJsonPath, "utf8");
+
+    const { stdin } = render(
+      <App readStateFn={() => store.readState()} exitFn={mockExit} />,
+    );
+
+    stdin.write("q");
+    await flush();
+
+    expect(mockExit).toHaveBeenCalled();
+    expect(readFileSync(stateJsonPath, "utf8")).toBe(before);
+  });
+
+  it("pressing Ctrl+C calls exitFn and does not mutate state.json", async () => {
+    const mockExit = vi.fn();
+    const stateJsonPath = join(tmpDir, "state.json");
+    const before = readFileSync(stateJsonPath, "utf8");
+
+    const { stdin } = render(
+      <App readStateFn={() => store.readState()} exitFn={mockExit} />,
+    );
+
+    stdin.write("\x03");
+    await flush();
+
+    expect(mockExit).toHaveBeenCalled();
+    expect(readFileSync(stateJsonPath, "utf8")).toBe(before);
+  });
+
+  it("pressing Esc calls exitFn and does not mutate state.json", async () => {
+    const mockExit = vi.fn();
+    const stateJsonPath = join(tmpDir, "state.json");
+    const before = readFileSync(stateJsonPath, "utf8");
+
+    const { stdin } = render(
+      <App readStateFn={() => store.readState()} exitFn={mockExit} />,
+    );
+
+    stdin.write("\x1B");
+    vi.advanceTimersByTime(100); // ink waits briefly to disambiguate bare ESC from escape sequences
+    await flush();
+
+    expect(mockExit).toHaveBeenCalled();
+    expect(readFileSync(stateJsonPath, "utf8")).toBe(before);
   });
 });

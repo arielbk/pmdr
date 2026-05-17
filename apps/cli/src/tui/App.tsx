@@ -14,6 +14,7 @@ interface AppProps {
   getProjects?: () => ProjectRecord[];
   upsertProjectFn?: (name: string) => ProjectRecord;
   readStateFn?: () => StateRecord | null;
+  exitFn?: () => void;
 }
 
 interface AppInit {
@@ -61,8 +62,10 @@ export default function App({
   getProjects = () => listProjects({ includeArchived: false }),
   upsertProjectFn = upsertProject,
   readStateFn = readState,
+  exitFn,
 }: AppProps) {
-  const { exit } = useApp();
+  const { exit: inkExit } = useApp();
+  const exit = exitFn ?? inkExit;
 
   const [{ machine, showProjectPicker: initPicker, pickerProjects: initPickerProjects, currentProject: initProject }] = useState(
     () => buildAppInit(readStateFn, getProjects),
@@ -88,7 +91,7 @@ export default function App({
   useInput(
     (input, key) => {
       const now = Date.now();
-      if (input === "q" || (key.ctrl && input === "c")) {
+      if (input === "q" || (key.ctrl && input === "c") || key.escape || input === "\x1B") {
         exit();
       } else if (input === " ") {
         const state = machine.getState(now);
