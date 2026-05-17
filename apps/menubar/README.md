@@ -34,9 +34,26 @@ apps/menubar/
 ├── project.yml           # XcodeGen spec — generates pmdr-menubar.xcodeproj
 ├── Resources/
 │   └── Info.plist        # LSUIElement = true (menubar-only app)
-└── Sources/
-    ├── main.swift        # entry point, installs AppDelegate
-    └── AppDelegate.swift # owns the NSStatusItem and its menu
+├── Sources/
+│   ├── main.swift        # entry point, installs AppDelegate
+│   ├── AppDelegate.swift # owns the NSStatusItem and its menu
+│   └── PmdrClient.swift  # typed Swift client for the `pmdr` CLI
+└── Tests/
+    └── PmdrMenubarTests/ # XCTest bundle for the menubar app
 ```
 
 The generated `pmdr-menubar.xcodeproj` is git-ignored — regenerate with `xcodegen generate` after changing `project.yml`.
+
+## Tests
+
+Unit tests live under `Tests/PmdrMenubarTests/` and run via the `pmdr-menubarTests` scheme:
+
+```sh
+xcodebuild -scheme pmdr-menubar -destination 'platform=macOS' test
+```
+
+Integration tests that shell out to the real `pmdr` binary are gated behind `PMDR_INTEGRATION=1` and require `pmdr` on PATH:
+
+```sh
+PMDR_INTEGRATION=1 xcodebuild -scheme pmdr-menubar -destination 'platform=macOS' test
+```

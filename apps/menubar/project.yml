@@ -15,11 +15,26 @@ settings:
     CODE_SIGN_IDENTITY: "-"
 
 targets:
+  PmdrMenubarCore:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Sources/PmdrMenubarCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.pmdr.menubar.core
+        PRODUCT_NAME: PmdrMenubarCore
+        DEFINES_MODULE: YES
+
   pmdr-menubar:
     type: application
     platform: macOS
     sources:
       - path: Sources
+        excludes:
+          - PmdrMenubarCore/**
+    dependencies:
+      - target: PmdrMenubarCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.pmdr.menubar
@@ -29,3 +44,27 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: Resources/Info.plist
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+
+  PmdrMenubarCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/PmdrMenubarCoreTests
+    dependencies:
+      - target: PmdrMenubarCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.pmdr.menubar.core.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  pmdr-menubar:
+    build:
+      targets:
+        pmdr-menubar: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PmdrMenubarCoreTests

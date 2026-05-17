@@ -20,7 +20,7 @@ A native Swift macOS menubar app that surfaces pmdr's timer in the system tray, 
 
 ### `pmdr-client` — Typed Swift client for the CLI
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** `PmdrClient.status() async throws -> Status` where `Status` is an enum mirroring `StatusResult` in `apps/cli/src/commands/status.ts`. Throws a typed `.binaryNotFound` error when `pmdr` is not on PATH.
 
