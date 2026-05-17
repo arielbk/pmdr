@@ -1,92 +1,127 @@
 import React, { useEffect, useState } from "react";
 import { useApp, useInput } from "ink";
-import { createPhaseStateMachine } from "./phase-state-machine.js";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { derivePhaseState } from "./phase-state-machine.js";
 import CountdownView from "./CountdownView.js";
 import ProjectPickerOverlay from "./ProjectPickerOverlay.js";
 import HelpOverlay from "./HelpOverlay.js";
 import { listProjects, upsertProject } from "../projects.js";
-import { readState, deriveState } from "../state.js";
-import type { DerivedPhaseState, InitialMachineState } from "./phase-state-machine.js";
+import { createStateModule, deriveState } from "../state.js";
+import { pauseTimer } from "../commands/pause.js";
+import { resumeTimer } from "../commands/resume.js";
+import type { DerivedPhaseState } from "./phase-state-machine.js";
 import type { ProjectRecord } from "../projects.js";
 import type { StateRecord } from "../state.js";
+
+type Store = ReturnType<typeof createStateModule>;
 
 interface AppProps {
   getProjects?: () => ProjectRecord[];
   upsertProjectFn?: (name: string) => ProjectRecord;
+  store?: Store;
   readStateFn?: () => StateRecord | null;
   exitFn?: () => void;
 }
 
-interface AppInit {
-  machine: ReturnType<typeof createPhaseStateMachine>;
-  showProjectPicker: boolean;
-  pickerProjects: ProjectRecord[];
-  currentProject: string | undefined;
+const DEFAULT_STATE_DIR = join(homedir(), ".local", "state", "pmdr");
+
+function makeReadOnlyStore(readFn: () => StateRecord | null): Store {
+  return {
+    readState: readFn,
+    writeState: () => {},
+    clearState: () => {},
+    readCompletions: () => [],
+    appendCompletion: () => {},
+    finalizeIfExpired: () => {},
+    advancePhaseIfExpired: () => {},
+    readToday: () => ({}),
+    rewriteCompletionProject: () => {},
+  } as unknown as Store;
 }
 
-function buildAppInit(
-  readStateFn: () => StateRecord | null,
-  getProjects: () => ProjectRecord[],
-): AppInit {
-  const now = Date.now();
-  const record = readStateFn();
-  const kind = record ? deriveState({ file: record, now }).kind : "idle";
-
-  if (record && (kind === "running" || kind === "paused")) {
-    const seed: InitialMachineState = {
-      phase: "focus",
-      phaseStartedAt: record.startedAt,
-      phaseDurationMs: record.durationMs,
-      pausedAt: record.pausedAt,
-      accumulatedPauseMs: record.accumulatedPauseMs,
-      completedFocusBlocks: 0,
-      project: record.project,
-    };
-    return {
-      machine: createPhaseStateMachine(now, { initialState: seed }),
-      showProjectPicker: false,
-      pickerProjects: [],
-      currentProject: record.project,
-    };
-  }
-
-  return {
-    machine: createPhaseStateMachine(now),
-    showProjectPicker: true,
-    pickerProjects: getProjects(),
-    currentProject: undefined,
-  };
+function skipFocusToBreak(store: Store, now: number): void {
+  const file = store.readState();
+  if (!file) return;
+  const phase = file.phase ?? "focus";
+  if (phase !== "focus") return;
+  const completedFocusBlocks = file.completedFocusBlocks ?? 0;
+  store.appendCompletion({
+    completedAt: now,
+    durationMs: file.durationMs,
+    project: file.project ?? "(unassigned)",
+  });
+  const newCount = completedFocusBlocks + 1;
+  const shortBreakMs = 5 * 60 * 1000;
+  const longBreakMs = 15 * 60 * 1000;
+  const breakMs = newCount % 4 === 0 ? longBreakMs : shortBreakMs;
+  store.writeState({
+    startedAt: now,
+    durationMs: breakMs,
+    pausedAt: null,
+    accumulatedPauseMs: 0,
+    project: file.project,
+    phase: "break",
+    completedFocusBlocks: newCount,
+  });
 }
 
 export default function App({
   getProjects = () => listProjects({ includeArchived: false }),
   upsertProjectFn = upsertProject,
-  readStateFn = readState,
+  store: providedStore,
+  readStateFn,
   exitFn,
 }: AppProps) {
   const { exit: inkExit } = useApp();
   const exit = exitFn ?? inkExit;
 
-  const [{ machine, showProjectPicker: initPicker, pickerProjects: initPickerProjects, currentProject: initProject }] = useState(
-    () => buildAppInit(readStateFn, getProjects),
+  const [store] = useState<Store>(
+    () =>
+      providedStore ??
+      (readStateFn
+        ? makeReadOnlyStore(readStateFn)
+        : createStateModule(DEFAULT_STATE_DIR)),
   );
 
+  const [initial] = useState(() => {
+    const now = Date.now();
+    const record = store.readState();
+    const kind = record ? deriveState({ file: record, now }).kind : "idle";
+    return {
+      record,
+      isAttached: kind === "running" || kind === "paused",
+    };
+  });
+
   const [viewState, setViewState] = useState<DerivedPhaseState>(() =>
-    machine.getState(Date.now()),
+    derivePhaseState(initial.record, Date.now()),
   );
-  const [showProjectPicker, setShowProjectPicker] = useState(initPicker);
+  const [showProjectPicker, setShowProjectPicker] = useState(
+    !initial.isAttached,
+  );
   const [showHelp, setShowHelp] = useState(false);
-  const [currentProject, setCurrentProject] = useState<string | undefined>(initProject);
-  const [pickerProjects, setPickerProjects] = useState<ProjectRecord[]>(initPickerProjects);
+  const [currentProject, setCurrentProject] = useState<string | undefined>(
+    initial.record?.project,
+  );
+  const [pickerProjects, setPickerProjects] = useState<ProjectRecord[]>(
+    initial.isAttached ? [] : getProjects(),
+  );
 
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
-      machine.tick(now);
-      setViewState(machine.getState(now));
+      try {
+        store.advancePhaseIfExpired(now);
+      } catch {
+        // ignore — read-only test stores can no-op
+      }
+      const record = store.readState();
+      setViewState(derivePhaseState(record, now));
+      setCurrentProject(record?.project);
     }, 500);
     return () => clearInterval(interval);
-  }, [machine]);
+  }, [store]);
 
   useInput(
     (input, key) => {
@@ -94,16 +129,26 @@ export default function App({
       if (input === "q" || (key.ctrl && input === "c") || key.escape || input === "\x1B") {
         exit();
       } else if (input === " ") {
-        const state = machine.getState(now);
-        if (state.paused) {
-          machine.resume(now);
-        } else {
-          machine.pause(now);
+        const file = store.readState();
+        if (!file) return;
+        const derived = deriveState({ file, now });
+        try {
+          if (derived.kind === "paused") {
+            resumeTimer({ store, now });
+          } else if (derived.kind === "running") {
+            pauseTimer({ store, now });
+          }
+        } catch {
+          // swallow — pauseTimer/resumeTimer throw on idle/conflicting state
         }
-        setViewState(machine.getState(now));
+        const after = store.readState();
+        setViewState(derivePhaseState(after, now));
+        setCurrentProject(after?.project);
       } else if (input === "s") {
-        machine.skip(now);
-        setViewState(machine.getState(now));
+        skipFocusToBreak(store, now);
+        const after = store.readState();
+        setViewState(derivePhaseState(after, now));
+        setCurrentProject(after?.project);
       } else if (input === "p") {
         setPickerProjects(getProjects());
         setShowProjectPicker(true);
@@ -116,7 +161,10 @@ export default function App({
 
   function handleProjectSelect(name: string) {
     const record = upsertProjectFn(name);
-    machine.setProject(record.name);
+    const file = store.readState();
+    if (file) {
+      store.writeState({ ...file, project: record.name });
+    }
     setCurrentProject(record.name);
     setShowProjectPicker(false);
   }

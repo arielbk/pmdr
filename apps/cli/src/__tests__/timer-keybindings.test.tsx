@@ -29,21 +29,41 @@ afterEach(() => {
 });
 
 describe("timer-keybindings — space toggles pause/resume", () => {
-  it("pressing space pauses the timer (shows dim/gray state)", async () => {
-    const { lastFrame, stdin } = render(<App readStateFn={makeRunningRecord} />);
+  let tmpDir: string;
+  let store: ReturnType<typeof createStateModule>;
+  const NOW = 1_000_000;
 
-    // Initially running — ANSI red for focus
+  beforeEach(() => {
+    vi.setSystemTime(NOW);
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-toggle-test-"));
+    store = createStateModule(tmpDir);
+    store.writeState({
+      startedAt: NOW - 60_000,
+      durationMs: 25 * 60 * 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("pressing space pauses the timer (shows dim/gray state)", async () => {
+    const { lastFrame, stdin } = render(<App store={store} exitFn={vi.fn()} />);
+
     expect(lastFrame()).toMatch(/\x1b\[.*?31.*?m|\x1b\[31m/);
 
     stdin.write(" ");
     await flush();
 
-    // Paused state uses gray (dim ANSI code \x1b[2m or gray color)
     expect(lastFrame()).toMatch(/\x1b\[2m|\x1b\[.*?90.*?m/);
   });
 
   it("pressing space twice resumes the timer (back to red)", async () => {
-    const { lastFrame, stdin } = render(<App readStateFn={makeRunningRecord} />);
+    const { lastFrame, stdin } = render(<App store={store} exitFn={vi.fn()} />);
 
     stdin.write(" ");
     await flush();
@@ -51,14 +71,35 @@ describe("timer-keybindings — space toggles pause/resume", () => {
     stdin.write(" ");
     await flush();
 
-    // After resume, focus is red again
     expect(lastFrame()).toMatch(/\x1b\[.*?31.*?m|\x1b\[31m/);
   });
 });
 
 describe("timer-keybindings — s skips phase", () => {
+  let tmpDir: string;
+  let store: ReturnType<typeof createStateModule>;
+  const NOW = 1_000_000;
+
+  beforeEach(() => {
+    vi.setSystemTime(NOW);
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-skip-test-"));
+    store = createStateModule(tmpDir);
+    store.writeState({
+      startedAt: NOW - 60_000,
+      durationMs: 25 * 60 * 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it("pressing s transitions from focus to break", async () => {
-    const { lastFrame, stdin } = render(<App readStateFn={makeRunningRecord} />);
+    const { lastFrame, stdin } = render(<App store={store} exitFn={vi.fn()} />);
 
     expect(lastFrame()).toContain("FOCUS");
 
@@ -69,7 +110,7 @@ describe("timer-keybindings — s skips phase", () => {
   });
 
   it("pressing s while paused still skips to break", async () => {
-    const { lastFrame, stdin } = render(<App readStateFn={makeRunningRecord} />);
+    const { lastFrame, stdin } = render(<App store={store} exitFn={vi.fn()} />);
 
     stdin.write(" ");
     await flush();
@@ -88,6 +129,62 @@ describe("timer-keybindings — q quits", () => {
     expect(lastFrame()).toContain("FOCUS");
 
     expect(() => stdin.write("q")).not.toThrow();
+  });
+});
+
+describe("timer-keybindings — space persists pause/resume to state.json", () => {
+  let tmpDir: string;
+  let store: ReturnType<typeof createStateModule>;
+
+  const NOW = 1_000_000;
+
+  beforeEach(() => {
+    vi.setSystemTime(NOW);
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-persist-test-"));
+    store = createStateModule(tmpDir);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("pressing space on a running timer writes pausedAt=now to state.json", async () => {
+    store.writeState({
+      startedAt: NOW - 60_000,
+      durationMs: 25 * 60 * 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+
+    const { stdin } = render(<App store={store} exitFn={vi.fn()} />);
+
+    stdin.write(" ");
+    await flush();
+
+    const file = store.readState();
+    expect(file?.pausedAt).toBe(NOW);
+  });
+
+  it("pressing space on a paused timer clears pausedAt and accumulates pause duration", async () => {
+    store.writeState({
+      startedAt: NOW - 60_000,
+      durationMs: 25 * 60 * 1000,
+      pausedAt: NOW - 10_000,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+
+    const { stdin } = render(<App store={store} exitFn={vi.fn()} />);
+
+    stdin.write(" ");
+    await flush();
+
+    const file = store.readState();
+    expect(file?.pausedAt).toBeNull();
+    expect(file?.accumulatedPauseMs).toBe(10_000);
   });
 });
 

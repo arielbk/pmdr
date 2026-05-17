@@ -58,3 +58,28 @@ Surfaced phase and completed-block info in `pmdr status` JSON and text output. T
 - For the focus phase the suffix shows the *next* block index (`completedFocusBlocks + 1`) since that block is in progress; for the break phase it shows blocks completed so far (`completedFocusBlocks`)
 - The `state` field is kept untouched so existing scripts continue to parse running/paused/idle
 - Full suite: 250/250 passing; `tsc --noEmit` clean. ESLint was broken project-wide (v9 config-format migration not done) — unrelated to this slice
+
+## tui-mutations-persist
+
+**Date:** 2026-05-17
+**Status:** done
+
+### What was done
+
+The TUI now reads and writes through `state.json` instead of maintaining a separate in-memory phase state machine. The tick interval calls `store.advancePhaseIfExpired(now)` then re-reads the file each iteration; pressing `space` invokes the shared `pauseTimer` / `resumeTimer` helpers from `commands/pause.ts` / `commands/resume.ts`, so a pause done in the TUI is immediately visible to `pmdr status` in another shell. `phase-state-machine.ts` was reduced from a stateful machine to a single pure helper, `derivePhaseState(record, now): DerivedPhaseState`.
+
+`App.tsx` gained an injectable `store?: ReturnType<typeof createStateModule>` prop. For backward compatibility with read-only tests that pass a bare `readStateFn`, a `makeReadOnlyStore` wrapper exposes a Store-shaped object whose writes are no-ops. The skip (`s`) handler is retained but now mutates `state.json` directly (writes a fresh break record after appending a focus completion); it will be removed in the next slice.
+
+**Files changed:**
+- `apps/cli/src/tui/App.tsx` — replaced the in-memory machine with store-driven tick + space handlers; added `store` prop with read-only fallback; project picker now persists the chosen project onto the live state record
+- `apps/cli/src/tui/phase-state-machine.ts` — reduced to a single `derivePhaseState` pure function plus `Phase` / `DerivedPhaseState` types
+- `apps/cli/src/__tests__/timer-keybindings.test.tsx` — added a `space persists pause/resume to state.json` describe block (two assertions on disk-side writes); updated the existing space-toggle and skip describe blocks to use a tmpdir-backed `store` instead of `readStateFn` (the read-only wrapper can't observe writes)
+- `apps/cli/src/__tests__/tui-mutations-persist.test.tsx` — new integration test: attach → press space → `getStatus` reports paused → press space → `getStatus` reports running
+- `apps/cli/src/__tests__/phase-state-machine.test.ts` — deleted; its target (the stateful machine) no longer exists. Equivalent cycle/transition behaviour is covered by `state.test.ts`'s `advancePhaseIfExpired` block
+
+### Observations
+
+- The `s` handler still works but will be deleted by `tui-stop-and-help-cleanup`; left untouched here to avoid bleeding scope into a downstream slice
+- `pauseTimer` / `resumeTimer` may throw on idle/conflicting state (e.g. expired-and-advanced races); the space handler swallows those errors and just re-reads the file to refresh the view — same defensive shape as the existing `runCountdown` in `start.ts`
+- Project picker now persists to `state.json` when attached (`writeState({ ...file, project })`) — a small behavioural improvement that fell naturally out of the refactor (previously it only updated in-memory machine state)
+- Full suite: 233/233 passing (one obsolete test file of 20 cases removed, one new file of 1 case added); `tsc --noEmit` clean

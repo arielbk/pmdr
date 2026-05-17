@@ -48,7 +48,7 @@ Make the TUI a true attached view onto a persisted pomodoro session: extend `sta
 
 ### `tui-mutations-persist` — TUI reads and writes through `state.json`
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** TUI's tick interval re-reads `state.json` and runs `advancePhaseIfExpired(now)` instead of mutating an in-memory phase machine. `space` calls the shared `pauseTimer` / `resumeTimer` helpers from `commands/pause.ts` / `commands/resume.ts` so pause state is written to disk. The in-memory phase state machine module is removed (or reduced to a pure rendering helper if anything remains).
 
