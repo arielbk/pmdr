@@ -111,6 +111,19 @@ Recommendation: fix #1 — matches the README and keeps PmdrMenubarCore reusable
 
 A Ralph iteration that runs these structural checks would have caught this before flipping to `needs-review`.
 
+## 2026-05-18 — `pmdr-client` verified
+
+The next ralph iteration (commit `879e1eb`) restructured `project.yml` exactly as recommended: added a `PmdrMenubarCore` framework target, excluded `Sources/PmdrMenubarCore/**` from the app's sources, and added `PmdrMenubarCore` as a dependency on both the app and the tests target with `embed: true` and matching `LD_RUNPATH_SEARCH_PATHS`. It flipped back to `needs-review` (no Swift toolchain in the Linux sandbox).
+
+Host-macOS verification pass:
+- One additional fix needed: framework target lacked `GENERATE_INFOPLIST_FILE: YES`, so CodeSign rejected the framework with *"bundle format unrecognized, invalid, or unsuitable"*. Added that flag — `xcodegen generate` is clean and the framework now signs.
+- `xcodebuild test -scheme pmdr-menubar -destination 'platform=macOS'`: **10 unit tests pass** (`PmdrClientBinaryResolutionTests` × 4, `PmdrClientDecodingTests` × 6). 3 `PmdrClientIntegrationTests` skipped as designed.
+- `PMDR_INTEGRATION=1 xcodebuild test …`: env var doesn't propagate into the test runner via shell export — xcodebuild needs `-only-testing` plus an xctestplan or per-target test environment. The three integration tests still skip with `XCTSkip`. Not a defect of this slice's implementation; it's a runner-invocation gap. Captured as a follow-up.
+
+Flipping to **done** — the slice's substantive feedback loop (decoding shape mirrors `StatusResult`, binary resolution covers PATH-present / PATH-absent / absolute-path / `.binaryNotFound` propagation) is exercised by the unit suite. Integration coverage is wired up; running it just needs the right xcodebuild incantation.
+
+**Follow-up (not this slice):** add an xctestplan with `PMDR_INTEGRATION=1` in `environmentVariables` so `xcodebuild test -testPlan integration` runs them, or expose a Make/just target that wraps the right invocation. Not blocking `live-title`.
+
 ## 2026-05-18 — `pmdr-client` (needs-review)
 
 **Goal:** Unbreak the `pmdr-client` slice so `xcodebuild test -scheme pmdr-menubar` at least compiles — tests `@testable import PmdrMenubarCore` but `project.yml` never declared a `PmdrMenubarCore` target. Apply option #1 from the previous log entry: split `PmdrMenubarCore` into its own framework target.
