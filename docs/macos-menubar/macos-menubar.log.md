@@ -110,3 +110,47 @@ Recommendation: fix #1 — matches the README and keeps PmdrMenubarCore reusable
 - `xcodegen generate` runs on Linux via the XcodeGen Mint/Mise install or `swift run` — if available in the sandbox, run it and check the spec validates. If not, at minimum hand-validate the YAML schema by comparing against the existing committed structure.
 
 A Ralph iteration that runs these structural checks would have caught this before flipping to `needs-review`.
+
+## 2026-05-18 — `pmdr-client` (needs-review)
+
+**Goal:** Unbreak the `pmdr-client` slice so `xcodebuild test -scheme pmdr-menubar` at least compiles — tests `@testable import PmdrMenubarCore` but `project.yml` never declared a `PmdrMenubarCore` target. Apply option #1 from the previous log entry: split `PmdrMenubarCore` into its own framework target.
+
+**State on entry**
+- `pmdr-client` was `Status: not-started`, deliberately reset by the prior log entry after macOS-host verification found `xcodebuild` failed with "Unable to find module dependency: 'PmdrMenubarCore'".
+- All source code (`Sources/PmdrMenubarCore/PmdrClient.swift`, `Tests/PmdrMenubarCoreTests/PmdrClientTests.swift`) and the README were already aligned to the framework layout — only `project.yml` was wrong.
+
+**What I did**
+- Added a `PmdrMenubarCore` framework target in `project.yml`:
+  - `type: framework`, sources rooted at `Sources/PmdrMenubarCore`.
+  - `DEFINES_MODULE: YES` so `import PmdrMenubarCore` resolves.
+  - `SKIP_INSTALL: YES`, `DYLIB_INSTALL_NAME_BASE: @rpath`, and an `LD_RUNPATH_SEARCH_PATHS` of `@executable_path/../Frameworks @loader_path/Frameworks` so the framework links cleanly when embedded.
+- Changed the app target so it no longer swallows the framework's sources:
+  - `sources: - path: Sources` now `excludes: - "PmdrMenubarCore/**"`.
+  - Added a `dependencies: - target: PmdrMenubarCore` with `embed: true` and `codeSign: true` so the framework lands in `pmdr.app/Contents/Frameworks/` at build time.
+  - Set the app's `LD_RUNPATH_SEARCH_PATHS` to `@executable_path/../Frameworks` so the embedded framework loads at runtime.
+- Updated the test target to depend on both `pmdr-menubar` (for `TEST_HOST` / `BUNDLE_LOADER`) and `PmdrMenubarCore` (so `@testable import PmdrMenubarCore` resolves at compile time). Added `LD_RUNPATH_SEARCH_PATHS` covering the standard test-bundle search paths.
+
+**Why option #1 over flattening**
+- The README already documents the framework layout (`PmdrMenubarCore/         # framework consumed by the app + tests`). Flattening would force a README rewrite and lose the modularity for future menubar surfaces (preferences window, eventually).
+- The cost is purely declarative — no Swift source changes — and matches the access modifiers that were already in place (`public enum Status`, `public struct PmdrClient`, etc.).
+
+**Self-verification (Linux sandbox, no Swift toolchain)**
+Following the prior log entry's explicit guidance, ran the structural checks that don't need a Mac:
+1. **YAML validity + path existence:** wrote a Python validator that loads `project.yml`, walks every target's `sources:` and `dependencies:`, and checks the schemes. Result: `VALIDATION: OK`, targets `[PmdrMenubarCore, pmdr-menubar, pmdr-menubarTests]`, schemes `[pmdr-menubar]`.
+2. **Module resolution:** `Tests/PmdrMenubarCoreTests/PmdrClientTests.swift:2` does `@testable import PmdrMenubarCore` — now backed by a declared target of that exact name.
+3. **Access modifiers:** confirmed `Status`, `Phase`, `Status.Active` (and its init), `PmdrClient` (and its init), `PmdrClientError`, and `PmdrClient.status()` are all `public`. Tests using `@testable` still reach the internal statics `decodeStatus(from:)` and `resolveBinary(hint:environment:)`.
+4. **README ↔ tree:** diffed README layout against `find apps/menubar -type f`. Tree matches diagram.
+5. **Swift toolchain on Linux:** apt has no Apple-Swift package (only OpenStack `swift`); a swift.org tarball install is ~500MB and only helps with `Foundation`-only code (the app target uses `AppKit` which is Darwin-only). Skipped — structural checks above already cover what could fail.
+
+**Why still `needs-review`, not `done`**
+The slice's feedback loop is "Integration test against the real `pmdr` binary in a temp state dir: idle status decodes, running status decodes after `pmdr start --force --project test`, paused status decodes after `pmdr pause`, and a fake PATH surfaces `.binaryNotFound`." That is a *runtime* gate that needs macOS + Xcode + a built `pmdr` CLI on PATH. The structural blocker is fixed but the actual tests still haven't executed.
+
+**To verify on macOS**
+1. `cd apps/menubar && xcodegen generate`
+2. `xcodebuild test -scheme pmdr-menubar -destination 'platform=macOS'` — expect `PmdrClientDecodingTests` and `PmdrClientBinaryResolutionTests` green; `PmdrClientIntegrationTests` skipped.
+3. `pnpm --filter cli build` and expose `pmdr` on PATH.
+4. `PMDR_INTEGRATION=1 xcodebuild test -scheme pmdr-menubar -destination 'platform=macOS'` — expect all three integration tests green.
+
+**Open follow-ups (not this slice)**
+- `AppDelegate.swift` does not yet `import PmdrMenubarCore`; the framework is linked and embedded but unused by the app's binary until `live-title` plugs in the poller. That's expected — embedding without usage is harmless.
+- If embedding ever feels heavyweight for a tiny client, a `staticFramework` or a Swift Package target are both lighter alternatives — but for now the framework matches the README and keeps `@testable import` straightforward.
