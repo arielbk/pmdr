@@ -1,16 +1,21 @@
 import AppKit
 import Foundation
+import os.log
 import PmdrMenubarCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
-    private let poller = StatusPoller(fetcher: PmdrClient())
+    private var poller: StatusPoller?
     private var pollTask: Task<Void, Never>?
     private var redrawTimer: Timer?
     private var lastStatus: Status = .idle
     private var lastPollAt: Date = .distantPast
+    private let log = OSLog(subsystem: "dev.pmdr.menubar", category: "polling")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let environment = LoginShellEnvironment.resolve()
+        poller = StatusPoller(fetcher: PmdrClient(environment: environment))
+
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             if let image = NSImage(systemSymbolName: "timer", accessibilityDescription: "pmdr") {
@@ -45,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func startPolling() {
-        let poller = self.poller
+        guard let poller else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
@@ -58,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         self?.redrawTitle()
                     }
                 } catch {
-                    // Errors are non-fatal for the title — future slices surface them.
+                    os_log("Failed to poll pmdr status: %{public}@", log: self?.log ?? .default, type: .error, String(describing: error))
                 }
                 let cadence = await poller.cadence
                 try? await Task.sleep(nanoseconds: UInt64(cadence * 1_000_000_000))
@@ -85,10 +90,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: NSMenuDelegate
 
     func menuWillOpen(_ menu: NSMenu) {
-        Task { await poller.setMenuOpen(true) }
+        Task { await poller?.setMenuOpen(true) }
     }
 
     func menuDidClose(_ menu: NSMenu) {
-        Task { await poller.setMenuOpen(false) }
+        Task { await poller?.setMenuOpen(false) }
     }
 }

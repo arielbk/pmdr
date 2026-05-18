@@ -58,15 +58,12 @@ targets:
     sources:
       - path: Tests/PmdrMenubarCoreTests
     dependencies:
-      - target: pmdr-menubar
       - target: PmdrMenubarCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.pmdr.menubarTests
         GENERATE_INFOPLIST_FILE: YES
-        BUNDLE_LOADER: $(TEST_HOST)
-        TEST_HOST: $(BUILT_PRODUCTS_DIR)/pmdr.app/Contents/MacOS/pmdr
-        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks @loader_path/../Frameworks @loader_path/../../../../Frameworks"
+        LD_RUNPATH_SEARCH_PATHS: "@loader_path/../Frameworks @loader_path/../../../../Frameworks"
 
 schemes:
   pmdr-menubar:

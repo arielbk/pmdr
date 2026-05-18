@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from "vitest";
+import { mkdtempSync, rmSync, readFileSync, existsSync, symlinkSync, mkdirSync } from "node:fs";
+import { spawnSync, execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createStateModule } from "../state.js";
 import { getStatus, formatStatus } from "../commands/status.js";
 import type { StatusResult } from "../commands/status.js";
@@ -209,5 +211,51 @@ describe("formatStatus", () => {
       completedFocusBlocks: 0,
     };
     expect(formatStatus(r)).toBe("focus — 1:05 left (block 1/4)");
+  });
+});
+
+// ─── CLI integration ─────────────────────────────────────────────────────────
+
+describe("pmdr status --json", () => {
+  const testDir = dirname(fileURLToPath(import.meta.url));
+  const repoRoot = resolve(testDir, "../../../..");
+  const cliDist = join(repoRoot, "apps/cli/dist/index.js");
+  let tmpDir: string;
+
+  beforeAll(() => {
+    execFileSync("pnpm", ["--filter", "cli", "build"], {
+      cwd: repoRoot,
+      stdio: "pipe",
+    });
+  });
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-cli-status-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("exits 0 with only valid JSON on stdout when stdin is non-interactive", () => {
+    const binDir = join(tmpDir, "bin");
+    const homeDir = join(tmpDir, "home");
+    mkdirSync(binDir);
+    mkdirSync(homeDir);
+    symlinkSync(cliDist, join(binDir, "pmdr"));
+
+    const result = spawnSync("pmdr", ["status", "--json"], {
+      env: {
+        HOME: homeDir,
+        PATH: `${binDir}:${dirname(process.execPath)}:/usr/bin:/bin`,
+      },
+      input: "",
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(() => JSON.parse(result.stdout)).not.toThrow();
+    expect(JSON.parse(result.stdout)).toEqual({ state: "idle" });
   });
 });

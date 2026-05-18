@@ -240,3 +240,73 @@ When the menu is closed, the *poll* cadence is 5s but the *display* redraws ever
 - `menu-actions` slice will replace the single "Quit" item with state-dependent items. The current `NSMenuDelegate` plumbing (and `poller.currentStatus()`) will become the trigger for menu rebuilds.
 - `phase-notifications` slice already has `StatusPoller.Event.phaseTransition` to subscribe to; it just needs to add `break → idle` semantics (the current poller only fires phase transitions between two active states, which deliberately excludes the `break → idle` case — `phase-notifications` should either extend `Event` or observe `statusChanged` and diff itself).
 - The poll loop swallows errors silently. A future slice should surface `.binaryNotFound` (e.g. an alert on first failure) — for now it just means the title stays empty until `pmdr` reappears on PATH.
+
+## 2026-05-18 — `live-title` PATH resolution cleanup (needs-review)
+
+**Goal:** Replace the fragile hard-coded `PmdrClient` fallback directories with a login-shell-derived environment so a launchd-launched `.app` can find both `pmdr` and whatever runtime its wrapper needs (`node` via fnm, nvm, asdf, volta, Homebrew, etc.). Keep `live-title` at `Status: needs-review`.
+
+**State on entry**
+- `live-title` was already implemented and marked `needs-review`.
+- `PmdrClient.swift` had `defaultFallbackDirs` for pnpm, bun, deno, fnm, and Homebrew paths. That fixed this machine's fnm setup but would fail for users whose shell initializes Node through a different manager.
+- `AppDelegate.startPolling()` swallowed all polling errors, so subprocess failures left the menubar title blank with no Console visibility.
+
+**What I did**
+- Added `Sources/PmdrMenubarCore/LoginShellEnvironment.swift`.
+  - Reads the login shell from `getpwuid(getuid()).pointee.pw_shell`.
+  - Runs the shell synchronously as `-lic` with `printf '%s\n' "$PATH"` so login and interactive rc files contribute to PATH.
+  - Parses the last non-empty output line as PATH, merges it into the current process environment, and falls back to the app's own environment on empty output, non-zero exit, missing shell, or timeout.
+  - Enforces a 5s timeout so startup cannot hang indefinitely on shell initialization.
+- Cleaned up `PmdrClient.swift`.
+  - Removed `fallbackDirs`, `defaultFallbackDirs`, and fallback PATH mutation entirely.
+  - `PmdrClient(environment:)` now merges any provided environment over `ProcessInfo.processInfo.environment`.
+  - Binary resolution searches only the `PATH` in the effective environment, and spawned `Process` instances receive that same environment so wrapper scripts can find their runtimes.
+- Wired `AppDelegate.swift` to resolve the login-shell environment once during `applicationDidFinishLaunching`, pass it into `PmdrClient`, and log polling failures with `os_log(..., type: .error, ...)`.
+- Added `Tests/PmdrMenubarCoreTests/LoginShellEnvironmentTests.swift` covering successful PATH resolution through an injected shell runner and graceful fallback when the shell returns an empty PATH.
+- Updated `PmdrClientTests.swift` to remove all `fallbackDirs: []` and fallback-dir-specific assertions.
+- Updated `project.yml` so the core test bundle no longer uses the app as a test host. These tests only exercise `PmdrMenubarCore`; removing the host also lets the bundle run directly with `xcrun xctest` in sandboxed environments.
+- Updated `README.md` to include `LoginShellEnvironment.swift` in the layout diagram and added `.derivedData/` to `apps/menubar/.gitignore` because verification used a sandbox-writable DerivedData path.
+
+**Verification**
+- Initial requested build command failed before compilation because Xcode tried to write DerivedData under `~/Library/Developer/Xcode`, which this sandbox cannot modify. Re-ran with a writable DerivedData path:
+  - `xcodebuild -scheme pmdr-menubar -configuration Debug -derivedDataPath .derivedData build`: **BUILD SUCCEEDED**
+- Manual subprocess-chain checks:
+  - `env -i HOME=/Users/arielbk TMPDIR=... /bin/sh -lic 'echo $PATH'` returned a non-empty login-shell PATH.
+  - `~/Library/pnpm/bin/pmdr` exists and is executable.
+  - `~/.local/share/fnm/aliases/default/bin/node` exists and is executable.
+- `xcodebuild -scheme pmdr-menubar -destination 'platform=macOS' -derivedDataPath .derivedData test` still cannot complete in this Codex sandbox: Xcode fails to establish communication with `testmanagerd` (`Sandbox restriction`). This is a runner/sandbox limitation, not a compile or test failure.
+- To verify the actual tests, ran:
+  - `xcodebuild -scheme pmdr-menubar -destination 'platform=macOS' -derivedDataPath .derivedData build-for-testing`: **TEST BUILD SUCCEEDED**
+  - `xcrun xctest .derivedData/Build/Products/Debug/pmdr-menubarTests.xctest`: **38 tests passed, 3 integration tests skipped, 0 failures**
+
+**Status**
+- `live-title` remains **needs-review** in `macos-menubar.tasks.md`.
+- No CLI, web app, or unrelated package files were touched.
+
+## 2026-05-18 — `live-title` CLI status polling fix (needs-review)
+
+**Goal:** Fix the menubar polling failure where `pmdr status --json` printed valid JSON but exited 1 in a non-TTY process because the CLI root command started the Ink TUI after the `status` subcommand completed.
+
+**State on entry**
+- `live-title` remained `needs-review`.
+- Reproducer: `env -i HOME=$HOME PATH=/usr/bin:/bin:/Users/arielbk/Library/pnpm/bin:/Users/arielbk/.local/share/fnm/aliases/default/bin pmdr status --json < /dev/null`.
+- The command wrote a valid `StatusResult` JSON object to stdout, then Ink wrote `Raw mode is not supported on the current process.stdin` to stderr and exited 1.
+
+**What I did**
+- Confirmed the double execution in `citty@0.2.2` source: `runCommand` recurses into the matched subcommand, then continues and invokes the parent command's `run()` when present.
+- Updated `apps/cli/src/index.ts` so the root `run()` returns immediately when the raw args contain a known subcommand. Bare `pmdr` still reaches Ink and opens the TUI.
+- Added a CLI regression test in `apps/cli/src/__tests__/status.test.ts` that builds the CLI, invokes `pmdr status --json` through a stripped environment with non-interactive stdin, and asserts exit 0, empty stderr, and valid JSON on stdout.
+- Left `PmdrClient.swift` unchanged. With the CLI exit code fixed, swallowing non-zero exits that happen to contain decodable stdout is unnecessary for this bug and could hide real CLI failures.
+
+**Verification**
+- `pnpm --filter cli build`: **passed**.
+- Exact reproducer after the build:
+  - exit code: `0`
+  - stdout: `{"state":"running","remainingMs":779412,"duration":1500000,"startedAt":1779106699811,"phase":"focus","completedFocusBlocks":0}`
+  - stderr: empty
+- `pnpm --filter cli exec vitest run src/__tests__/status.test.ts`: **15 tests passed**.
+- Full `pnpm --filter cli test` still has unrelated pre-existing failures in ANSI color assertions plus one sandbox/home state rename failure; the new `status --json` regression test passed inside that run.
+- Requested menubar build command failed in this sandbox before compilation because Xcode could not write its default DerivedData under `~/Library/Developer/Xcode`.
+- Re-ran with workspace-local DerivedData: `xcodebuild -scheme pmdr-menubar -configuration Debug -derivedDataPath .derivedData build`: **BUILD SUCCEEDED**.
+
+**Status**
+- `live-title` remains **needs-review** in `macos-menubar.tasks.md`.

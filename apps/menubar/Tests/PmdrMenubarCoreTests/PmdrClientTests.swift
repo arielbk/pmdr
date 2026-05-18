@@ -121,6 +121,21 @@ final class PmdrClientBinaryResolutionTests: XCTestCase {
         XCTAssertEqual(resolved, script.path)
     }
 
+    func test_finds_binary_in_resolved_environment_PATH() throws {
+        let dir = try makeTempDir()
+        let script = dir.appendingPathComponent("pmdr")
+        try Data("#!/bin/sh\necho hi\n".utf8).write(to: script)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: script.path
+        )
+        let resolved = PmdrClient.resolveBinary(
+            hint: "pmdr",
+            environment: ["PATH": dir.path]
+        )
+        XCTAssertEqual(resolved, script.path)
+    }
+
     private func makeTempDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("pmdr-client-tests-\(UUID().uuidString)")

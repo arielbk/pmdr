@@ -56,7 +56,13 @@ public struct PmdrClient: Sendable {
         environment: [String: String]? = nil
     ) {
         self.binaryHint = binaryHint
-        self.environment = environment ?? ProcessInfo.processInfo.environment
+        var mergedEnvironment = ProcessInfo.processInfo.environment
+        if let environment {
+            for (key, value) in environment {
+                mergedEnvironment[key] = value
+            }
+        }
+        self.environment = mergedEnvironment
     }
 
     public func status() async throws -> Status {
@@ -112,9 +118,12 @@ public struct PmdrClient: Sendable {
 
     // MARK: - Process
 
-    /// Resolve `binaryHint` to an absolute executable path, searching PATH if needed.
-    /// Returns `nil` (so the caller can throw `.binaryNotFound`) if no match is found.
-    static func resolveBinary(hint: String, environment: [String: String]) -> String? {
+    /// Resolve `binaryHint` to an absolute executable path, searching `PATH` then
+    /// returning `nil` so the caller can throw `.binaryNotFound` if no match is found.
+    static func resolveBinary(
+        hint: String,
+        environment: [String: String]
+    ) -> String? {
         if hint.hasPrefix("/") {
             return FileManager.default.isExecutableFile(atPath: hint) ? hint : nil
         }
@@ -129,7 +138,10 @@ public struct PmdrClient: Sendable {
     }
 
     private func run(arguments: [String]) async throws -> Data {
-        guard let executable = Self.resolveBinary(hint: binaryHint, environment: environment) else {
+        guard let executable = Self.resolveBinary(
+            hint: binaryHint,
+            environment: environment
+        ) else {
             throw PmdrClientError.binaryNotFound
         }
 
