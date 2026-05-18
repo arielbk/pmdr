@@ -1,159 +1,66 @@
-# Turborepo starter
+# pmdr
 
-This Turborepo starter is maintained by the Turborepo core team.
+A pomodoro timer with shared session state, surfaced through a CLI and a native macOS menubar app. One running session, many ways to drive it: start it in one terminal, check status from another, pause it with a global hotkey from the menubar, assign sessions to projects, and let agents (or scripts) read whether you're currently in deep focus.
 
-## Using this example
+The CLI owns the session state. The menubar app is a thin native shell over the CLI — it polls `pmdr status --json` and shells out to `pmdr` for control. Anything else that wants to read or drive a session can do the same.
 
-Run the following command:
+## Repo layout
 
-```sh
-npx create-turbo@latest
+```
+apps/
+  cli/        # `pmdr` binary — Node/TypeScript, citty + Ink TUI. Owns session state.
+  menubar/    # Native macOS menubar app (Swift / Xcode). Thin client over the CLI.
+packages/
+  ui/                # Shared React component stubs
+  eslint-config/     # Shared ESLint config
+  typescript-config/ # Shared tsconfig presets
 ```
 
-## What's inside?
+`apps/menubar` lives outside the Turbo pipeline — it has its own Xcode toolchain. Everything else is wired through Turborepo + pnpm.
 
-This Turborepo includes the following packages/apps:
+## Requirements
 
-### Apps and Packages
+- Node 18+
+- pnpm 9
+- (Menubar only) macOS 13+, Xcode 15+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) — `brew install xcodegen`
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## Quickstart
 
 ```sh
-cd my-turborepo
-turbo build
+pnpm setup        # install, build, and link `pmdr` onto your PATH
 ```
 
-Without global `turbo`, use your package manager:
+Day-to-day:
 
 ```sh
-cd my-turborepo
-npx turbo build
-pnpm dlx turbo build
-pnpm exec turbo build
+pnpm dev          # watch mode across the JS workspace
+pnpm build        # rebuild the CLI
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+## Running the CLI
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+`pnpm setup` links the `pmdr` binary globally. Then:
 
 ```sh
-turbo build --filter=docs
+pmdr                # opens the interactive TUI
+pmdr start          # start a focus session
+pmdr status         # current session, human-readable
+pmdr status --json  # current session, for scripts / the menubar / agents
+pmdr pause
+pmdr resume
+pmdr stop
+pmdr today          # today's sessions
+pmdr project ...    # assign sessions to projects
 ```
 
-Without global `turbo`:
+Open as many terminals as you want — they all read and write the same session.
+
+## Running the menubar app
 
 ```sh
-npx turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+pnpm menubar      # regenerates the Xcode project and opens it
 ```
 
-### Develop
+Hit Run in Xcode. The app appears only in the menubar (no Dock icon). It needs the `pmdr` CLI on your PATH — `pnpm setup` handles that.
 
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo dev
-pnpm exec turbo dev
-pnpm exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-pnpm exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-pnpm exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+See [`apps/menubar/README.md`](apps/menubar/README.md) for build/test details and the global hotkey.
