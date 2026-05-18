@@ -54,6 +54,15 @@ export type CompletionWrite = {
   id?: string;
 };
 
+export type EventType = "start" | "stop" | "pause" | "resume";
+
+export interface EventRecord {
+  type: EventType;
+  at: number;
+  id: string;
+  project?: string;
+}
+
 export function deriveState({
   file,
   now,
@@ -78,6 +87,31 @@ export function deriveState({
 export function createStateModule(stateDir: string) {
   const stateFile = join(stateDir, "state.json");
   const completionsFile = join(stateDir, "completions.jsonl");
+  const eventsFile = join(stateDir, "events.jsonl");
+
+  function appendEvent(event: EventRecord): void {
+    mkdirSync(stateDir, { recursive: true });
+    const row: EventRecord = {
+      type: event.type,
+      at: event.at,
+      id: event.id,
+      ...(event.project !== undefined ? { project: event.project } : {}),
+    };
+    appendFileSync(eventsFile, JSON.stringify(row) + "\n", "utf8");
+  }
+
+  function readEvents(): EventRecord[] {
+    try {
+      const raw = readFileSync(eventsFile, "utf8");
+      return raw
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as EventRecord);
+    } catch {
+      return [];
+    }
+  }
 
   function readState(): StateRecord | null {
     try {
@@ -225,7 +259,19 @@ export function createStateModule(stateDir: string) {
     return groups;
   }
 
-  return { readState, writeState, clearState, readCompletions, appendCompletion, finalizeIfExpired, advancePhaseIfExpired, readToday, rewriteCompletionProject };
+  return {
+    readState,
+    writeState,
+    clearState,
+    readCompletions,
+    appendCompletion,
+    finalizeIfExpired,
+    advancePhaseIfExpired,
+    readToday,
+    rewriteCompletionProject,
+    appendEvent,
+    readEvents,
+  };
 }
 
 const _prod = createStateModule(join(homedir(), ".local", "state", "pmdr"));
@@ -244,3 +290,5 @@ export const advancePhaseIfExpired = (now: number): void =>
   _prod.advancePhaseIfExpired(now);
 export const rewriteCompletionProject = (oldName: string, newName: string): void =>
   _prod.rewriteCompletionProject(oldName, newName);
+export const appendEvent = (e: EventRecord): void => _prod.appendEvent(e);
+export const readEvents = (): EventRecord[] => _prod.readEvents();

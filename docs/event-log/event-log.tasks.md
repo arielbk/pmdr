@@ -34,7 +34,7 @@ Adds an append-only `events.jsonl` capturing start/stop/pause/resume with per-ti
 
 ### `event-log-emission` — Append-only event log
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `~/.local/state/pmdr/events.jsonl` receives one JSONL row per timer event. Each row: `{ type: "start" | "stop" | "pause" | "resume", at: <epoch ms>, id: <uuid>, project?: string }`. `start` fires from `pmdr start`; `pause`/`resume` fire from those commands; `stop` fires only when a timer is cleared without completing. Expiry writes a completion, not a `stop`.
 

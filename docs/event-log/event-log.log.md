@@ -46,3 +46,24 @@
 **Feedback loop result:**
 - `pnpm --filter cli test` — 248/248 pass.
 - `pnpm --filter cli check-types` — clean.
+
+---
+
+## event-log-emission — 2026-05-18
+
+**Slice:** `event-log-emission` — Append-only event log
+
+**Status:** done
+
+**What was implemented:**
+- Added `EventRecord` type and `appendEvent` / `readEvents` to the state module, writing to `~/.local/state/pmdr/events.jsonl`.
+- `initTimer` writes a `start` event after persisting state.
+- `pauseTimer` and `resumeTimer` emit matching `pause` / `resume` events using the active record's id.
+- `stopTimer` accepts an optional `now` and emits a `stop` event only when an active record is being cleared. Expiry continues to write a `completions.jsonl` row and no `stop`.
+
+**Tests:**
+- New `event-log.test.ts` drives start → pause → resume → stop and asserts the four-row sequence with a single shared id; a second test asserts start → expiry produces a completion and no stop event; a third asserts stop on idle is a no-op.
+
+**Feedback loop result:**
+- `pnpm --filter cli test` — 251/251 pass.
+- `pnpm --filter cli check-types` — clean.

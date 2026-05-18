@@ -33,6 +33,7 @@ export function initTimer(options: {
     throw new Error("A pomodoro is paused. Resume or stop it first.");
   }
 
+  const id = options.id ?? randomUUID();
   store.writeState({
     startedAt: now,
     durationMs,
@@ -41,8 +42,9 @@ export function initTimer(options: {
     project,
     phase: "focus",
     completedFocusBlocks: 0,
-    id: options.id ?? randomUUID(),
+    id,
   });
+  store.appendEvent({ type: "start", at: now, id, project });
 }
 
 const NEW_PROJECT_VALUE = "__new__";
