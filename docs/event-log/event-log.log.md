@@ -67,3 +67,22 @@
 **Feedback loop result:**
 - `pnpm --filter cli test` — 251/251 pass.
 - `pnpm --filter cli check-types` — clean.
+
+---
+
+## dots-from-completions — 2026-05-18
+
+**Slice:** `dots-from-completions` — TUI dots fill across the day
+
+**Status:** done
+
+**What was implemented:**
+- `derivePhaseState` now accepts an optional store and counts today's completions from `completions.jsonl` (falling back to `record.completedFocusBlocks` when no store is supplied). `App.tsx` passes its store on every derivation so the dot row reads from completions.
+- `CountdownView` removed the `x/8` fraction next to the dot row; the visual remains capped at 8 dots via the existing `Math.min(..., DEFAULT_FOCUS_GOAL)`.
+
+**Tests:**
+- New `dots-from-completions.test.tsx` covers: no `/8` fraction in the rendered frame, dot count tracks `completedFocusBlocks`, cap at 8 even at higher counts, and `derivePhaseState` summing today's completions while ignoring yesterday's even after state.json has been cleared (the live focus→break→focus bug).
+
+**Feedback loop result:**
+- `pnpm --filter cli test` — 257/257 pass.
+- `pnpm --filter cli check-types` — clean.

@@ -56,7 +56,6 @@ export default function CountdownView({
           <Text dimColor>
             {Array.from({ length: Math.max(0, DEFAULT_FOCUS_GOAL - completedFocusBlocks) }, () => "○").join(" ")}
           </Text>
-          <Text dimColor>{`  ${Math.min(completedFocusBlocks, DEFAULT_FOCUS_GOAL)}/${DEFAULT_FOCUS_GOAL}`}</Text>
         </Text>
       </Box>
 

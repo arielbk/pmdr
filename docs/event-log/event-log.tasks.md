@@ -48,7 +48,7 @@ Adds an append-only `events.jsonl` capturing start/stop/pause/resume with per-ti
 
 ### `dots-from-completions` — TUI dots fill across the day
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** The interactive TUI's focus-block dot row reflects today's completed focus blocks read from `completions.jsonl`, capped visually at 8 dots. The "x/8" fraction next to the dots is removed.
 
