@@ -143,26 +143,29 @@ export default function App({
     { isActive: !showProjectPicker && !showHelp },
   );
 
-  function handleProjectSelect(name: string) {
-    const record = upsertProjectFn(name);
+  function handleProjectSelect(name: string | null) {
     const now = Date.now();
     const file = store.readState();
+    const resolvedName = name === null ? undefined : upsertProjectFn(name).name;
     if (file) {
-      store.writeState({ ...file, project: record.name });
+      const { project: _drop, ...rest } = file;
+      store.writeState(
+        resolvedName ? { ...rest, project: resolvedName } : rest,
+      );
     } else {
       try {
         initTimer({
           store,
           durationMs: DEFAULT_DURATION_MS,
           now,
-          project: record.name,
+          project: resolvedName,
         });
       } catch {
         // ignore — read-only stores in tests
       }
     }
     setViewState(derivePhaseState(store.readState(), now, store));
-    setCurrentProject(record.name);
+    setCurrentProject(resolvedName);
     setShowProjectPicker(false);
   }
 

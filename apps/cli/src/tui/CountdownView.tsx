@@ -40,7 +40,7 @@ export default function CountdownView({
       </Box>
 
       <Box justifyContent="center">
-        <Text dimColor>{project ?? ""}</Text>
+        <Text dimColor>{project && project !== "(unassigned)" ? project : ""}</Text>
       </Box>
 
       <Box justifyContent="center">
