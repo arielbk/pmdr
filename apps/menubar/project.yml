@@ -34,7 +34,7 @@ targets:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - path: Tests/PmdrMenubarTests
+      - path: Tests/PmdrMenubarCoreTests
     dependencies:
       - target: pmdr-menubar
     settings:

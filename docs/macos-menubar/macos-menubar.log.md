@@ -73,3 +73,40 @@
 **Open follow-ups (not this slice)**
 - No callers yet — `PmdrClient` is wired into the project but the `AppDelegate` still shows the static `pmdr` title. The `live-title` slice plugs the poller into it.
 - The integration tests rely on `HOME` overriding `STATE_DIR`. `apps/cli/src/commands/status.ts` builds `STATE_DIR` from `homedir()` at module load, so a per-process `HOME` swap is sufficient — but worth re-verifying once the CLI grows env-var overrides.
+
+## 2026-05-18 — macOS-host verification + `pmdr-client` defect
+
+Verification pass on host macOS (Xcode 17 / SDK 26.2), driven by Ariel running the slice feedback loops outside the Linux sandbox.
+
+**`app-skeleton`** — passes. After fixing two unrelated issues:
+- `project.yml` referenced `Tests/PmdrMenubarTests`, but the on-disk directory is `Tests/PmdrMenubarCoreTests` — commit `6f0fba2` aligned Sources/ but missed Tests/. Patched the path.
+- `xcodegen generate` then validates; the app builds, the `.app` launches headless, the `pmdr` label appears in the menubar, the Quit item terminates the process. No Dock icon (LSUIElement = true). Flipping to **done**.
+
+**`pmdr-client`** — defect, flipping back to **not-started** for another Ralph pass.
+
+`xcodebuild test -scheme pmdr-menubar -destination 'platform=macOS'` fails to build:
+
+```
+Tests/PmdrMenubarCoreTests/PmdrClientTests.swift:2:18: error:
+  Unable to find module dependency: 'PmdrMenubarCore'
+@testable import PmdrMenubarCore
+```
+
+The README and tests both treat `PmdrMenubarCore` as a separate framework module (sources at `Sources/PmdrMenubarCore/PmdrClient.swift`, tests do `@testable import PmdrMenubarCore`) — but `project.yml` never declares a `PmdrMenubarCore` framework target. The single app target's `sources: - path: Sources` swallows the subfolder as part of the app module, so the import can't resolve.
+
+The prior log entry's "@testable import pmdr" rationale was written against a flatter layout that no longer matches the on-disk source tree. The slice's feedback loop ("integration test against the real `pmdr` binary") can't run at all — even the pure decoding tests don't compile.
+
+Two viable fixes:
+1. **Declare the framework** (matches README intent): add a `PmdrMenubarCore` framework target in `project.yml` whose sources are `Sources/PmdrMenubarCore`, remove that subpath from the app's sources, add `PmdrMenubarCore` as a dependency on both `pmdr-menubar` and `pmdr-menubarTests`. Mark `PmdrClient`/`Status`/`Phase`/`PmdrClientError` `public` (they already are) so the app can consume them. This is the structure the README documents and the tests expect.
+2. **Flatten**: move `PmdrClient.swift` up to `Sources/`, change the test import to `@testable import pmdr`, update README. Less faithful to the documented architecture.
+
+Recommendation: fix #1 — matches the README and keeps PmdrMenubarCore reusable by other future menubar surfaces (preferences window, etc.).
+
+**Self-verification ralph can do without a Mac**
+- Parse `project.yml` and confirm every target's `sources:` path exists on disk.
+- Confirm every `@testable import X` in `Tests/**.swift` is satisfied by a target named `X` in `project.yml`.
+- Confirm public/internal access modifiers match how cross-module callers (tests, app) use them.
+- Confirm the README's layout diagram matches the actual source tree.
+- `xcodegen generate` runs on Linux via the XcodeGen Mint/Mise install or `swift run` — if available in the sandbox, run it and check the spec validates. If not, at minimum hand-validate the YAML schema by comparing against the existing committed structure.
+
+A Ralph iteration that runs these structural checks would have caught this before flipping to `needs-review`.

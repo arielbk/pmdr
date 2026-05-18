@@ -6,7 +6,7 @@ A native Swift macOS menubar app that surfaces pmdr's timer in the system tray, 
 
 ### `app-skeleton` — Xcode project + static tray icon
 
-**Status:** needs-review
+**Status:** done
 
 **Outside-in:** Launching the `.app` puts a `pmdr` label / icon in the macOS menubar with a one-item menu ("Quit").
 
@@ -20,7 +20,7 @@ A native Swift macOS menubar app that surfaces pmdr's timer in the system tray, 
 
 ### `pmdr-client` — Typed Swift client for the CLI
 
-**Status:** needs-review
+**Status:** not-started
 
 **Outside-in:** `PmdrClient.status() async throws -> Status` where `Status` is an enum mirroring `StatusResult` in `apps/cli/src/commands/status.ts`. Throws a typed `.binaryNotFound` error when `pmdr` is not on PATH.
 
