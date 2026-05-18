@@ -15,11 +15,18 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.4.0",
-    "citty": "^0.2.2"
+    "citty": "^0.2.2",
+    "figlet": "^1.11.0",
+    "ink": "^7.0.3",
+    "ink-big-text": "^2.0.0",
+    "react": "^19.2.0"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@types/figlet": "^1.7.0",
+    "@types/react": "19.2.2",
+    "ink-testing-library": "^4.0.0",
     "tsup": "^8.0.0",
     "typescript": "5.9.2",
     "vitest": "^2.0.0"

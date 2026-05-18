@@ -175,8 +175,8 @@ describe("getToday", () => {
     expect(result.count).toBe(1);
   });
 
-  it("finalizes an expired timer and includes it in today's count", () => {
-    // Timer that started 70s ago, 60s duration → expired, completedAt = start + duration
+  it("advances an expired focus to break and includes the focus completion in today's count", () => {
+    // focus expired 10s ago → break auto-starts; one focus completion is logged
     const startedAt = NOW - 70_000;
     store.writeState({
       startedAt,
@@ -185,9 +185,9 @@ describe("getToday", () => {
       accumulatedPauseMs: 0,
     });
     const result = getToday({ store, now: NOW });
-    // The expired timer should be finalized and its completion should appear
     expect(result.count).toBe(1);
-    expect(store.readState()).toBeNull();
+    // State is now a running break (not null)
+    expect(store.readState()?.phase).toBe("break");
   });
 
   it("json shape has count and completions array with completedAt and durationMs", () => {

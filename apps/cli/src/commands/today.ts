@@ -33,7 +33,7 @@ export function getToday(opts: {
   now: number;
 }): TodayResult {
   const { store, now } = opts;
-  store.finalizeIfExpired(now);
+  store.advancePhaseIfExpired(now);
   const all = store.readCompletions();
   const completions = filterToday(all, now);
   return { count: completions.length, completions };

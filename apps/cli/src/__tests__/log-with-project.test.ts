@@ -120,11 +120,12 @@ describe("readToday grouping", () => {
     expect(groups["proj-a"]).toHaveLength(1);
   });
 
-  it("finalizes an expired timer and includes it in groups", () => {
+  it("advances an expired focus to break and includes the focus completion in groups", () => {
     const startedAt = NOW - 70_000;
     store.writeState({ startedAt, durationMs: 60_000, pausedAt: null, accumulatedPauseMs: 0 });
     const groups = store.readToday(NOW);
     expect(groups["(unassigned)"]).toHaveLength(1);
-    expect(store.readState()).toBeNull();
+    // State is now a running break (not null) after auto-advancing
+    expect(store.readState()?.phase).toBe("break");
   });
 });

@@ -26,6 +26,13 @@ const main = defineCommand({
     today: todayCmd,
     project: projectCmd,
   },
+  async run() {
+    const { render } = await import("ink");
+    const { default: App } = await import("./tui/App.js");
+    const React = await import("react");
+    const { waitUntilExit } = render(React.default.createElement(App));
+    await waitUntilExit();
+  },
 });
 
 runMain(main);

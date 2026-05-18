@@ -16,6 +16,20 @@ export interface StateRecord {
   pausedAt: number | null;
   accumulatedPauseMs: number;
   project?: string;
+  phase?: "focus" | "break";
+  completedFocusBlocks?: number;
+}
+
+const DEFAULT_SHORT_BREAK_MS = 5 * 60 * 1000;
+const DEFAULT_LONG_BREAK_MS = 15 * 60 * 1000;
+const DEFAULT_LONG_BREAK_AFTER = 4;
+
+export const DEFAULT_FOCUS_GOAL = 8;
+
+function computeBreakDurationMs(completedFocusBlocks: number): number {
+  return completedFocusBlocks % DEFAULT_LONG_BREAK_AFTER === 0
+    ? DEFAULT_LONG_BREAK_MS
+    : DEFAULT_SHORT_BREAK_MS;
 }
 
 export type DerivedKind = "idle" | "running" | "paused" | "expired";
@@ -122,6 +136,44 @@ export function createStateModule(stateDir: string) {
     clearState();
   }
 
+  function advancePhaseIfExpired(now: number): void {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const file = readState();
+      if (!file) return;
+
+      const derived = deriveState({ file, now });
+      if (derived.kind !== "expired") return;
+
+      const completedAt = file.startedAt + file.durationMs + file.accumulatedPauseMs;
+      const phase = file.phase ?? "focus";
+      const completedFocusBlocks = file.completedFocusBlocks ?? 0;
+
+      if (phase === "focus") {
+        appendCompletion({
+          completedAt,
+          durationMs: file.durationMs,
+          project: file.project ?? "(unassigned)",
+        });
+        const newCompletedFocusBlocks = completedFocusBlocks + 1;
+        writeState({
+          startedAt: completedAt,
+          durationMs: computeBreakDurationMs(newCompletedFocusBlocks),
+          pausedAt: null,
+          accumulatedPauseMs: 0,
+          project: file.project,
+          phase: "break",
+          completedFocusBlocks: newCompletedFocusBlocks,
+        });
+        // loop to check if the break also expired
+      } else {
+        // break expired → return to idle, no completion logged
+        clearState();
+        return;
+      }
+    }
+  }
+
   function rewriteCompletionProject(oldName: string, newName: string): void {
     const completions = readCompletions();
     const oldNorm = oldName.trim().toLowerCase();
@@ -143,7 +195,7 @@ export function createStateModule(stateDir: string) {
   }
 
   function readToday(now: number): Record<string, CompletionRecord[]> {
-    finalizeIfExpired(now);
+    advancePhaseIfExpired(now);
     const all = readCompletions();
     const nowD = new Date(now);
     const todayEntries = all.filter((c) => {
@@ -163,7 +215,7 @@ export function createStateModule(stateDir: string) {
     return groups;
   }
 
-  return { readState, writeState, clearState, readCompletions, appendCompletion, finalizeIfExpired, readToday, rewriteCompletionProject };
+  return { readState, writeState, clearState, readCompletions, appendCompletion, finalizeIfExpired, advancePhaseIfExpired, readToday, rewriteCompletionProject };
 }
 
 const _prod = createStateModule(join(homedir(), ".local", "state", "pmdr"));
@@ -178,5 +230,7 @@ export const readToday = (now: number): Record<string, CompletionRecord[]> =>
   _prod.readToday(now);
 export const finalizeIfExpired = (now: number): void =>
   _prod.finalizeIfExpired(now);
+export const advancePhaseIfExpired = (now: number): void =>
+  _prod.advancePhaseIfExpired(now);
 export const rewriteCompletionProject = (oldName: string, newName: string): void =>
   _prod.rewriteCompletionProject(oldName, newName);

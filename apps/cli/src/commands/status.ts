@@ -5,6 +5,8 @@ import { createStateModule, deriveState } from "../state.js";
 
 const STATE_DIR = join(homedir(), ".local", "state", "pmdr");
 
+const LONG_BREAK_AFTER = 4;
+
 export type StatusResult =
   | { state: "idle" }
   | {
@@ -12,6 +14,8 @@ export type StatusResult =
       remainingMs: number;
       duration: number;
       startedAt: number;
+      phase: "focus" | "break";
+      completedFocusBlocks: number;
     };
 
 export function getStatus(opts: {
@@ -20,7 +24,7 @@ export function getStatus(opts: {
 }): StatusResult {
   const { store, now } = opts;
 
-  store.finalizeIfExpired(now);
+  store.advancePhaseIfExpired(now);
 
   const file = store.readState();
   const derived = deriveState({ file, now });
@@ -34,6 +38,8 @@ export function getStatus(opts: {
     remainingMs: derived.remainingMs,
     duration: file!.durationMs,
     startedAt: file!.startedAt,
+    phase: file!.phase ?? "focus",
+    completedFocusBlocks: file!.completedFocusBlocks ?? 0,
   };
 }
 
@@ -46,7 +52,14 @@ function formatRemaining(ms: number): string {
 
 export function formatStatus(result: StatusResult): string {
   if (result.state === "idle") return "idle";
-  return `${result.state} — ${formatRemaining(result.remainingMs)} left`;
+  const remaining = formatRemaining(result.remainingMs);
+  const prefix =
+    result.state === "paused" ? `${result.phase} paused` : result.phase;
+  const suffix =
+    result.phase === "focus"
+      ? `(block ${result.completedFocusBlocks + 1}/${LONG_BREAK_AFTER})`
+      : `(${result.completedFocusBlocks}/${LONG_BREAK_AFTER} done)`;
+  return `${prefix} — ${remaining} left ${suffix}`;
 }
 
 export default defineCommand({
