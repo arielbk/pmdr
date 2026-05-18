@@ -169,6 +169,16 @@ export default defineCommand({
       description: "Force non-interactive mode (error if no --project)",
       default: false,
     },
+    force: {
+      type: "boolean",
+      description: "Replace any active timer before starting",
+      default: false,
+    },
+    detach: {
+      type: "boolean",
+      description: "Start the timer without rendering the countdown",
+      default: false,
+    },
   },
   async run({ args }) {
     let durationMs: number;
@@ -196,8 +206,14 @@ export default defineCommand({
 
     const store = createStateModule(STATE_DIR);
     const now = Date.now();
+    const force = args.force as boolean;
+    const detach = args.detach as boolean;
 
     try {
+      if (force) {
+        store.advancePhaseIfExpired(now);
+        store.clearState();
+      }
       initTimer({ store, durationMs, now, project });
     } catch (e) {
       console.error((e as Error).message);
@@ -210,6 +226,10 @@ export default defineCommand({
         ? `${Number.isInteger(mins) ? mins : mins.toFixed(1)}m`
         : `${durationMs / 1_000}s`;
     console.log(`Starting ${label} pomodoro... [${project}]`);
+
+    if (detach) {
+      return;
+    }
 
     await runCountdown(store);
   },

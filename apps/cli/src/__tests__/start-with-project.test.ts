@@ -51,7 +51,12 @@ describe("start-with-project", () => {
 
   it("state file without project falls back to (unassigned) on finalize", () => {
     // Simulate legacy state (no project field)
-    store.writeState({ startedAt: NOW - 2_000, durationMs: 1_000, pausedAt: null, accumulatedPauseMs: 0 });
+    store.writeState({
+      startedAt: NOW - 2_000,
+      durationMs: 1_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+    });
     store.finalizeIfExpired(NOW);
 
     const raw = readFileSync(join(tmpDir, "completions.jsonl"), "utf8");

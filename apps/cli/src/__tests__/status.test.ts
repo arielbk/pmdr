@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from "vitest";
-import { mkdtempSync, rmSync, readFileSync, existsSync, symlinkSync, mkdirSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  readFileSync,
+  existsSync,
+  symlinkSync,
+  mkdirSync,
+} from "node:fs";
 import { spawnSync, execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -142,6 +149,49 @@ describe("getStatus", () => {
     const result = getStatus({ store, now: NOW });
     expect(result).toMatchObject({ state: "running", remainingMs: 40_000 });
   });
+
+  it("includes the project name when running", () => {
+    store.writeState({
+      startedAt: NOW - 5_000,
+      durationMs: 60_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      project: "deepwork",
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+    expect(getStatus({ store, now: NOW })).toMatchObject({
+      state: "running",
+      project: "deepwork",
+    });
+  });
+
+  it("includes the project name when paused", () => {
+    store.writeState({
+      startedAt: NOW - 10_000,
+      durationMs: 60_000,
+      pausedAt: NOW - 2_000,
+      accumulatedPauseMs: 0,
+      project: "deepwork",
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+    expect(getStatus({ store, now: NOW })).toMatchObject({
+      state: "paused",
+      project: "deepwork",
+    });
+  });
+
+  it("omits project when not set on the state record", () => {
+    store.writeState({
+      startedAt: NOW - 5_000,
+      durationMs: 60_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+    });
+    const result = getStatus({ store, now: NOW });
+    expect(result).not.toHaveProperty("project");
+  });
 });
 
 // ─── formatStatus ─────────────────────────────────────────────────────────────
@@ -257,5 +307,41 @@ describe("pmdr status --json", () => {
     expect(result.stderr).toBe("");
     expect(() => JSON.parse(result.stdout)).not.toThrow();
     expect(JSON.parse(result.stdout)).toEqual({ state: "idle" });
+  });
+
+  it("pmdr start --detach starts and exits immediately without rendering the countdown", () => {
+    const binDir = join(tmpDir, "bin");
+    const homeDir = join(tmpDir, "home");
+    mkdirSync(binDir);
+    mkdirSync(homeDir);
+    symlinkSync(cliDist, join(binDir, "pmdr"));
+
+    const result = spawnSync(
+      "pmdr",
+      ["start", "--project", "alpha", "--duration", "10s", "--detach"],
+      {
+        env: {
+          HOME: homeDir,
+          PATH: `${binDir}:${dirname(process.execPath)}:/usr/bin:/bin`,
+        },
+        input: "",
+        encoding: "utf8",
+        timeout: 2_000,
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("Starting 10s pomodoro... [alpha]");
+
+    const state = JSON.parse(
+      readFileSync(join(homeDir, ".local/state/pmdr/state.json"), "utf8"),
+    );
+    expect(state).toMatchObject({
+      durationMs: 10_000,
+      project: "alpha",
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
   });
 });

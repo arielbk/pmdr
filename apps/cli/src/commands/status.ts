@@ -16,6 +16,7 @@ export type StatusResult =
       startedAt: number;
       phase: "focus" | "break";
       completedFocusBlocks: number;
+      project?: string;
     };
 
 export function getStatus(opts: {
@@ -33,14 +34,16 @@ export function getStatus(opts: {
     return { state: "idle" };
   }
 
-  return {
+  const base = {
     state: derived.kind,
     remainingMs: derived.remainingMs,
     duration: file!.durationMs,
     startedAt: file!.startedAt,
     phase: file!.phase ?? "focus",
     completedFocusBlocks: file!.completedFocusBlocks ?? 0,
-  };
+  } as const;
+
+  return file!.project ? { ...base, project: file!.project } : base;
 }
 
 function formatRemaining(ms: number): string {
