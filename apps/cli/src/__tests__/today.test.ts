@@ -159,8 +159,8 @@ describe("getToday", () => {
 
   it("returns all completions from today", () => {
     const todayTs = new Date("2024-01-15T09:00:00").getTime();
-    store.appendCompletion({ completedAt: todayTs, durationMs: 1500_000 });
-    store.appendCompletion({ completedAt: todayTs + 60_000, durationMs: 1500_000 });
+    store.appendCompletion({ completedAt: todayTs, durationMs: 1500_000, project: "(unassigned)" });
+    store.appendCompletion({ completedAt: todayTs + 60_000, durationMs: 1500_000, project: "(unassigned)" });
     const result = getToday({ store, now: NOW });
     expect(result.count).toBe(2);
     expect(result.completions).toHaveLength(2);
@@ -169,14 +169,14 @@ describe("getToday", () => {
   it("excludes yesterday's completions", () => {
     const yestTs = new Date("2024-01-14T23:00:00").getTime();
     const todayTs = new Date("2024-01-15T09:00:00").getTime();
-    store.appendCompletion({ completedAt: yestTs, durationMs: 1500_000 });
-    store.appendCompletion({ completedAt: todayTs, durationMs: 1500_000 });
+    store.appendCompletion({ completedAt: yestTs, durationMs: 1500_000, project: "(unassigned)" });
+    store.appendCompletion({ completedAt: todayTs, durationMs: 1500_000, project: "(unassigned)" });
     const result = getToday({ store, now: NOW });
     expect(result.count).toBe(1);
   });
 
-  it("finalizes an expired timer and includes it in today's count", () => {
-    // Timer that started 70s ago, 60s duration → expired, completedAt = start + duration
+  it("advances an expired focus to break and includes the focus completion in today's count", () => {
+    // focus expired 10s ago → break auto-starts; one focus completion is logged
     const startedAt = NOW - 70_000;
     store.writeState({
       startedAt,
@@ -185,14 +185,14 @@ describe("getToday", () => {
       accumulatedPauseMs: 0,
     });
     const result = getToday({ store, now: NOW });
-    // The expired timer should be finalized and its completion should appear
     expect(result.count).toBe(1);
-    expect(store.readState()).toBeNull();
+    // State is now a running break (not null)
+    expect(store.readState()?.phase).toBe("break");
   });
 
   it("json shape has count and completions array with completedAt and durationMs", () => {
     const todayTs = new Date("2024-01-15T09:00:00").getTime();
-    store.appendCompletion({ completedAt: todayTs, durationMs: 1500_000 });
+    store.appendCompletion({ completedAt: todayTs, durationMs: 1500_000, project: "(unassigned)" });
     const result = getToday({ store, now: NOW });
     expect(result).toMatchObject({
       count: 1,

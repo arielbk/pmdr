@@ -170,14 +170,14 @@ describe("filesystem operations", () => {
   });
 
   it("appendCompletion creates and appends to completions.jsonl", () => {
-    store.appendCompletion({ completedAt: 1000, durationMs: 60_000 });
-    store.appendCompletion({ completedAt: 2000, durationMs: 60_000 });
+    store.appendCompletion({ completedAt: 1000, durationMs: 60_000, project: "(unassigned)" });
+    store.appendCompletion({ completedAt: 2000, durationMs: 60_000, project: "(unassigned)" });
 
     const raw = readFileSync(join(tmpDir, "completions.jsonl"), "utf8");
     const lines = raw.trim().split("\n");
     expect(lines).toHaveLength(2);
-    expect(JSON.parse(lines[0]!)).toEqual({ completedAt: 1000, durationMs: 60_000 });
-    expect(JSON.parse(lines[1]!)).toEqual({ completedAt: 2000, durationMs: 60_000 });
+    expect(JSON.parse(lines[0]!)).toMatchObject({ completedAt: 1000, durationMs: 60_000 });
+    expect(JSON.parse(lines[1]!)).toMatchObject({ completedAt: 2000, durationMs: 60_000 });
   });
 });
 
@@ -261,6 +261,126 @@ describe("finalizeIfExpired", () => {
     store.finalizeIfExpired(999_999); // paused is never "expired"
     expect(store.readState()).toEqual(file);
     expect(existsSync(join(tmpDir, "completions.jsonl"))).toBe(false);
+  });
+});
+
+// ─── advancePhaseIfExpired ────────────────────────────────────────────────────
+
+describe("advancePhaseIfExpired", () => {
+  let tmpDir: string;
+  let store: ReturnType<typeof createStateModule>;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-test-"));
+    store = createStateModule(tmpDir);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("is a no-op when state is idle (no file)", () => {
+    store.advancePhaseIfExpired(99_999);
+    expect(store.readState()).toBeNull();
+    expect(existsSync(join(tmpDir, "completions.jsonl"))).toBe(false);
+  });
+
+  it("is a no-op when focus is still running", () => {
+    const file: StateRecord = {
+      startedAt: 0,
+      durationMs: 60_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+    };
+    store.writeState(file);
+    store.advancePhaseIfExpired(30_000);
+    expect(store.readState()!.startedAt).toBe(0);
+    expect(existsSync(join(tmpDir, "completions.jsonl"))).toBe(false);
+  });
+
+  it("expired focus → break running + one focus completion appended", () => {
+    store.writeState({ startedAt: 0, durationMs: 1000, pausedAt: null, accumulatedPauseMs: 0 });
+    store.advancePhaseIfExpired(2000);
+
+    const file = store.readState();
+    expect(file?.phase).toBe("break");
+    expect(file?.completedFocusBlocks).toBe(1);
+    expect(file?.startedAt).toBe(1000); // break starts at focus nominal end
+    expect(file?.pausedAt).toBeNull();
+
+    const completions = store.readCompletions();
+    expect(completions).toHaveLength(1);
+    expect(completions[0]!.completedAt).toBe(1000);
+    expect(completions[0]!.durationMs).toBe(1000);
+  });
+
+  it("expired focus whose break also already expired → idle + one completion", () => {
+    // focus: 0→1000, break: 1000→1000+300_000=301000; at 302000 both expired
+    store.writeState({ startedAt: 0, durationMs: 1000, pausedAt: null, accumulatedPauseMs: 0 });
+    store.advancePhaseIfExpired(302_000);
+
+    expect(store.readState()).toBeNull();
+    const completions = store.readCompletions();
+    expect(completions).toHaveLength(1);
+    expect(completions[0]!.completedAt).toBe(1000);
+  });
+
+  it("expired break → idle, no completion logged", () => {
+    store.writeState({
+      startedAt: 0,
+      durationMs: 5_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "break",
+      completedFocusBlocks: 1,
+    });
+    store.advancePhaseIfExpired(10_000);
+
+    expect(store.readState()).toBeNull();
+    expect(existsSync(join(tmpDir, "completions.jsonl"))).toBe(false);
+  });
+
+  it("old record without phase fields is treated as focus/0", () => {
+    // legacy state written without phase or completedFocusBlocks
+    store.writeState({ startedAt: 0, durationMs: 1000, pausedAt: null, accumulatedPauseMs: 0 });
+    store.advancePhaseIfExpired(2000);
+
+    const file = store.readState();
+    expect(file?.phase).toBe("break");
+    expect(file?.completedFocusBlocks).toBe(1);
+    expect(store.readCompletions()).toHaveLength(1);
+  });
+
+  it("preserves project when writing break record", () => {
+    store.writeState({ startedAt: 0, durationMs: 1000, pausedAt: null, accumulatedPauseMs: 0, project: "my-proj" });
+    store.advancePhaseIfExpired(2000);
+
+    const file = store.readState();
+    expect(file?.project).toBe("my-proj");
+  });
+
+  it("uses short break after 1 completed focus block", () => {
+    store.writeState({ startedAt: 0, durationMs: 1000, pausedAt: null, accumulatedPauseMs: 0 });
+    store.advancePhaseIfExpired(2000);
+
+    const file = store.readState();
+    expect(file?.durationMs).toBe(5 * 60 * 1000); // short break
+  });
+
+  it("uses long break after 4 completed focus blocks", () => {
+    store.writeState({
+      startedAt: 0,
+      durationMs: 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 3, // this is the 4th focus block
+    });
+    store.advancePhaseIfExpired(2000);
+
+    const file = store.readState();
+    expect(file?.durationMs).toBe(15 * 60 * 1000); // long break
+    expect(file?.completedFocusBlocks).toBe(4);
   });
 });
 

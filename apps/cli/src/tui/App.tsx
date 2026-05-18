@@ -1,0 +1,186 @@
+import React, { useEffect, useState } from "react";
+import { useApp, useInput } from "ink";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { derivePhaseState } from "./phase-state-machine.js";
+import CountdownView from "./CountdownView.js";
+import ProjectPickerOverlay from "./ProjectPickerOverlay.js";
+import HelpOverlay from "./HelpOverlay.js";
+import { listProjects, upsertProject } from "../projects.js";
+import { createStateModule, deriveState } from "../state.js";
+import { pauseTimer } from "../commands/pause.js";
+import { resumeTimer } from "../commands/resume.js";
+import { stopTimer } from "../commands/stop.js";
+import { initTimer } from "../commands/start.js";
+
+const DEFAULT_DURATION_MS = 25 * 60 * 1_000;
+import type { DerivedPhaseState } from "./phase-state-machine.js";
+import type { ProjectRecord } from "../projects.js";
+import type { StateRecord } from "../state.js";
+
+type Store = ReturnType<typeof createStateModule>;
+
+interface AppProps {
+  getProjects?: () => ProjectRecord[];
+  upsertProjectFn?: (name: string) => ProjectRecord;
+  store?: Store;
+  readStateFn?: () => StateRecord | null;
+  exitFn?: () => void;
+}
+
+const DEFAULT_STATE_DIR = join(homedir(), ".local", "state", "pmdr");
+
+function makeReadOnlyStore(readFn: () => StateRecord | null): Store {
+  return {
+    readState: readFn,
+    writeState: () => {},
+    clearState: () => {},
+    readCompletions: () => [],
+    appendCompletion: () => {},
+    finalizeIfExpired: () => {},
+    advancePhaseIfExpired: () => {},
+    readToday: () => ({}),
+    rewriteCompletionProject: () => {},
+  } as unknown as Store;
+}
+
+export default function App({
+  getProjects = () => listProjects({ includeArchived: false }),
+  upsertProjectFn = upsertProject,
+  store: providedStore,
+  readStateFn,
+  exitFn,
+}: AppProps) {
+  const { exit: inkExit } = useApp();
+  const exit = exitFn ?? inkExit;
+
+  const [store] = useState<Store>(
+    () =>
+      providedStore ??
+      (readStateFn
+        ? makeReadOnlyStore(readStateFn)
+        : createStateModule(DEFAULT_STATE_DIR)),
+  );
+
+  const [initial] = useState(() => {
+    const now = Date.now();
+    const record = store.readState();
+    const kind = record ? deriveState({ file: record, now }).kind : "idle";
+    return {
+      record,
+      isAttached: kind === "running" || kind === "paused",
+    };
+  });
+
+  const [viewState, setViewState] = useState<DerivedPhaseState>(() =>
+    derivePhaseState(initial.record, Date.now()),
+  );
+  const [showProjectPicker, setShowProjectPicker] = useState(
+    !initial.isAttached,
+  );
+  const [showHelp, setShowHelp] = useState(false);
+  const [currentProject, setCurrentProject] = useState<string | undefined>(
+    initial.record?.project,
+  );
+  const [pickerProjects, setPickerProjects] = useState<ProjectRecord[]>(
+    initial.isAttached ? [] : getProjects(),
+  );
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      try {
+        store.advancePhaseIfExpired(now);
+      } catch {
+        // ignore — read-only test stores can no-op
+      }
+      const record = store.readState();
+      setViewState(derivePhaseState(record, now));
+      setCurrentProject(record?.project);
+    }, 500);
+    return () => clearInterval(interval);
+  }, [store]);
+
+  useInput(
+    (input, key) => {
+      const now = Date.now();
+      if (input === "q" || (key.ctrl && input === "c") || key.escape || input === "\x1B") {
+        exit();
+      } else if (input === " ") {
+        const file = store.readState();
+        if (!file) return;
+        const derived = deriveState({ file, now });
+        try {
+          if (derived.kind === "paused") {
+            resumeTimer({ store, now });
+          } else if (derived.kind === "running") {
+            pauseTimer({ store, now });
+          }
+        } catch {
+          // swallow — pauseTimer/resumeTimer throw on idle/conflicting state
+        }
+        const after = store.readState();
+        setViewState(derivePhaseState(after, now));
+        setCurrentProject(after?.project);
+      } else if (input === "x") {
+        try {
+          stopTimer({ store });
+        } catch {
+          // ignore — read-only stores or already-empty state
+        }
+        const after = store.readState();
+        setViewState(derivePhaseState(after, now));
+        setCurrentProject(after?.project);
+        setPickerProjects(getProjects());
+        setShowProjectPicker(true);
+      } else if (input === "p") {
+        setPickerProjects(getProjects());
+        setShowProjectPicker(true);
+      } else if (input === "?") {
+        setShowHelp(true);
+      }
+    },
+    { isActive: !showProjectPicker && !showHelp },
+  );
+
+  function handleProjectSelect(name: string) {
+    const record = upsertProjectFn(name);
+    const now = Date.now();
+    const file = store.readState();
+    if (file) {
+      store.writeState({ ...file, project: record.name });
+    } else {
+      try {
+        initTimer({
+          store,
+          durationMs: DEFAULT_DURATION_MS,
+          now,
+          project: record.name,
+        });
+      } catch {
+        // ignore — read-only stores in tests
+      }
+    }
+    setViewState(derivePhaseState(store.readState(), now));
+    setCurrentProject(record.name);
+    setShowProjectPicker(false);
+  }
+
+  function handlePickerClose() {
+    setShowProjectPicker(false);
+  }
+
+  return (
+    <>
+      <CountdownView {...viewState} project={currentProject} />
+      {showProjectPicker && (
+        <ProjectPickerOverlay
+          projects={pickerProjects}
+          onSelect={handleProjectSelect}
+          onClose={handlePickerClose}
+        />
+      )}
+      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
+    </>
+  );
+}
