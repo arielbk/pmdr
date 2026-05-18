@@ -47,7 +47,7 @@ export default function CountdownView({
         <BigText text={timeStr} colors={colors} />
       </Box>
 
-      <Box justifyContent="center">
+      <Box justifyContent="center" marginTop={-1} marginBottom={1}>
         <Text>
           <Text color="green" dimColor={paused}>
             {Array.from({ length: Math.min(completedFocusBlocks, DEFAULT_FOCUS_GOAL) }, () => "●").join(" ")}
