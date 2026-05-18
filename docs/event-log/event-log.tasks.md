@@ -6,7 +6,7 @@ Adds an append-only `events.jsonl` capturing start/stop/pause/resume with per-ti
 
 ### `late-project-attribution` — Late-binding project attribution
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `pmdr start` (no `--project`, interactive TTY) starts a timer immediately without prompting; the active record's project is `(unassigned)` until the user changes it via the existing `p` command, and the completion row uses the project at expiry.
 

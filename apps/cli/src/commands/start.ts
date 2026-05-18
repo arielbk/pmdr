@@ -8,14 +8,16 @@ import { select, text, cancel, isCancel } from "@clack/prompts";
 
 const DEFAULT_DURATION_MS = 25 * 60 * 1_000;
 const STATE_DIR = join(homedir(), ".local", "state", "pmdr");
+const UNASSIGNED_PROJECT = "(unassigned)";
 
 export function initTimer(options: {
   store: ReturnType<typeof createStateModule>;
   durationMs: number;
   now: number;
-  project: string;
+  project?: string;
 }): void {
-  const { store, durationMs, now, project } = options;
+  const { store, durationMs, now } = options;
+  const project = options.project ?? UNASSIGNED_PROJECT;
 
   store.advancePhaseIfExpired(now);
 
@@ -51,6 +53,20 @@ type TextFn = (opts: {
   message: string;
   validate?: (v: string) => string | undefined;
 }) => Promise<string | symbol>;
+
+type ProjectResolver = Pick<
+  ReturnType<typeof createProjectsModule>,
+  "upsertProject"
+>;
+
+export function resolveStartProject(
+  projectArg: string | undefined,
+  projects: ProjectResolver,
+): string {
+  return projectArg
+    ? projects.upsertProject(projectArg).name
+    : UNASSIGNED_PROJECT;
+}
 
 export async function pickProject(options: {
   projects: ReturnType<typeof createProjectsModule>;
@@ -199,10 +215,10 @@ export default defineCommand({
       process.exit(1);
     }
 
-    const projects = createProjectsModule(STATE_DIR);
-    const project = projectArg
-      ? projects.upsertProject(projectArg).name
-      : await pickProject({ projects });
+    const project = resolveStartProject(
+      projectArg,
+      createProjectsModule(STATE_DIR),
+    );
 
     const store = createStateModule(STATE_DIR);
     const now = Date.now();
