@@ -34,7 +34,7 @@ A native Swift macOS menubar app that surfaces pmdr's timer in the system tray, 
 
 ### `live-title` — Tray title ticks from poller
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** With a focus block running (started via the TUI), the menubar title shows `M:SS` remaining and counts down live. When idle, the title is empty (icon only).
 

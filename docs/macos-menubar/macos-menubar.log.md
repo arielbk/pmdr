@@ -167,3 +167,76 @@ The slice's feedback loop is "Integration test against the real `pmdr` binary in
 **Open follow-ups (not this slice)**
 - `AppDelegate.swift` does not yet `import PmdrMenubarCore`; the framework is linked and embedded but unused by the app's binary until `live-title` plugs in the poller. That's expected — embedding without usage is harmless.
 - If embedding ever feels heavyweight for a tiny client, a `staticFramework` or a Swift Package target are both lighter alternatives — but for now the framework matches the README and keeps `@testable import` straightforward.
+
+## 2026-05-18 — `live-title` (needs-review)
+
+**Goal:** Menubar title shows `M:SS` while a focus block is running (counts down live), and is empty (icon only) when idle. Cadence adjusts open vs closed. Pure-unit-tested `StatusPoller` covers status changes, phase transitions, and cadence switching.
+
+**State on entry**
+- `pmdr-client` and `app-skeleton` both `done`. AppDelegate still showed the static `pmdr` text title and did not import `PmdrMenubarCore`.
+- No `StatusPoller` or `TitleFormatter` yet — both new modules.
+
+**What I did**
+
+Three new files in the `PmdrMenubarCore` framework + a substantial AppDelegate rewrite:
+
+1. `Sources/PmdrMenubarCore/StatusPoller.swift`
+   - `public protocol StatusFetching: Sendable { func status() async throws -> Status }`, with `PmdrClient` conforming via an extension. The protocol exists purely so tests can inject stubs without spinning up a real `pmdr` binary.
+   - `public actor StatusPoller` exposes `pollOnce() async throws -> [Event]`, a `cadence: TimeInterval` accessor, `setMenuOpen(_:)`, and `currentStatus()`. Cadence is `openCadence = 1.0` when the menu is open and `closedCadence = 5.0` otherwise — published as static constants so tests assert on the same values the production code uses.
+   - The poller does **not** own a timer. It is a state machine that takes one snapshot per `pollOnce()`. The owner (AppDelegate) decides when to fire next. This keeps the unit tests deterministic — no `Task.sleep`, no clock fakes.
+   - `Event` is a nested public enum with two cases: `statusChanged(Status)` (whenever the new snapshot differs from the previous one — including the very first poll) and `phaseTransition(from: Phase, to: Phase)` (only between two *active* snapshots — going idle resets the baseline, so `focus → idle → break` does not produce a phantom `focus → break` event).
+2. `Sources/PmdrMenubarCore/TitleFormatter.swift`
+   - `public enum TitleFormatter` with two static functions:
+     - `format(remainingMs:)` produces `"M:SS"`, ceiling-rounded so 1ms remaining still reads `0:01`, clamped to `"0:00"` at or below zero.
+     - `title(for status: Status, elapsedSincePoll: TimeInterval = 0) -> String` returns `""` for `.idle`, the frozen `remainingMs` for `.paused` (elapsed time ignored — the timer doesn't tick while paused), and `remainingMs - elapsedSincePoll*1000` for `.running` (interpolated so the displayed seconds tick between polls).
+3. `Sources/AppDelegate.swift` (rewritten)
+   - Imports `PmdrMenubarCore`. On launch, sets the status item's button to the `timer` SF Symbol (with a `pmdr` text fallback if the symbol fails to load), kicks off a poll `Task`, and schedules a 1Hz `Timer` on the main run loop that redraws the title via `TitleFormatter.title(for:elapsedSincePoll:)`.
+   - The poll task loops `pollOnce()` → `MainActor.run { … redrawTitle() }` → `Task.sleep(cadence)`. Cadence is re-read from the actor each iteration, so a menu open/close updates the next sleep.
+   - Becomes the `NSMenu.delegate` and forwards `menuWillOpen` / `menuDidClose` to `poller.setMenuOpen(_:)`. The downstream `menu-actions` slice will use the same delegate for state-dependent items, but for `live-title` only the cadence signal matters.
+   - On `applicationWillTerminate`, cancels the poll task and invalidates the timer.
+4. New unit tests under `Tests/PmdrMenubarCoreTests/`:
+   - `StatusPollerTests.swift` (11 cases) covers: default cadence, open/close cadence transitions, first-poll emits `statusChanged`, identical polls emit nothing, status changes emit `statusChanged`, `focus → break` emits `phaseTransition`, same-phase emits no transition, `running(focus) → idle → running(break)` does NOT emit a stale `focus → break` (idle resets the phase baseline), `pollOnce` propagates fetcher errors, and `currentStatus()` reflects the last successful poll. A private `StubFetcher` actor records call counts and replays a scripted result sequence.
+   - `TitleFormatterTests.swift` (10 cases) covers `format(remainingMs:)` boundaries (25:00 exact, sub-second rounds up, zero, negative clamp, ceiling within a second, two-digit pad) and `title(for:elapsedSincePoll:)` behavior across `.idle` (always empty), `.running` (interpolates and clamps), and `.paused` (elapsed ignored).
+
+5. `apps/menubar/README.md` layout diagram updated to include the two new core files.
+
+**Why an actor + protocol injection, not a Combine publisher / NotificationCenter**
+- Combine pulls in a Foundation-heavy dependency for what is essentially `(Status, [Event]) -> Void`. The poller already needs to be on its own isolation domain (it talks to `PmdrClient`, which spawns processes), and an actor naturally satisfies that.
+- Returning `[Event]` directly from `pollOnce()` is the most test-friendly API I could pick: the test enumerates exactly what it expects after each poll, no race against an `AsyncStream` buffer, no expectation timeouts. AppDelegate doesn't need an event subscription right now — it just reacts to the post-poll `currentStatus()`. Future slices (`menu-actions`, `phase-notifications`) can consume the returned events from inside the polling loop.
+- `StatusFetching` is a one-method protocol carved out of `PmdrClient`'s public surface so the stub doesn't need to mock subprocess plumbing. `PmdrClient` adopts it via a one-line extension — no production-side changes.
+
+**Why interpolation lives in `TitleFormatter`, not the poller**
+- The poller's job is *facts* (what the CLI reports + transitions). The 1Hz visual tick is a *display* concern. Coupling them would force the poller to own a clock, and `pollOnce()` returning interpolated values would either re-snapshot the date or take a `now:` parameter the actor can't isolate.
+- Putting interpolation in `TitleFormatter` keeps both pieces deterministic and pure: tests can call `title(for: status, elapsedSincePoll: 5)` with no mocking at all. The AppDelegate's 1Hz `Timer` is the only place that reads `Date()`.
+
+**Why `lastPollAt = .distantPast` is fine as an initializer**
+- Before the first poll completes, `lastStatus` is `.idle` and `TitleFormatter.title(for: .idle, elapsedSincePoll: anything) == ""`. So the redraw timer firing between launch and the first poll just paints empty — exactly what we want.
+- After the first poll, `lastPollAt` becomes `Date()` and interpolation uses real elapsed time.
+
+**Self-verification (Linux sandbox, no Swift toolchain)**
+Following the pattern from the prior log entry's "Self-verification ralph can do without a Mac" list:
+
+1. **YAML schema + path existence:** ran a Python validator on `project.yml`. Output: `Targets: ['PmdrMenubarCore', 'pmdr-menubar', 'pmdr-menubarTests']`, `Schemes: ['pmdr-menubar']`, `Errors: none`. Every `sources:` path resolves, every `dependencies: -> target:` names a declared target.
+2. **Source layout:** `Sources/PmdrMenubarCore/` contains `PmdrClient.swift`, `StatusPoller.swift`, `TitleFormatter.swift` — all three are picked up by the `PmdrMenubarCore` target's `path: Sources/PmdrMenubarCore`. `Sources/` (excluding `PmdrMenubarCore/**`, per the app target's exclude rule) contains `main.swift` and `AppDelegate.swift` — both picked up by the app. `Tests/PmdrMenubarCoreTests/` now has three files, all picked up by the test target.
+3. **Import resolution:** AppDelegate's `import PmdrMenubarCore` is backed by the framework target declared in `project.yml` and embedded into the app bundle. Tests do `@testable import PmdrMenubarCore` and depend on `PmdrMenubarCore` in `project.yml`.
+4. **Public surface:** confirmed `StatusPoller`, `StatusPoller.Event`, `StatusFetching`, `TitleFormatter` are all declared `public`. `PmdrClient`, `Status`, `Phase`, `PmdrClientError` (consumed by AppDelegate via `PmdrClient()`) were already public. `Status` is `Equatable`, so the test assertions on `[Event]` (which contains `Status`) compile.
+5. **Actor / protocol witness:** `StubFetcher` is a `private actor` conforming to `public protocol StatusFetching`. Async protocol requirements can be witnessed by isolated actor methods (the caller `await`s), so `actor StubFetcher.status() async throws -> Status` satisfies the requirement.
+6. **README ↔ tree:** layout diagram updated to include `StatusPoller.swift` and `TitleFormatter.swift`. `find apps/menubar -type f` matches.
+
+**Why still `needs-review`, not `done`**
+The slice explicitly says `Human checkpoint: yes`. The manual half of the feedback loop — "start a session in the TUI, watch the menubar tick down second-by-second; close the menu and confirm cadence relaxes" — needs a Mac. The unit-tested half (poller logic + title formatting) is fully captured by the new test files, but they have not been executed against a Swift toolchain from this sandbox.
+
+**To verify on macOS**
+1. `cd apps/menubar && xcodegen generate`
+2. `xcodebuild test -scheme pmdr-menubar -destination 'platform=macOS'` — expect 10 (decoding + binary resolution) + 11 (`StatusPollerTests`) + 10 (`TitleFormatterTests`) = **31 unit tests** green, plus 3 integration tests skipped.
+3. Build and run the app, then in another terminal: `pmdr start --force --project test --duration 2m`. The menubar title should show "2:00" within ~1s, then tick "1:59", "1:58", … in real time. Click the menubar to open the menu — cadence shifts to 1Hz polls so the title stays in sync (current implementation also has a 1Hz local redraw timer, so the visual tick is independent of poll cadence). Close the menu — confirm the title still keeps ticking smoothly (1Hz redraw timer keeps interpolating; poll cadence relaxes to 5s).
+4. `pmdr pause` — title freezes (paused state ignores elapsed). `pmdr resume` — title resumes ticking from the new `remainingMs`.
+5. `pmdr stop` — title goes empty within one poll cycle.
+
+**Known cosmetic gap (acceptable for this slice)**
+When the menu is closed, the *poll* cadence is 5s but the *display* redraws every 1s using interpolated time. This means the title ticks smoothly between polls. If the poller is wrong by N seconds (e.g. the CLI clock drifted), the title will jump by N seconds on the next poll. That's fine — the CLI is the source of truth, the menubar just reflects it.
+
+**Open follow-ups (not this slice)**
+- `menu-actions` slice will replace the single "Quit" item with state-dependent items. The current `NSMenuDelegate` plumbing (and `poller.currentStatus()`) will become the trigger for menu rebuilds.
+- `phase-notifications` slice already has `StatusPoller.Event.phaseTransition` to subscribe to; it just needs to add `break → idle` semantics (the current poller only fires phase transitions between two active states, which deliberately excludes the `break → idle` case — `phase-notifications` should either extend `Event` or observe `statusChanged` and diff itself).
+- The poll loop swallows errors silently. A future slice should surface `.binaryNotFound` (e.g. an alert on first failure) — for now it just means the title stays empty until `pmdr` reappears on PATH.

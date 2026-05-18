@@ -36,9 +36,11 @@ apps/menubar/
 │   └── Info.plist               # LSUIElement = true (menubar-only app)
 ├── Sources/
 │   ├── main.swift               # app entry point, installs AppDelegate
-│   ├── AppDelegate.swift        # owns the NSStatusItem and its menu
+│   ├── AppDelegate.swift        # NSStatusItem + menu, drives the poller + tick timer
 │   └── PmdrMenubarCore/         # framework consumed by the app + tests
-│       └── PmdrClient.swift     # typed Swift client for the `pmdr` CLI
+│       ├── PmdrClient.swift     # typed Swift client for the `pmdr` CLI
+│       ├── StatusPoller.swift   # actor that polls PmdrClient + emits change/phase events
+│       └── TitleFormatter.swift # pure Status → "M:SS" / "" formatter
 └── Tests/
     └── PmdrMenubarCoreTests/    # XCTest bundle for PmdrMenubarCore
 ```
