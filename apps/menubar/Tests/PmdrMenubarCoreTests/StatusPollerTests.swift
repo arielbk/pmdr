@@ -123,6 +123,79 @@ final class StatusPollerTests: XCTestCase {
         XCTAssertEqual(events, [.statusChanged(.running(brk))])
     }
 
+    func test_break_to_idle_emits_sessionEnded_break() async throws {
+        let brk = makeActive(remainingMs: 1_000, durationMs: 300_000, phase: .break)
+        let poller = StatusPoller(fetcher: StubFetcher([
+            .success(.running(brk)),
+            .success(.idle),
+        ]))
+        _ = try await poller.pollOnce()
+        let events = try await poller.pollOnce()
+        XCTAssertEqual(events, [
+            .statusChanged(.idle),
+            .sessionEnded(lastPhase: .break),
+        ])
+    }
+
+    func test_focus_to_idle_emits_sessionEnded_focus() async throws {
+        let focus = makeActive(phase: .focus)
+        let poller = StatusPoller(fetcher: StubFetcher([
+            .success(.running(focus)),
+            .success(.idle),
+        ]))
+        _ = try await poller.pollOnce()
+        let events = try await poller.pollOnce()
+        XCTAssertEqual(events, [
+            .statusChanged(.idle),
+            .sessionEnded(lastPhase: .focus),
+        ])
+    }
+
+    func test_paused_to_idle_emits_sessionEnded() async throws {
+        let active = makeActive(phase: .focus)
+        let poller = StatusPoller(fetcher: StubFetcher([
+            .success(.paused(active)),
+            .success(.idle),
+        ]))
+        _ = try await poller.pollOnce()
+        let events = try await poller.pollOnce()
+        XCTAssertEqual(events, [
+            .statusChanged(.idle),
+            .sessionEnded(lastPhase: .focus),
+        ])
+    }
+
+    func test_first_poll_idle_does_not_emit_sessionEnded() async throws {
+        let poller = StatusPoller(fetcher: StubFetcher([.success(.idle)]))
+        let events = try await poller.pollOnce()
+        XCTAssertEqual(events, [.statusChanged(.idle)])
+    }
+
+    func test_idle_to_idle_emits_no_sessionEnded() async throws {
+        let poller = StatusPoller(fetcher: StubFetcher([
+            .success(.idle),
+            .success(.idle),
+        ]))
+        _ = try await poller.pollOnce()
+        let events = try await poller.pollOnce()
+        XCTAssertEqual(events, [])
+    }
+
+    func test_focus_to_break_does_not_emit_sessionEnded() async throws {
+        let focus = makeActive(phase: .focus)
+        let brk = makeActive(remainingMs: 300_000, durationMs: 300_000, phase: .break)
+        let poller = StatusPoller(fetcher: StubFetcher([
+            .success(.running(focus)),
+            .success(.running(brk)),
+        ]))
+        _ = try await poller.pollOnce()
+        let events = try await poller.pollOnce()
+        XCTAssertEqual(events, [
+            .statusChanged(.running(brk)),
+            .phaseTransition(from: .focus, to: .break),
+        ])
+    }
+
     func test_poll_propagates_fetcher_errors() async {
         struct Boom: Error, Equatable {}
         let poller = StatusPoller(fetcher: StubFetcher([.failure(Boom())]))

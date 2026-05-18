@@ -19,6 +19,10 @@ public actor StatusPoller {
     public enum Event: Equatable, Sendable {
         case statusChanged(Status)
         case phaseTransition(from: Phase, to: Phase)
+        /// Fires when an active session (running or paused) transitions to idle.
+        /// Exposes the phase that just ended so consumers (notifications) can
+        /// distinguish a focus end from a break end without diffing themselves.
+        case sessionEnded(lastPhase: Phase)
     }
 
     /// Cadence used while the tray menu is open — fast enough for a live `M:SS` tick.
@@ -56,10 +60,13 @@ public actor StatusPoller {
         if status != lastStatus {
             events.append(.statusChanged(status))
         }
-        if let fromPhase = Self.phase(of: lastStatus),
-           let toPhase = Self.phase(of: status),
-           fromPhase != toPhase {
+        let fromPhase = Self.phase(of: lastStatus)
+        let toPhase = Self.phase(of: status)
+        if let fromPhase, let toPhase, fromPhase != toPhase {
             events.append(.phaseTransition(from: fromPhase, to: toPhase))
+        }
+        if let fromPhase, toPhase == nil {
+            events.append(.sessionEnded(lastPhase: fromPhase))
         }
         lastStatus = status
         return events

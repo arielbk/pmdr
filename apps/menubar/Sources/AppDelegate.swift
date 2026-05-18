@@ -6,6 +6,7 @@ import PmdrMenubarCore
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var poller: StatusPoller?
+    private var notifier: PhaseNotifier?
     private var pollTask: Task<Void, Never>?
     private var redrawTimer: Timer?
     private var lastStatus: Status = .idle
@@ -15,6 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let environment = LoginShellEnvironment.resolve()
         poller = StatusPoller(fetcher: PmdrClient(environment: environment))
+        let presenter = UserNotificationsPresenter()
+        notifier = PhaseNotifier(presenter: presenter)
+        Task { await presenter.requestAuthorization() }
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
@@ -54,13 +58,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
-                    _ = try await poller.pollOnce()
+                    let events = try await poller.pollOnce()
                     let now = Date()
                     let status = await poller.currentStatus() ?? .idle
                     await MainActor.run {
                         self?.lastStatus = status
                         self?.lastPollAt = now
                         self?.redrawTitle()
+                    }
+                    if let notifier = self?.notifier {
+                        await notifier.handle(events)
                     }
                 } catch {
                     os_log("Failed to poll pmdr status: %{public}@", log: self?.log ?? .default, type: .error, String(describing: error))

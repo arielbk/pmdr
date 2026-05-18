@@ -39,6 +39,7 @@ apps/menubar/
 │   ├── AppDelegate.swift        # NSStatusItem + menu, drives the poller + tick timer
 │   └── PmdrMenubarCore/         # framework consumed by the app + tests
 │       ├── LoginShellEnvironment.swift # resolves user login-shell PATH for CLI subprocesses
+│       ├── PhaseNotifier.swift  # maps poller events to native banners (focus end, break end)
 │       ├── PmdrClient.swift     # typed Swift client for the `pmdr` CLI
 │       ├── StatusPoller.swift   # actor that polls PmdrClient + emits change/phase events
 │       └── TitleFormatter.swift # pure Status → "M:SS" / "" formatter

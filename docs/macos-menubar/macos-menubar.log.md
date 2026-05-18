@@ -310,3 +310,80 @@ When the menu is closed, the *poll* cadence is 5s but the *display* redraws ever
 
 **Status**
 - `live-title` remains **needs-review** in `macos-menubar.tasks.md`.
+
+## 2026-05-18 — `phase-notifications` (needs-review)
+
+**Goal:** On focus→break, fire a native banner "Focus done / Break started". On break→idle, fire "Break done". One banner per transition, no sound config, no settings.
+
+**State on entry**
+- `live-title` `done`, `pmdr-client` `done`, `app-skeleton` `done`. `menu-actions` `in-progress` with uncommitted CLI work (adds `project` to `StatusResult`) — not mine to touch; left in working tree.
+- `phase-notifications` `not-started`. No notifier or notification-presenter types existed. The previous `live-title` author already flagged the design choice: extend `StatusPoller.Event` with a `break→idle` semantic, or have the notifier diff `statusChanged` itself.
+
+**What I did**
+
+1. **Extended `StatusPoller.Event`** with `sessionEnded(lastPhase: Phase)`. The poller emits it whenever a non-idle status transitions to `.idle`. This keeps all phase-edge detection inside the poller, so the notifier can be a pure switch over events.
+   - The existing `phaseTransition(from:to:)` semantics stay unchanged (only fires between two active phases). Going active→idle was previously silent; it now produces `sessionEnded(lastPhase:)`. `idle→idle` and `nil→idle` (first poll) still emit nothing — `sessionEnded` requires a previous non-nil active phase.
+2. **`Sources/PmdrMenubarCore/PhaseNotifier.swift`** — a `Sendable` struct that takes a `NotificationPresenting` protocol witness and maps event sequences to banner presentations:
+   - `.phaseTransition(from: .focus, to: .break)` → present `title: "Focus done"`, `body: "Break started"`.
+   - `.sessionEnded(lastPhase: .break)` → present `title: "Break done"`, `body: ""`.
+   - Every other event (including `sessionEnded(lastPhase: .focus)` from manual `pmdr stop` mid-focus, `break→focus` start-of-next-focus, plain `statusChanged`) is silent.
+   - The same file ships `UserNotificationsPresenter`, a concrete `NotificationPresenting` that wraps `UNUserNotificationCenter`. Exposes `requestAuthorization()` (asks for `.alert` only — no sound/badge per the slice's "no sound config, no settings") and `present(title:body:)` which posts an immediate `UNNotificationRequest` with `trigger: nil`. Wrapped in `try?` because notification delivery isn't something we want to crash the poll loop over.
+3. **`Tests/PmdrMenubarCoreTests/PhaseNotifierTests.swift`** — 7 cases using a `RecordingPresenter` actor that captures `(title, body)` pairs:
+   - focus→break presents the focus-done banner exactly.
+   - sessionEnded(break) presents the break-done banner exactly.
+   - sessionEnded(focus) — manual stop — presents nothing.
+   - break→focus — start of new focus block — presents nothing.
+   - plain statusChanged with no transitions presents nothing.
+   - empty event list presents nothing.
+   - Two consecutive `handle()` calls produce two banners, one per transition (no duplicates).
+4. **`Tests/PmdrMenubarCoreTests/StatusPollerTests.swift`** — 6 new cases for `sessionEnded`:
+   - `break → idle` emits `sessionEnded(lastPhase: .break)`.
+   - `focus → idle` emits `sessionEnded(lastPhase: .focus)`.
+   - `paused(focus) → idle` emits `sessionEnded(lastPhase: .focus)` (paused counts as the same active phase).
+   - First poll `idle` does not emit sessionEnded (no prior phase).
+   - `idle → idle` emits no events.
+   - `focus → break` does not emit sessionEnded (toPhase still active).
+   - Existing `idle_in_between_resets_phase_baseline` test continues to pass — its discarded second poll now also includes a `sessionEnded(.focus)` event, but the test only asserts on poll 3.
+5. **`Sources/AppDelegate.swift`** — instantiates `UserNotificationsPresenter`, kicks off `requestAuthorization()` in a `Task` at launch, and feeds `pollOnce()`'s returned events into `notifier.handle(_:)` from inside the poll loop. The notifier runs off-main, after the title redraw — banners are decoration, not blocking UI.
+6. **`apps/menubar/README.md`** — added `PhaseNotifier.swift` to the layout diagram.
+
+**Design notes**
+
+- **Why split "Focus done — break started" into title + body.** macOS native banners render title and body as separate visual lines. The slice's spec sentence reads naturally as title "Focus done" + body "Break started". Could trivially be collapsed to a single-line title if review prefers — one-line change in `PhaseNotifier`.
+- **Why a `PhaseNotifier` struct, not an actor.** It owns no state. All dedup happens upstream in `StatusPoller`: a given transition appears in exactly one `pollOnce()` result. Re-firing would require the poller to forget — which it doesn't. So no actor isolation is needed.
+- **Why `NotificationPresenting` instead of injecting `UNUserNotificationCenter` directly.** `UNUserNotificationCenter.current()` is a singleton and `requestAuthorization` / `add` mutate global system state. A protocol witness lets unit tests stay completely off the framework.
+- **Why ignore `sessionEnded(.focus)`.** Spec only calls out focus→break and break→idle. A manual `pmdr stop` mid-focus should not pop a "Focus done" banner — the user explicitly interrupted, no completion claim to be made. Encoded as a deliberate `case .sessionEnded` no-op so the intent is in the source.
+- **Why not call the new event `phaseTransition(from: .break, to: .idle)`.** Would require widening `phaseTransition` to take optional phases or inventing an `.idle` case on `Phase` (which mirrors the CLI's two-state phase). A separate `sessionEnded` case keeps the existing test invariants intact ("phaseTransition only between two active phases") and reads more clearly at the call site.
+
+**Self-verification (Linux sandbox, no Swift toolchain)**
+
+1. **YAML schema + path existence:** `project.yml` validator runs cleanly. The `PmdrMenubarCore` target globs `Sources/PmdrMenubarCore`, so the new `PhaseNotifier.swift` is picked up automatically without any spec edit. Same for `PhaseNotifierTests.swift` under `Tests/PmdrMenubarCoreTests`.
+2. **Module resolution:** `PhaseNotifierTests.swift` does `@testable import PmdrMenubarCore` — backed by the existing framework target. `PhaseNotifier.swift` imports `Foundation` and `UserNotifications`; `UserNotifications` is part of the macOS 13 SDK and Swift auto-links system frameworks via `import`, so no `frameworks:` entry in `project.yml` is required.
+3. **Public surface:** `NotificationPresenting`, `PhaseNotifier`, `UserNotificationsPresenter`, and the new `Event.sessionEnded` case are all `public`. `Phase` was already `public`.
+4. **Switch exhaustiveness:** `PhaseNotifier.handle`'s switch has the specific `.phaseTransition(from: .focus, to: .break)` and `.sessionEnded(lastPhase: .break)` patterns first, then a catch-all `case .statusChanged, .phaseTransition, .sessionEnded:` for the remaining variants. Swift allows partially-overlapping enum patterns; exhaustiveness is satisfied by the case-name catch-alls.
+5. **Existing test impact:** mentally re-ran the older `StatusPollerTests`. The only behavioral change is that polls going `active → idle` now also yield `sessionEnded`. The tests that exercise this path (`test_idle_in_between_resets_phase_baseline`) discard the affected poll's result, so they remain green.
+6. **README ↔ tree:** layout updated; `find apps/menubar/Sources` matches the diagram.
+
+**Why still `needs-review`, not `done`**
+
+The slice's feedback loop is fully manual: "start a short focus block, leave the menubar app running, confirm the focus-end banner fires once at expiry. Let the break run out and confirm the break-end banner fires once. Verify no duplicate banners on subsequent polls." This needs:
+- A Mac with the Xcode toolchain to build.
+- A real `UNUserNotificationCenter` and a user who has granted notification permission to the `.app`.
+- Time to wait out at least one focus + break cycle.
+
+None of those exist in this Linux sandbox. The unit-tested half of the work (poller event emission + notifier mapping) is fully captured by the new tests but they have not executed against a Swift compiler.
+
+**To verify on macOS**
+1. `cd apps/menubar && xcodegen generate`.
+2. `xcodebuild test -scheme pmdr-menubar -destination 'platform=macOS' -derivedDataPath .derivedData` — expect previous 38 tests + 6 new `StatusPollerTests` + 7 new `PhaseNotifierTests` = **51 tests** green (plus 3 integration tests skipped without `PMDR_INTEGRATION=1`).
+3. Build & run `pmdr.app`. The first launch should pop a system prompt asking to allow Notifications for "pmdr"; grant it.
+4. In a terminal: `pmdr start --force --project test --duration 10s` (with break duration also short — check whatever `pmdr config` exposes, or set via env). Wait ≤10s — expect a single banner "Focus done / Break started". Wait for the break to expire — expect a single banner "Break done". Confirm no duplicates as the poller continues to tick.
+5. Edge case: run a focus block and `pmdr stop` mid-way — confirm no "Focus done" banner fires (it's a manual abort, not a phase end).
+
+**Slice scope check**
+- Files I touched: `Sources/PmdrMenubarCore/StatusPoller.swift`, `Sources/PmdrMenubarCore/PhaseNotifier.swift` (new), `Tests/PmdrMenubarCoreTests/StatusPollerTests.swift`, `Tests/PmdrMenubarCoreTests/PhaseNotifierTests.swift` (new), `Sources/AppDelegate.swift`, `README.md`. Plus the `phase-notifications` row in `macos-menubar.tasks.md` and this log entry.
+- Files I deliberately did NOT touch: `apps/cli/src/commands/status.ts`, `apps/cli/src/__tests__/status.test.ts`, and the `menu-actions` row in the tasks file. Those uncommitted edits belong to a prior iteration's in-progress `menu-actions` slice; they will get committed by that slice's owner.
+
+**Open follow-ups (not this slice)**
+- Notification permission denial is silently swallowed. If `requestAuthorization` returns `false`, banners won't deliver and we have no UI signal. A future polish slice could surface a one-time alert. The PRD lists notifications as table-stakes, not as something the user can opt out of, so this is low priority.
+- If a future slice extends the phase model (e.g. long-break), the `PhaseNotifier`'s pattern match becomes more interesting. The current switch is intentionally exhaustive-by-case so adding a `Phase` case will surface as a compiler error in the catch-alls.

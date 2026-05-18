@@ -106,7 +106,7 @@ If hotkey registration fails (e.g. another app owns the combo), a one-time alert
 
 ### `phase-notifications` — Banner on phase transitions
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** When the poller observes a focus→break transition, a native banner says "Focus done — break started". On break→idle, "Break done". One banner per transition, no sound config, no settings.
 
