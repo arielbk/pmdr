@@ -73,7 +73,7 @@ export default function App({
   });
 
   const [viewState, setViewState] = useState<DerivedPhaseState>(() =>
-    derivePhaseState(initial.record, Date.now()),
+    derivePhaseState(initial.record, Date.now(), store),
   );
   const [showProjectPicker, setShowProjectPicker] = useState(
     !initial.isAttached,
@@ -95,7 +95,7 @@ export default function App({
         // ignore — read-only test stores can no-op
       }
       const record = store.readState();
-      setViewState(derivePhaseState(record, now));
+      setViewState(derivePhaseState(record, now, store));
       setCurrentProject(record?.project);
     }, 500);
     return () => clearInterval(interval);
@@ -120,7 +120,7 @@ export default function App({
           // swallow — pauseTimer/resumeTimer throw on idle/conflicting state
         }
         const after = store.readState();
-        setViewState(derivePhaseState(after, now));
+        setViewState(derivePhaseState(after, now, store));
         setCurrentProject(after?.project);
       } else if (input === "x") {
         try {
@@ -129,7 +129,7 @@ export default function App({
           // ignore — read-only stores or already-empty state
         }
         const after = store.readState();
-        setViewState(derivePhaseState(after, now));
+        setViewState(derivePhaseState(after, now, store));
         setCurrentProject(after?.project);
         setPickerProjects(getProjects());
         setShowProjectPicker(true);
@@ -143,26 +143,29 @@ export default function App({
     { isActive: !showProjectPicker && !showHelp },
   );
 
-  function handleProjectSelect(name: string) {
-    const record = upsertProjectFn(name);
+  function handleProjectSelect(name: string | null) {
     const now = Date.now();
     const file = store.readState();
+    const resolvedName = name === null ? undefined : upsertProjectFn(name).name;
     if (file) {
-      store.writeState({ ...file, project: record.name });
+      const { project: _drop, ...rest } = file;
+      store.writeState(
+        resolvedName ? { ...rest, project: resolvedName } : rest,
+      );
     } else {
       try {
         initTimer({
           store,
           durationMs: DEFAULT_DURATION_MS,
           now,
-          project: record.name,
+          project: resolvedName,
         });
       } catch {
         // ignore — read-only stores in tests
       }
     }
-    setViewState(derivePhaseState(store.readState(), now));
-    setCurrentProject(record.name);
+    setViewState(derivePhaseState(store.readState(), now, store));
+    setCurrentProject(resolvedName);
     setShowProjectPicker(false);
   }
 

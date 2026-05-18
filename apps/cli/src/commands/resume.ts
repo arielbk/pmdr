@@ -29,6 +29,14 @@ export function resumeTimer(opts: {
     pausedAt: null,
     accumulatedPauseMs: file!.accumulatedPauseMs + pauseDurationMs,
   });
+  if (file!.id) {
+    store.appendEvent({
+      type: "resume",
+      at: now,
+      id: file!.id,
+      ...(file!.project !== undefined ? { project: file!.project } : {}),
+    });
+  }
 }
 
 export default defineCommand({

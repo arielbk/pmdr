@@ -24,6 +24,14 @@ export function pauseTimer(opts: {
   }
 
   store.writeState({ ...file!, pausedAt: now });
+  if (file!.id) {
+    store.appendEvent({
+      type: "pause",
+      at: now,
+      id: file!.id,
+      ...(file!.project !== undefined ? { project: file!.project } : {}),
+    });
+  }
 }
 
 export default defineCommand({

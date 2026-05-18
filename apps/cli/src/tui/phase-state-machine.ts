@@ -1,4 +1,4 @@
-import type { StateRecord } from "../state.js";
+import type { StateRecord, createStateModule } from "../state.js";
 import { deriveState } from "../state.js";
 
 export type Phase = "focus" | "break";
@@ -10,15 +10,36 @@ export interface DerivedPhaseState {
   paused: boolean;
 }
 
+type StoreLike = Pick<ReturnType<typeof createStateModule>, "readToday">;
+
+function countTodayFocusBlocks(
+  store: StoreLike | undefined,
+  now: number,
+  fallback: number,
+): number {
+  if (!store) return fallback;
+  try {
+    const groups = store.readToday(now);
+    let total = 0;
+    for (const key of Object.keys(groups)) {
+      total += groups[key]!.length;
+    }
+    return total;
+  } catch {
+    return fallback;
+  }
+}
+
 export function derivePhaseState(
   record: StateRecord | null,
   now: number,
+  store?: StoreLike,
 ): DerivedPhaseState {
   if (!record) {
     return {
       phase: "focus",
       remainingMs: 25 * 60 * 1000,
-      completedFocusBlocks: 0,
+      completedFocusBlocks: countTodayFocusBlocks(store, now, 0),
       paused: false,
     };
   }
@@ -27,7 +48,11 @@ export function derivePhaseState(
   return {
     phase: record.phase ?? "focus",
     remainingMs: derived.remainingMs,
-    completedFocusBlocks: record.completedFocusBlocks ?? 0,
+    completedFocusBlocks: countTodayFocusBlocks(
+      store,
+      now,
+      record.completedFocusBlocks ?? 0,
+    ),
     paused: derived.kind === "paused",
   };
 }

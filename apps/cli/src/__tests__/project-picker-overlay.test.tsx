@@ -29,11 +29,18 @@ describe("ProjectPickerOverlay — list rendering", () => {
     expect(frame).toContain("beta");
   });
 
-  it("shows a 'new…' entry", () => {
+  it("shows a 'New' entry", () => {
     const { lastFrame } = render(
       <ProjectPickerOverlay projects={[]} onSelect={vi.fn()} onClose={vi.fn()} />,
     );
-    expect(lastFrame()).toContain("new…");
+    expect(lastFrame()).toContain("New");
+  });
+
+  it("shows a 'None' entry even when there are no projects", () => {
+    const { lastFrame } = render(
+      <ProjectPickerOverlay projects={[]} onSelect={vi.fn()} onClose={vi.fn()} />,
+    );
+    expect(lastFrame()).toContain("None");
   });
 
   it("shows the 'Applies from next block' hint", () => {
@@ -43,13 +50,12 @@ describe("ProjectPickerOverlay — list rendering", () => {
     expect(lastFrame()).toContain("Applies from next block");
   });
 
-  it("shows the first item highlighted initially", () => {
+  it("shows None highlighted initially (it's first)", () => {
     const { lastFrame } = render(
       <ProjectPickerOverlay projects={[alpha, beta]} onSelect={vi.fn()} onClose={vi.fn()} />,
     );
     const frame = lastFrame() ?? "";
-    expect(frame).toContain("> alpha");
-    expect(frame).not.toContain("> beta");
+    expect(frame).toContain("> None");
   });
 });
 
@@ -59,7 +65,10 @@ describe("ProjectPickerOverlay — navigation", () => {
       <ProjectPickerOverlay projects={[alpha, beta]} onSelect={vi.fn()} onClose={vi.fn()} />,
     );
 
-    stdin.write("\x1B[B"); // down arrow
+    // Entries: None, alpha, beta, New. From None, down → alpha, down → beta.
+    stdin.write("\x1B[B");
+    await flush();
+    stdin.write("\x1B[B");
     await flush();
 
     const frame = lastFrame() ?? "";
@@ -76,30 +85,33 @@ describe("ProjectPickerOverlay — navigation", () => {
     await flush();
 
     const frame = lastFrame() ?? "";
-    expect(frame).toContain("> alpha");
-    expect(frame).not.toContain("> beta");
+    expect(frame).toContain("> None");
   });
 });
 
 describe("ProjectPickerOverlay — selection", () => {
-  it("pressing enter calls onSelect with the highlighted project name", async () => {
+  it("pressing down then enter selects the first project", async () => {
     const onSelect = vi.fn();
     const { stdin } = render(
       <ProjectPickerOverlay projects={[alpha, beta]} onSelect={onSelect} onClose={vi.fn()} />,
     );
 
+    stdin.write("\x1B[B"); // past None to alpha
+    await flush();
     stdin.write("\r");
     await flush();
 
     expect(onSelect).toHaveBeenCalledWith("alpha");
   });
 
-  it("pressing down then enter selects the second item", async () => {
+  it("pressing down twice then enter selects the second project", async () => {
     const onSelect = vi.fn();
     const { stdin } = render(
       <ProjectPickerOverlay projects={[alpha, beta]} onSelect={onSelect} onClose={vi.fn()} />,
     );
 
+    stdin.write("\x1B[B");
+    await flush();
     stdin.write("\x1B[B");
     await flush();
     stdin.write("\r");
@@ -124,34 +136,51 @@ describe("ProjectPickerOverlay — selection", () => {
   });
 });
 
-describe("ProjectPickerOverlay — new project creation", () => {
-  it("selecting 'new…' shows the text input prompt", async () => {
-    const { lastFrame, stdin } = render(
-      <ProjectPickerOverlay projects={[]} onSelect={vi.fn()} onClose={vi.fn()} />,
-    );
-
-    // With no projects, first and only entry is "new…"
-    stdin.write("\r");
-    await flush();
-
-    expect(lastFrame()).toContain("New project:");
-  });
-
-  it("typing a name and pressing enter calls onSelect with the new name", async () => {
+describe("ProjectPickerOverlay — None selection", () => {
+  it("selecting None calls onSelect with null", async () => {
     const onSelect = vi.fn();
     const { stdin } = render(
       <ProjectPickerOverlay projects={[]} onSelect={onSelect} onClose={vi.fn()} />,
     );
 
-    stdin.write("\r"); // select "new…"
+    // With no projects, entries are None, New. First is None.
+    stdin.write("\r");
     await flush();
 
+    expect(onSelect).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("ProjectPickerOverlay — new project creation", () => {
+  it("typing while on New inlines characters into the entry label", async () => {
+    const { lastFrame, stdin } = render(
+      <ProjectPickerOverlay projects={[]} onSelect={vi.fn()} onClose={vi.fn()} />,
+    );
+
+    stdin.write("\x1B[B"); // down to New
+    await flush();
     stdin.write("m");
     await flush();
     stdin.write("y");
     await flush();
 
-    stdin.write("\r"); // confirm
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("New: my");
+  });
+
+  it("typing on New and pressing enter calls onSelect with the new name", async () => {
+    const onSelect = vi.fn();
+    const { stdin } = render(
+      <ProjectPickerOverlay projects={[]} onSelect={onSelect} onClose={vi.fn()} />,
+    );
+
+    stdin.write("\x1B[B"); // down to New
+    await flush();
+    stdin.write("m");
+    await flush();
+    stdin.write("y");
+    await flush();
+    stdin.write("\r");
     await flush();
 
     expect(onSelect).toHaveBeenCalledWith("my");
@@ -159,45 +188,60 @@ describe("ProjectPickerOverlay — new project creation", () => {
 
   it("backspace removes the last typed character", async () => {
     const onSelect = vi.fn();
-    const { lastFrame, stdin } = render(
+    const { stdin } = render(
       <ProjectPickerOverlay projects={[]} onSelect={onSelect} onClose={vi.fn()} />,
     );
 
-    stdin.write("\r"); // select "new…"
+    stdin.write("\x1B[B"); // down to New
     await flush();
-
     stdin.write("m");
     await flush();
     stdin.write("y");
     await flush();
-    stdin.write("\x7f"); // backspace (DEL)
+    stdin.write("\x7f"); // backspace
     await flush();
-
-    stdin.write("\r"); // confirm "m" only
+    stdin.write("\r");
     await flush();
 
     expect(onSelect).toHaveBeenCalledWith("m");
   });
 
-  it("pressing escape in text input mode returns to the list", async () => {
+  it("navigating away from New resets the typed buffer", async () => {
+    const onSelect = vi.fn();
+    const { stdin } = render(
+      <ProjectPickerOverlay projects={[]} onSelect={onSelect} onClose={vi.fn()} />,
+    );
+
+    stdin.write("\x1B[B"); // down to New
+    await flush();
+    stdin.write("m");
+    await flush();
+    stdin.write("y");
+    await flush();
+
+    stdin.write("\x1B[A"); // back to None
+    await flush();
+    stdin.write("\x1B[B"); // back to New
+    await flush();
+    stdin.write("\r"); // enter with empty buffer — should not select
+    await flush();
+
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("pressing escape from the New entry closes the overlay", async () => {
     const onClose = vi.fn();
-    const { lastFrame, stdin } = render(
+    const { stdin } = render(
       <ProjectPickerOverlay projects={[]} onSelect={vi.fn()} onClose={onClose} />,
     );
 
-    stdin.write("\r"); // select "new…"
+    stdin.write("\x1B[B"); // down to New
     await flush();
-
-    expect(lastFrame()).toContain("New project:");
-
     stdin.write("\x1B"); // escape
-    vi.runAllTimers(); // advance Ink's escape-detection timeout
+    vi.runAllTimers();
     await flush();
 
-    // Should be back in the list (no "New project:" prompt)
-    expect(lastFrame()).not.toContain("New project:");
-    // onClose should NOT have been called yet
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 });
 
@@ -221,6 +265,8 @@ describe("App — project picker integration", () => {
     stdin.write("p");
     await flush();
 
+    stdin.write("\x1B[B"); // past None to alpha
+    await flush();
     stdin.write("\r"); // select alpha
     await flush();
 

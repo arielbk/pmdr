@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseDuration } from "../parse-duration.js";
-import { initTimer } from "../commands/start.js";
+import { initTimer, resolveStartProject } from "../commands/start.js";
 import { createStateModule } from "../state.js";
 
 // ─── parseDuration ────────────────────────────────────────────────────────────
@@ -46,7 +46,13 @@ describe("initTimer", () => {
   });
 
   it("writes state when idle", () => {
-    initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" });
+    initTimer({
+      store,
+      durationMs: 10_000,
+      now: NOW,
+      project: "test-proj",
+      id: "fixed-id-1",
+    });
     expect(store.readState()).toEqual({
       startedAt: NOW,
       durationMs: 10_000,
@@ -55,6 +61,21 @@ describe("initTimer", () => {
       project: "test-proj",
       phase: "focus",
       completedFocusBlocks: 0,
+      id: "fixed-id-1",
+    });
+  });
+
+  it("defaults to (unassigned) when no project is provided", () => {
+    initTimer({ store, durationMs: 10_000, now: NOW, id: "fixed-id-2" });
+    expect(store.readState()).toEqual({
+      startedAt: NOW,
+      durationMs: 10_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      project: "(unassigned)",
+      phase: "focus",
+      completedFocusBlocks: 0,
+      id: "fixed-id-2",
     });
   });
 
@@ -109,5 +130,29 @@ describe("initTimer", () => {
     expect(() =>
       initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" }),
     ).toThrow(/already running/i);
+  });
+});
+
+describe("resolveStartProject", () => {
+  it("returns (unassigned) without touching projects when no project is provided", () => {
+    const projects = {
+      upsertProject: () => {
+        throw new Error("upsertProject should not be called");
+      },
+    };
+
+    expect(resolveStartProject(undefined, projects)).toBe("(unassigned)");
+  });
+
+  it("canonicalizes an explicit project through the project store", () => {
+    const projects = {
+      upsertProject: (name: string) => ({
+        name: name.toUpperCase(),
+        archived: false,
+        createdAt: "2024-01-15T12:00:00.000Z",
+      }),
+    };
+
+    expect(resolveStartProject("pmdr", projects)).toBe("PMDR");
   });
 });

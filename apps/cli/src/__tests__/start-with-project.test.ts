@@ -49,6 +49,18 @@ describe("start-with-project", () => {
     expect(entry.durationMs).toBe(1_000);
   });
 
+  it("completion uses a project changed after start", () => {
+    initTimer({ store, durationMs: 1_000, now: NOW });
+    const active = store.readState()!;
+    store.writeState({ ...active, project: "picked-later" });
+
+    store.finalizeIfExpired(NOW + 2_000);
+
+    const raw = readFileSync(join(tmpDir, "completions.jsonl"), "utf8");
+    const entry = JSON.parse(raw.trim());
+    expect(entry.project).toBe("picked-later");
+  });
+
   it("state file without project falls back to (unassigned) on finalize", () => {
     // Simulate legacy state (no project field)
     store.writeState({
