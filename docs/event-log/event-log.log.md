@@ -25,3 +25,24 @@
 - `pnpm --filter cli test` — unrelated existing ANSI color expectation failures in Ink rendering tests; the slice-local tests pass.
 
 **Notes:** The older `pickProject` helper remains for existing tests/possible future use, but `start` no longer calls it for missing `--project`.
+
+---
+
+## pomodoro-id — 2026-05-18
+
+**Slice:** `pomodoro-id` — Per-timer uuid
+
+**Status:** done
+
+**What was implemented:**
+- `StateRecord` and `CompletionRecord` gained an optional `id` field.
+- `initTimer` now generates a `randomUUID()` at start (overrideable via an `id` option used by tests).
+- `advancePhaseIfExpired` and `finalizeIfExpired` propagate the id onto the appended `completions.jsonl` row, and `advancePhaseIfExpired` carries the id through the focus→break state transition so the whole timer keeps one identity.
+
+**Tests:**
+- New `pomodoro-id.test.ts` covers: uuid shape at start, fresh ids per timer, completion row's id matches state's id, phase transition preserves id, and legacy state without id does not throw on read.
+- Updated `start.test.ts` to pass an explicit `id` where the strict `toEqual` shape assertions live.
+
+**Feedback loop result:**
+- `pnpm --filter cli test` — 248/248 pass.
+- `pnpm --filter cli check-types` — clean.

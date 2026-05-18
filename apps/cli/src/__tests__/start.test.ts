@@ -46,7 +46,13 @@ describe("initTimer", () => {
   });
 
   it("writes state when idle", () => {
-    initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" });
+    initTimer({
+      store,
+      durationMs: 10_000,
+      now: NOW,
+      project: "test-proj",
+      id: "fixed-id-1",
+    });
     expect(store.readState()).toEqual({
       startedAt: NOW,
       durationMs: 10_000,
@@ -55,11 +61,12 @@ describe("initTimer", () => {
       project: "test-proj",
       phase: "focus",
       completedFocusBlocks: 0,
+      id: "fixed-id-1",
     });
   });
 
   it("defaults to (unassigned) when no project is provided", () => {
-    initTimer({ store, durationMs: 10_000, now: NOW });
+    initTimer({ store, durationMs: 10_000, now: NOW, id: "fixed-id-2" });
     expect(store.readState()).toEqual({
       startedAt: NOW,
       durationMs: 10_000,
@@ -68,6 +75,7 @@ describe("initTimer", () => {
       project: "(unassigned)",
       phase: "focus",
       completedFocusBlocks: 0,
+      id: "fixed-id-2",
     });
   });
 

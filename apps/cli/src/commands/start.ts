@@ -1,6 +1,7 @@
 import { defineCommand } from "citty";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { parseDuration } from "../parse-duration.js";
 import { createStateModule, deriveState } from "../state.js";
 import { createProjectsModule } from "../projects.js";
@@ -15,6 +16,7 @@ export function initTimer(options: {
   durationMs: number;
   now: number;
   project?: string;
+  id?: string;
 }): void {
   const { store, durationMs, now } = options;
   const project = options.project ?? UNASSIGNED_PROJECT;
@@ -39,6 +41,7 @@ export function initTimer(options: {
     project,
     phase: "focus",
     completedFocusBlocks: 0,
+    id: options.id ?? randomUUID(),
   });
 }
 

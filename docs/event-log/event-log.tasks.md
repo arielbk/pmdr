@@ -20,7 +20,7 @@ Adds an append-only `events.jsonl` capturing start/stop/pause/resume with per-ti
 
 ### `pomodoro-id` — Per-timer uuid
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `state.json` and every row in `completions.jsonl` carry a stable `id` (uuid v4) generated at `pmdr start`. The id survives pause/resume and phase transitions, and the completion row's id matches the `start` event's id.
 

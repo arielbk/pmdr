@@ -18,6 +18,7 @@ export interface StateRecord {
   project?: string;
   phase?: "focus" | "break";
   completedFocusBlocks?: number;
+  id?: string;
 }
 
 const DEFAULT_SHORT_BREAK_MS = 5 * 60 * 1000;
@@ -43,12 +44,14 @@ export interface CompletionRecord {
   completedAt: number;
   durationMs: number;
   project?: string;
+  id?: string;
 }
 
 export type CompletionWrite = {
   completedAt: number;
   durationMs: number;
   project: string;
+  id?: string;
 };
 
 export function deriveState({
@@ -132,7 +135,12 @@ export function createStateModule(stateDir: string) {
 
     const completedAt =
       file.startedAt + file.durationMs + file.accumulatedPauseMs;
-    appendCompletion({ completedAt, durationMs: file.durationMs, project: file.project ?? "(unassigned)" });
+    appendCompletion({
+      completedAt,
+      durationMs: file.durationMs,
+      project: file.project ?? "(unassigned)",
+      ...(file.id ? { id: file.id } : {}),
+    });
     clearState();
   }
 
@@ -154,6 +162,7 @@ export function createStateModule(stateDir: string) {
           completedAt,
           durationMs: file.durationMs,
           project: file.project ?? "(unassigned)",
+          ...(file.id ? { id: file.id } : {}),
         });
         const newCompletedFocusBlocks = completedFocusBlocks + 1;
         writeState({
@@ -164,6 +173,7 @@ export function createStateModule(stateDir: string) {
           project: file.project,
           phase: "break",
           completedFocusBlocks: newCompletedFocusBlocks,
+          ...(file.id ? { id: file.id } : {}),
         });
         // loop to check if the break also expired
       } else {
