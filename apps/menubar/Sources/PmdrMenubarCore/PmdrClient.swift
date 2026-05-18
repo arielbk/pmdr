@@ -18,20 +18,35 @@ public enum Status: Equatable, Sendable {
         public let startedAt: Int
         public let phase: Phase
         public let completedFocusBlocks: Int
+        public let project: String?
 
         public init(
             remainingMs: Int,
             durationMs: Int,
             startedAt: Int,
             phase: Phase,
-            completedFocusBlocks: Int
+            completedFocusBlocks: Int,
+            project: String? = nil
         ) {
             self.remainingMs = remainingMs
             self.durationMs = durationMs
             self.startedAt = startedAt
             self.phase = phase
             self.completedFocusBlocks = completedFocusBlocks
+            self.project = project
         }
+    }
+}
+
+public struct ProjectRecord: Equatable, Sendable {
+    public let name: String
+    public let archived: Bool
+    public let createdAt: String
+
+    public init(name: String, archived: Bool, createdAt: String) {
+        self.name = name
+        self.archived = archived
+        self.createdAt = createdAt
     }
 }
 
@@ -70,6 +85,27 @@ public struct PmdrClient: Sendable {
         return try Self.decodeStatus(from: data)
     }
 
+    public func start(project: String) async throws {
+        _ = try await run(arguments: ["start", "--force", "--detach", "--project", project])
+    }
+
+    public func pause() async throws {
+        _ = try await run(arguments: ["pause"])
+    }
+
+    public func resume() async throws {
+        _ = try await run(arguments: ["resume"])
+    }
+
+    public func stop() async throws {
+        _ = try await run(arguments: ["stop"])
+    }
+
+    public func listProjects() async throws -> [ProjectRecord] {
+        let data = try await run(arguments: ["project", "list", "--json"])
+        return try Self.decodeProjects(from: data)
+    }
+
     // MARK: - Decoding
 
     private struct RawStatus: Decodable {
@@ -79,6 +115,17 @@ public struct PmdrClient: Sendable {
         let startedAt: Int?
         let phase: Phase?
         let completedFocusBlocks: Int?
+        let project: String?
+    }
+
+    private struct RawProjects: Decodable {
+        let projects: [RawProject]
+    }
+
+    private struct RawProject: Decodable {
+        let name: String
+        let archived: Bool
+        let createdAt: String
     }
 
     static func decodeStatus(from data: Data) throws -> Status {
@@ -108,11 +155,23 @@ public struct PmdrClient: Sendable {
                 durationMs: duration,
                 startedAt: startedAt,
                 phase: phase,
-                completedFocusBlocks: blocks
+                completedFocusBlocks: blocks,
+                project: raw.project
             )
             return raw.state == "running" ? .running(active) : .paused(active)
         default:
             throw PmdrClientError.decodingFailed("unknown state: \(raw.state)")
+        }
+    }
+
+    static func decodeProjects(from data: Data) throws -> [ProjectRecord] {
+        do {
+            let raw = try JSONDecoder().decode(RawProjects.self, from: data)
+            return raw.projects.map {
+                ProjectRecord(name: $0.name, archived: $0.archived, createdAt: $0.createdAt)
+            }
+        } catch {
+            throw PmdrClientError.decodingFailed("invalid projects JSON: \(error)")
         }
     }
 

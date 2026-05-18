@@ -1,5 +1,5 @@
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 /// Presents a native banner. Abstracted so tests can substitute a recording stub
 /// for `UserNotificationsPresenter` without involving the real notification center.

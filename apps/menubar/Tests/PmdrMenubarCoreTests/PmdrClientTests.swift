@@ -35,6 +35,27 @@ final class PmdrClientDecodingTests: XCTestCase {
         XCTAssertEqual(try PmdrClient.decodeStatus(from: json), expected)
     }
 
+    func test_decodes_project_when_present() throws {
+        let json = Data(#"""
+        {"state":"running","remainingMs":1500000,"duration":1500000,"startedAt":1700000000000,"phase":"focus","completedFocusBlocks":0,"project":"deepwork"}
+        """#.utf8)
+        let status = try PmdrClient.decodeStatus(from: json)
+        guard case .running(let active) = status else {
+            return XCTFail("expected running, got \(status)")
+        }
+        XCTAssertEqual(active.project, "deepwork")
+    }
+
+    func test_decodes_project_list() throws {
+        let json = Data(#"""
+        {"projects":[{"name":"alpha","archived":false,"createdAt":"2026-05-18T10:00:00.000Z"},{"name":"old","archived":true,"createdAt":"2026-05-17T10:00:00.000Z"}]}
+        """#.utf8)
+        XCTAssertEqual(try PmdrClient.decodeProjects(from: json), [
+            ProjectRecord(name: "alpha", archived: false, createdAt: "2026-05-18T10:00:00.000Z"),
+            ProjectRecord(name: "old", archived: true, createdAt: "2026-05-17T10:00:00.000Z"),
+        ])
+    }
+
     func test_throws_decoding_failed_on_unknown_state() {
         let json = Data(#"{"state":"wat"}"#.utf8)
         XCTAssertThrowsError(try PmdrClient.decodeStatus(from: json)) { error in

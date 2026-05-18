@@ -50,7 +50,7 @@ A native Swift macOS menubar app that surfaces pmdr's timer in the system tray, 
 
 ### `menu-actions` — State-dependent menu with Pause / Resume / Stop / Start (last project)
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** Clicking the tray opens a menu whose items depend on current state:
 - Idle → "Start (last project)" (disabled if no last-used project), Quit.
@@ -71,7 +71,7 @@ Last-used project is read from the most recent line of `~/.local/state/pmdr/comp
 
 ### `project-picker` — Submenu of projects + "New project…"
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** The Idle-state menu's "Start" item becomes a submenu listing active (non-archived) projects with a "New project…" entry at the bottom. Clicking a project starts a focus block on it. "New project…" opens an `NSAlert` with a text field; submitting starts a focus block on that project (creating it via `pmdr start --force --project <name>`, which upserts).
 
@@ -85,7 +85,7 @@ Last-used project is read from the most recent line of `~/.local/state/pmdr/comp
 
 ### `hotkey-toggle` — Global ⌃⌥⌘P state-dependent toggle
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** Pressing ⌃⌥⌘P anywhere on the system:
 - If idle → starts a focus block on the last-used project. If no last-used project exists, opens the tray menu instead of starting silently.

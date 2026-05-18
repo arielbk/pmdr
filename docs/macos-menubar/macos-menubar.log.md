@@ -378,6 +378,41 @@ None of those exist in this Linux sandbox. The unit-tested half of the work (pol
 2. `xcodebuild test -scheme pmdr-menubar -destination 'platform=macOS' -derivedDataPath .derivedData` — expect previous 38 tests + 6 new `StatusPollerTests` + 7 new `PhaseNotifierTests` = **51 tests** green (plus 3 integration tests skipped without `PMDR_INTEGRATION=1`).
 3. Build & run `pmdr.app`. The first launch should pop a system prompt asking to allow Notifications for "pmdr"; grant it.
 4. In a terminal: `pmdr start --force --project test --duration 10s` (with break duration also short — check whatever `pmdr config` exposes, or set via env). Wait ≤10s — expect a single banner "Focus done / Break started". Wait for the break to expire — expect a single banner "Break done". Confirm no duplicates as the poller continues to tick.
+
+## 2026-05-18 — menu actions, project picker, and hotkey (needs-review)
+
+**Goal:** Finish the remaining app-side macOS menubar surface: state-dependent menu actions, idle project picker, new-project prompt, global Ctrl+Option+Command+P toggle, and a non-blocking CLI start path suitable for menubar use.
+
+**What I did**
+- Extended the Swift `PmdrClient`:
+  - Active status now decodes optional `project` from `pmdr status --json`.
+  - Added `ProjectRecord` decoding for `pmdr project list --json`.
+  - Added `start(project:)`, `pause()`, `resume()`, `stop()`, and `listProjects()` mutation/read methods.
+- Reworked `AppDelegate` from a static Quit menu to live menu construction:
+  - Idle shows a `Start` submenu with active projects plus `New project...`.
+  - Running shows `Pause`, `Stop`, and a disabled current-project label.
+  - Paused shows `Resume`, `Stop`, and a disabled current-project label.
+  - Menu open refreshes status and projects from the CLI; all actions refresh the poller afterward.
+  - Missing `pmdr` and hotkey-registration conflicts now surface one-time alerts.
+- Added `HotkeyManager.swift` using Carbon `RegisterEventHotKey` for Ctrl+Option+Command+P.
+  - Idle starts the most recent completion's project from `~/.local/state/pmdr/completions.jsonl`.
+  - If there is no last-used project, the hotkey opens the tray menu instead of starting silently.
+  - Running pauses; paused resumes.
+- Added a CLI `start --detach` mode so app-triggered starts write state and exit immediately instead of blocking inside the terminal countdown renderer.
+  - Kept/implemented `--force` for the PRD-documented `start --force --project` flow.
+  - Menubar starts now call `pmdr start --force --detach --project <name>`.
+- Updated README layout with `HotkeyManager.swift`.
+
+**Verification**
+- `xcodegen generate`: succeeded.
+- `xcodebuild -scheme pmdr-menubar -configuration Debug -derivedDataPath .derivedData build`: **BUILD SUCCEEDED**.
+- `xcodebuild -scheme pmdr-menubar -destination 'platform=macOS' -derivedDataPath .derivedData build-for-testing` + `xcrun xctest .derivedData/Build/Products/Debug/pmdr-menubarTests.xctest`: **53 tests executed, 3 integration tests skipped, 0 failures**.
+- `pnpm --filter cli exec vitest run src/__tests__/start-with-project.test.ts src/__tests__/status.test.ts`: **26 tests passed**.
+- Full `pnpm --filter cli test` still fails on the existing ANSI color assertions in `countdown-view`, `launch-attach-or-fresh`, and `timer-keybindings`; the new detached-start and status JSON tests pass inside that run.
+
+**Status**
+- `menu-actions`, `project-picker`, and `hotkey-toggle` are **needs-review** because their real feedback loops are app/manual flows: click the menu against a live TUI, create a new project via `NSAlert`, and press the global hotkey from another app.
+- `phase-notifications` remains **needs-review** pending a real notification-permission/manual expiry pass.
 5. Edge case: run a focus block and `pmdr stop` mid-way — confirm no "Focus done" banner fires (it's a manual abort, not a phase end).
 
 **Slice scope check**

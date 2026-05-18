@@ -37,6 +37,7 @@ apps/menubar/
 ├── Sources/
 │   ├── main.swift               # app entry point, installs AppDelegate
 │   ├── AppDelegate.swift        # NSStatusItem + menu, drives the poller + tick timer
+│   ├── HotkeyManager.swift      # global Ctrl+Option+Command+P registration
 │   └── PmdrMenubarCore/         # framework consumed by the app + tests
 │       ├── LoginShellEnvironment.swift # resolves user login-shell PATH for CLI subprocesses
 │       ├── PhaseNotifier.swift  # maps poller events to native banners (focus end, break end)
