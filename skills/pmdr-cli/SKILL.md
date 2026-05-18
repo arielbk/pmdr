@@ -18,7 +18,7 @@ A pomodoro timer CLI. Binary is `pmdr` (installed globally via pnpm). State live
 
 | Command | Purpose | Non-interactive form |
 |---|---|---|
-| `start` | Begin a pomodoro | `pmdr start --project NAME --duration 25m --no-interactive` |
+| `start` | Begin a pomodoro | `pmdr start --project NAME --duration 25m --no-interactive [--force] [--detach]` |
 | `pause` | Pause running timer | `pmdr pause` |
 | `resume` | Resume paused timer | `pmdr resume` |
 | `stop` | Stop & discard timer | `pmdr stop` |
@@ -32,12 +32,19 @@ A pomodoro timer CLI. Binary is `pmdr` (installed globally via pnpm). State live
 
 `--duration` accepts `25m`, `90s`, `1500ms`, etc. Default is 25m.
 
+`start` flags worth knowing:
+- `--force` — discard any running/paused timer before starting. Saves a separate `pmdr stop`.
+- `--detach` — initialize the timer and exit immediately; skips the countdown render. Prefer this over `&` backgrounding when you just want the timer running.
+
 ## Important gotchas
 
 - **`pmdr start` blocks**: after initializing the timer, the foreground process runs a countdown loop that only resolves when the timer completes, is stopped externally, or the state file is cleared. From an agent, run it with `run_in_background: true` (Bash) — or call only the state-setup logic by invoking `start` then immediately backgrounding. Don't `await` it in a foreground tool call.
 - **Only one timer at a time**: `start` errors if running or paused. Check `pmdr status --json` first; call `pmdr stop` if you need to reset.
 - **Reserved name**: `"(unassigned)"` cannot be used as a project name.
-- **State file location**: `~/.local/state/pmdr/state.json` (current timer) and `~/.local/state/pmdr/completions.json` (history). Safe to read; don't write directly — use the CLI.
+- **State files** under `~/.local/state/pmdr/` (safe to read; don't write — use the CLI):
+  - `state.json` — current timer record (per-timer `id` uuid).
+  - `completions.jsonl` — finished focus blocks, one JSON per line. Each row carries the timer's `id`.
+  - `events.jsonl` — append-only `start`/`pause`/`resume`/`stop` log. Only relevant for daily-review / interruption analysis — see [EVENT-LOG.md](EVENT-LOG.md).
 
 ## JSON shapes
 
@@ -49,7 +56,8 @@ A pomodoro timer CLI. Binary is `pmdr` (installed globally via pnpm). State live
 // pmdr today --json
 {
   "groups": [
-    { "project": "Work", "pomodoros": 2, "totalMs": 3000000, "entries": [{ "completedAt": 1700000000000, "durationMs": 1500000, "project": "Work" }] }
+    { "project": "Work", "pomodoros": 2, "totalMs": 3000000,
+      "entries": [{ "completedAt": 1700000000000, "durationMs": 1500000, "project": "Work", "id": "uuid…" }] }
   ],
   "total": { "pomodoros": 2, "totalMs": 3000000 }
 }
@@ -57,6 +65,8 @@ A pomodoro timer CLI. Binary is `pmdr` (installed globally via pnpm). State live
 // pmdr project list --json
 { "projects": [{ "name": "Work", "archived": false }] }
 ```
+
+For the `events.jsonl` shape and how to read interruption signals, see [EVENT-LOG.md](EVENT-LOG.md).
 
 ## Typical agent flow
 
@@ -74,25 +84,10 @@ pmdr start --project "Deep Work" --duration 25m --no-interactive &
 pmdr today --json
 ```
 
-## Backdating ("I started N minutes ago")
+## Further reading
 
-When the user says they started a pomodoro **N minutes ago** but never ran `pmdr start`, you can land the completion at the correct wall-clock time by shortening the duration:
-
-```sh
-pmdr start --project "<name>" --duration $((25 - N))m --no-interactive
-```
-
-Formula: `--duration = default_focus_minutes − N`. The default focus length is **25 minutes**, so:
-
-- "I started 5 minutes ago" → `--duration 20m`
-- "I started 10 minutes ago" → `--duration 15m`
-
-Rules:
-- **Never exceed the default focus length** (do not pass `--duration 25m` or longer when backdating — that's a fresh timer, not a backdate).
-- If `N ≥ 25`, the block has already conceptually ended. Don't backdate — log the time manually or treat the request as a fresh start.
-- If `N` is missing or ambiguous, ask the user to confirm before starting.
-
-This rule lives in the skill, not the CLI: the CLI does not know about backdating, it only knows the requested `--duration`.
+- [EVENT-LOG.md](EVENT-LOG.md) — read when summarising a day's flow / interruptions / abandoned timers.
+- [BACKDATING.md](BACKDATING.md) — read when the user says "I started N minutes ago" and never ran `pmdr start`.
 
 ## Source
 
