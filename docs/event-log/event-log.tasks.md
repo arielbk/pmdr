@@ -62,7 +62,7 @@ Adds an append-only `events.jsonl` capturing start/stop/pause/resume with per-ti
 
 ### `skill-backdating-doc` — pmdr-cli skill documents backdating
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** `skills/pmdr-cli/SKILL.md` contains a short section telling agents: when the user says "I started N minutes ago," run `pmdr start --duration (default − N)m` so the completion lands at the right wall-clock time, and do not exceed the default focus length.
 

@@ -86,3 +86,17 @@
 **Feedback loop result:**
 - `pnpm --filter cli test` — 257/257 pass.
 - `pnpm --filter cli check-types` — clean.
+
+---
+
+## skill-backdating-doc — 2026-05-18
+
+**Slice:** `skill-backdating-doc` — pmdr-cli skill documents backdating
+
+**Status:** needs-review (human checkpoint required per slice spec)
+
+**What was implemented:**
+- Added a "Backdating" section to `skills/pmdr-cli/SKILL.md` documenting the `--duration = default − N` formula for "I started N minutes ago" requests, including the cap at the default focus length (25m), worked examples for N=5 and N=10, and the rules for N≥25 or ambiguous N.
+
+**Tests:**
+- Human review only — the slice's feedback loop is "the rule and the formula are unambiguous to an agent reading the skill cold." Flagged for review in QA plan.
