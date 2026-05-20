@@ -85,8 +85,22 @@ public struct PmdrClient: Sendable {
         return try Self.decodeStatus(from: data)
     }
 
-    public func start(project: String) async throws {
-        _ = try await run(arguments: ["start", "--force", "--detach", "--project", project])
+    public func start(project: String? = nil) async throws {
+        var args = ["start", "--force", "--detach"]
+        if let project {
+            args.append(contentsOf: ["--project", project])
+        }
+        _ = try await run(arguments: args)
+    }
+
+    public func setProject(_ name: String?) async throws {
+        var args = ["project", "set"]
+        if let name {
+            args.append(name)
+        } else {
+            args.append("--none")
+        }
+        _ = try await run(arguments: args)
     }
 
     public func pause() async throws {

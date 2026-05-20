@@ -12,17 +12,20 @@ Lives outside the Turbo pipeline — separate Xcode toolchain.
 
 ## Run
 
+From the repo root:
+
+```sh
+pnpm menubar
+```
+
+Regenerates the Xcode project, builds Debug, and launches `pmdr.app` directly — no Xcode needed.
+
+To work in Xcode instead:
+
 ```sh
 cd apps/menubar
 xcodegen generate
 open pmdr-menubar.xcodeproj
-```
-
-Hit Run in Xcode. Or build & launch headless:
-
-```sh
-xcodebuild -scheme pmdr-menubar -configuration Debug build
-open "$(xcodebuild -scheme pmdr-menubar -configuration Debug -showBuildSettings | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{print $2}')/pmdr.app"
 ```
 
 The app is configured with `LSUIElement = true`, so it appears only in the menubar — no Dock icon, no main window. Click the `pmdr` item in the menubar and choose **Quit** (⌘Q) to terminate.

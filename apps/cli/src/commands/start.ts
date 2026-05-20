@@ -185,11 +185,6 @@ export default defineCommand({
       type: "string",
       description: "Project to attribute this pomodoro to",
     },
-    "no-interactive": {
-      type: "boolean",
-      description: "Force non-interactive mode (error if no --project)",
-      default: false,
-    },
     force: {
       type: "boolean",
       description: "Replace any active timer before starting",
@@ -213,12 +208,6 @@ export default defineCommand({
     }
 
     const projectArg = args.project as string | undefined;
-    const noInteractive = args["no-interactive"] as boolean;
-
-    if (!projectArg && (!process.stdout.isTTY || noInteractive)) {
-      console.error("no --project specified and stdout is not a TTY");
-      process.exit(1);
-    }
 
     const project = resolveStartProject(
       projectArg,

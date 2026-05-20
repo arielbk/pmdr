@@ -74,6 +74,52 @@ export function archiveProjectLogic(
   return { ...existing, archived: true };
 }
 
+export interface SetProjectArgs {
+  name?: string;
+  none?: boolean;
+}
+
+export interface SetProjectResult {
+  name: string;
+}
+
+export function setProjectLogic(
+  projectsStore: ReturnType<typeof createProjectsModule>,
+  stateStore: ReturnType<typeof createStateModule>,
+  args: SetProjectArgs,
+): SetProjectResult {
+  const hasName = typeof args.name === "string" && args.name.trim().length > 0;
+  const hasNone = args.none === true;
+
+  if (hasName && hasNone) {
+    throw new Error("--none and a project name are mutually exclusive");
+  }
+  if (!hasName && !hasNone) {
+    throw new Error("Provide a project name or --none");
+  }
+
+  const file = stateStore.readState();
+  if (!file) {
+    throw new Error("No timer is running");
+  }
+
+  if (hasNone) {
+    stateStore.writeState({ ...file, project: "(unassigned)" });
+    return { name: "(unassigned)" };
+  }
+
+  const trimmed = args.name!.trim();
+  if (trimmed.toLowerCase() === "(unassigned)") {
+    throw new Error(
+      '"(unassigned)" is a reserved sentinel and cannot be used as a project name',
+    );
+  }
+
+  const record = projectsStore.upsertProject(trimmed);
+  stateStore.writeState({ ...file, project: record.name });
+  return { name: record.name };
+}
+
 export function unarchiveProjectLogic(
   store: ReturnType<typeof createProjectsModule>,
   name: string,
@@ -199,6 +245,36 @@ const unarchiveCmd = defineCommand({
   },
 });
 
+const setCmd = defineCommand({
+  meta: { description: "Reassign the currently running session to a project" },
+  args: {
+    name: {
+      type: "positional",
+      required: false,
+      description: "Project name (auto-creates if unknown)",
+    },
+    none: {
+      type: "boolean",
+      description: "Clear the project to (unassigned)",
+    },
+  },
+  run({ args }) {
+    const projectsStore = createProjectsModule(STATE_DIR);
+    const stateStore = createStateModule(STATE_DIR);
+    let result: SetProjectResult;
+    try {
+      result = setProjectLogic(projectsStore, stateStore, {
+        name: args.name as string | undefined,
+        none: args.none as boolean | undefined,
+      });
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    console.log(`Session reassigned to "${result.name}"`);
+  },
+});
+
 // ─── project command ──────────────────────────────────────────────────────────
 
 export default defineCommand({
@@ -209,5 +285,6 @@ export default defineCommand({
     rename: renameCmd,
     archive: archiveCmd,
     unarchive: unarchiveCmd,
+    set: setCmd,
   },
 });

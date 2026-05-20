@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      ccusage:
+        specifier: 18.0.11
+        version: 18.0.11
       cli:
         specifier: workspace:*
         version: link:apps/cli
@@ -1186,6 +1189,11 @@ packages:
 
   caniuse-lite@1.0.30001761:
     resolution: {integrity: sha512-JF9ptu1vP2coz98+5051jZ4PwQgd2ni8A+gYSN7EA7dPKIMf0pDlSUxhdmVOaV3/fYK5uWBkgSXJaRLr4+3A6g==}
+
+  ccusage@18.0.11:
+    resolution: {integrity: sha512-QIFCY2gh06vjWelND1gDwJxrniAcNkPw0OHUhz985iE7FIEf738YVzxUKQMKhA2fO9CIJCz0dSpnyIufaKdjdA==}
+    engines: {node: '>=20.19.4'}
+    hasBin: true
 
   cfonts@3.3.1:
     resolution: {integrity: sha512-ZGEmN3W9mViWEDjsuPo4nK4h39sfh6YtoneFYp9WLPI/rw8BaSSrfQC6jkrGW3JMvV3ZnExJB/AEqXc/nHYxkw==}
@@ -3305,6 +3313,8 @@ snapshots:
   callsites@3.1.0: {}
 
   caniuse-lite@1.0.30001761: {}
+
+  ccusage@18.0.11: {}
 
   cfonts@3.3.1:
     dependencies:

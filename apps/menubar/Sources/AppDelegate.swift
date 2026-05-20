@@ -124,45 +124,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch lastStatus {
         case .idle:
             let startItem = NSMenuItem(title: "Start", action: nil, keyEquivalent: "")
-            let submenu = NSMenu()
-            if projects.isEmpty {
-                let empty = NSMenuItem(title: "No projects", action: nil, keyEquivalent: "")
-                empty.isEnabled = false
-                submenu.addItem(empty)
-            } else {
-                for project in projects {
-                    let item = NSMenuItem(
-                        title: project.name,
-                        action: #selector(startProjectFromMenu(_:)),
-                        keyEquivalent: ""
-                    )
-                    item.target = self
-                    item.representedObject = project.name
-                    submenu.addItem(item)
-                }
-            }
-            submenu.addItem(.separator())
-            let newProject = NSMenuItem(
-                title: "New project...",
-                action: #selector(newProjectFromMenu(_:)),
-                keyEquivalent: ""
+            startItem.submenu = projectPickerSubmenu(
+                current: nil,
+                projectAction: #selector(startProjectFromMenu(_:)),
+                noneAction: #selector(startNoneFromMenu(_:)),
+                newProjectAction: #selector(newProjectFromMenu(_:))
             )
-            newProject.target = self
-            submenu.addItem(newProject)
-            startItem.submenu = submenu
             menu.addItem(startItem)
 
         case .running(let active):
             menu.addItem(actionItem("Pause", #selector(pauseFromMenu(_:))))
             menu.addItem(actionItem("Stop", #selector(stopFromMenu(_:))))
             menu.addItem(.separator())
-            menu.addItem(projectLabelItem(active.project))
+            menu.addItem(changeProjectItem(current: active.project))
 
         case .paused(let active):
             menu.addItem(actionItem("Resume", #selector(resumeFromMenu(_:))))
             menu.addItem(actionItem("Stop", #selector(stopFromMenu(_:))))
             menu.addItem(.separator())
-            menu.addItem(projectLabelItem(active.project))
+            menu.addItem(changeProjectItem(current: active.project))
         }
 
         menu.addItem(.separator())
@@ -180,10 +160,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
-    private func projectLabelItem(_ project: String?) -> NSMenuItem {
-        let item = NSMenuItem(title: "Project: \(project ?? "None")", action: nil, keyEquivalent: "")
-        item.isEnabled = false
+    private func changeProjectItem(current: String?) -> NSMenuItem {
+        let item = NSMenuItem(title: "Change project", action: nil, keyEquivalent: "")
+        item.submenu = projectPickerSubmenu(
+            current: current,
+            projectAction: #selector(setProjectFromMenu(_:)),
+            noneAction: #selector(setNoneFromMenu(_:)),
+            newProjectAction: #selector(newProjectForChangeFromMenu(_:))
+        )
         return item
+    }
+
+    private func projectPickerSubmenu(
+        current: String?,
+        projectAction: Selector,
+        noneAction: Selector,
+        newProjectAction: Selector
+    ) -> NSMenu {
+        let submenu = NSMenu()
+        let visibleProjects = projects.filter { !$0.archived }
+        if visibleProjects.isEmpty {
+            let empty = NSMenuItem(title: "No projects", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            submenu.addItem(empty)
+        } else {
+            for project in visibleProjects {
+                let item = NSMenuItem(title: project.name, action: projectAction, keyEquivalent: "")
+                item.target = self
+                item.representedObject = project.name
+                if project.name == current {
+                    item.state = .on
+                }
+                submenu.addItem(item)
+            }
+        }
+        submenu.addItem(.separator())
+        let noneItem = NSMenuItem(title: "None", action: noneAction, keyEquivalent: "")
+        noneItem.target = self
+        if current == nil {
+            noneItem.state = .on
+        }
+        submenu.addItem(noneItem)
+        let newProject = NSMenuItem(title: "New project...", action: newProjectAction, keyEquivalent: "")
+        newProject.target = self
+        submenu.addItem(newProject)
+        return submenu
     }
 
     @objc private func pauseFromMenu(_ sender: NSMenuItem) {
@@ -203,24 +224,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         startProject(project)
     }
 
+    @objc private func startNoneFromMenu(_ sender: NSMenuItem) {
+        performClientAction { try await $0.start(project: nil) }
+    }
+
     @objc private func newProjectFromMenu(_ sender: NSMenuItem) {
+        guard let name = promptForNewProjectName(confirmTitle: "Start") else { return }
+        startProject(name)
+    }
+
+    @objc private func setProjectFromMenu(_ sender: NSMenuItem) {
+        guard let project = sender.representedObject as? String else { return }
+        performClientAction { try await $0.setProject(project) }
+    }
+
+    @objc private func setNoneFromMenu(_ sender: NSMenuItem) {
+        performClientAction { try await $0.setProject(nil) }
+    }
+
+    @objc private func newProjectForChangeFromMenu(_ sender: NSMenuItem) {
+        guard let name = promptForNewProjectName(confirmTitle: "Switch") else { return }
+        performClientAction { try await $0.setProject(name) }
+    }
+
+    private func startProject(_ project: String) {
+        performClientAction { try await $0.start(project: project) }
+    }
+
+    private func promptForNewProjectName(confirmTitle: String) -> String? {
         let alert = NSAlert()
         alert.messageText = "New project"
-        alert.informativeText = "Start a focus block for this project."
-        alert.addButton(withTitle: "Start")
+        alert.informativeText = "Name the project to attribute this block to."
+        alert.addButton(withTitle: confirmTitle)
         alert.addButton(withTitle: "Cancel")
         let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
         alert.accessoryView = input
 
         let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-        let project = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !project.isEmpty else { return }
-        startProject(project)
-    }
-
-    private func startProject(_ project: String) {
-        performClientAction { try await $0.start(project: project) }
+        guard response == .alertFirstButtonReturn else { return nil }
+        let trimmed = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func performClientAction(_ action: @escaping @Sendable (PmdrClient) async throws -> Void) {

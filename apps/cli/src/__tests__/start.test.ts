@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { parseDuration } from "../parse-duration.js";
 import { initTimer, resolveStartProject } from "../commands/start.js";
 import { createStateModule } from "../state.js";
+import { createProjectsModule } from "../projects.js";
 
 // ─── parseDuration ────────────────────────────────────────────────────────────
 
@@ -130,6 +131,31 @@ describe("initTimer", () => {
     expect(() =>
       initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" }),
     ).toThrow(/already running/i);
+  });
+});
+
+describe("start without --project (non-TTY path)", () => {
+  let tmpDir: string;
+  let store: ReturnType<typeof createStateModule>;
+  let projects: ReturnType<typeof createProjectsModule>;
+  const NOW = 1_000_000;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-noproj-test-"));
+    store = createStateModule(tmpDir);
+    projects = createProjectsModule(tmpDir);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resolves missing --project to (unassigned) and writes state without touching projects.json", () => {
+    const project = resolveStartProject(undefined, projects);
+    initTimer({ store, durationMs: 10_000, now: NOW, project, id: "no-proj-1" });
+
+    expect(store.readState()?.project).toBe("(unassigned)");
+    expect(projects.readProjects()).toEqual([]);
   });
 });
 

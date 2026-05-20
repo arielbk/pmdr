@@ -8,9 +8,10 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
     "setup": "pnpm install && pnpm build && pnpm --filter cli link --global",
-    "menubar": "cd apps/menubar && xcodegen generate && open pmdr-menubar.xcodeproj"
+    "menubar": "cd apps/menubar && xcodegen generate && xcodebuild -scheme pmdr-menubar -configuration Debug build && open \"$(xcodebuild -scheme pmdr-menubar -configuration Debug -showBuildSettings | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{print $2}')/pmdr.app\""
   },
   "devDependencies": {
+    "ccusage": "18.0.11",
     "cli": "workspace:*",
     "prettier": "^3.7.4",
     "turbo": "^2.9.14",
