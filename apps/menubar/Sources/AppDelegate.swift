@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var poller: StatusPoller?
     private var notifier: PhaseNotifier?
     private var hotkeyManager: HotkeyManager?
+    private var manageProjectsController: ManageProjectsWindowController?
     private var pollTask: Task<Void, Never>?
     private var redrawTimer: Timer?
     private var lastStatus: Status = .idle
@@ -146,6 +147,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        menu.addItem(actionItem("Manage projects…", #selector(openManageProjects(_:))))
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: "Quit",
             action: #selector(NSApplication.terminate(_:)),
@@ -240,6 +243,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func setNoneFromMenu(_ sender: NSMenuItem) {
         performClientAction { try await $0.setProject(nil) }
+    }
+
+    @objc private func openManageProjects(_ sender: NSMenuItem) {
+        guard let client else { return }
+        if manageProjectsController == nil {
+            manageProjectsController = ManageProjectsWindowController(client: client)
+        }
+        manageProjectsController?.show()
     }
 
     @objc private func newProjectForChangeFromMenu(_ sender: NSMenuItem) {

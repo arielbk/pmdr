@@ -84,6 +84,63 @@ final class PmdrClientDecodingTests: XCTestCase {
     }
 }
 
+final class PmdrClientArgvTests: XCTestCase {
+    /// Run the client against a stub `pmdr` binary that writes its argv to a file
+    /// and returns canned stdout. Lets us assert exactly which CLI args each
+    /// method invokes without needing the real pmdr binary.
+    func test_listProjects_passes_include_archived_when_requested() async throws {
+        let (client, argvLog) = try makeArgvCapturingClient(stdout: #"{"projects":[]}"#)
+        _ = try await client.listProjects(includeArchived: true)
+        XCTAssertEqual(readArgv(argvLog), ["project", "list", "--json", "--include-archived"])
+    }
+
+    func test_listProjects_omits_include_archived_by_default() async throws {
+        let (client, argvLog) = try makeArgvCapturingClient(stdout: #"{"projects":[]}"#)
+        _ = try await client.listProjects()
+        XCTAssertEqual(readArgv(argvLog), ["project", "list", "--json"])
+    }
+
+    func test_archiveProject_invokes_archive_subcommand() async throws {
+        let (client, argvLog) = try makeArgvCapturingClient(stdout: "")
+        try await client.archiveProject("alpha")
+        XCTAssertEqual(readArgv(argvLog), ["project", "archive", "alpha"])
+    }
+
+    func test_unarchiveProject_invokes_unarchive_subcommand() async throws {
+        let (client, argvLog) = try makeArgvCapturingClient(stdout: "")
+        try await client.unarchiveProject("alpha")
+        XCTAssertEqual(readArgv(argvLog), ["project", "unarchive", "alpha"])
+    }
+
+    private func makeArgvCapturingClient(stdout: String) throws -> (PmdrClient, URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pmdr-argv-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        let argvLog = dir.appendingPathComponent("argv.txt")
+        let script = dir.appendingPathComponent("pmdr")
+        let body = """
+        #!/bin/sh
+        printf '%s\\n' "$@" > \(argvLog.path)
+        printf '%s' '\(stdout)'
+        """
+        try Data(body.utf8).write(to: script)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: script.path
+        )
+        let client = PmdrClient(binaryHint: "pmdr", environment: ["PATH": dir.path])
+        return (client, argvLog)
+    }
+
+    private func readArgv(_ url: URL) -> [String] {
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        return raw.split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+            .filter { !$0.isEmpty }
+    }
+}
+
 final class PmdrClientBinaryResolutionTests: XCTestCase {
     func test_returns_nil_when_binary_missing_on_PATH() throws {
         let emptyDir = try makeTempDir()

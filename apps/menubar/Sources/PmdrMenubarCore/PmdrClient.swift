@@ -115,9 +115,21 @@ public struct PmdrClient: Sendable {
         _ = try await run(arguments: ["stop"])
     }
 
-    public func listProjects() async throws -> [ProjectRecord] {
-        let data = try await run(arguments: ["project", "list", "--json"])
+    public func listProjects(includeArchived: Bool = false) async throws -> [ProjectRecord] {
+        var args = ["project", "list", "--json"]
+        if includeArchived {
+            args.append("--include-archived")
+        }
+        let data = try await run(arguments: args)
         return try Self.decodeProjects(from: data)
+    }
+
+    public func archiveProject(_ name: String) async throws {
+        _ = try await run(arguments: ["project", "archive", name])
+    }
+
+    public func unarchiveProject(_ name: String) async throws {
+        _ = try await run(arguments: ["project", "unarchive", name])
     }
 
     // MARK: - Decoding

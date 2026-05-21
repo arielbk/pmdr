@@ -30,7 +30,7 @@ Expose the existing project archive/unarchive primitive in both the TUI and the 
 
 ### `menubar-manage-projects` — Menubar Manage Projects window
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** A new top-level "Manage projects..." `NSMenuItem` in the menubar opens a native window listing every project as a row with its name and an Archive/Unarchive button. A "Show archived" toggle at the top defaults to ON; flipping it off hides archived rows. Actions invoke the existing pmdr CLI archive/unarchive subcommands via `PmdrClient`.
 
