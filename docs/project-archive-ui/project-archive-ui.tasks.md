@@ -18,7 +18,7 @@ Expose the existing project archive/unarchive primitive in both the TUI and the 
 
 ### `tui-show-archived` — TUI show-archived toggle and unarchive
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** In the same picker, pressing `A` (shift+a) toggles a "show archived" mode that lists archived projects dimmed alongside active ones; pressing `a` on a dimmed (archived) row unarchives it.
 

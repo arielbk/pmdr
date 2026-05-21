@@ -3,7 +3,7 @@ import { Box, Text, useInput } from "ink";
 import type { ProjectRecord } from "../projects.js";
 
 type Entry =
-  | { kind: "project"; name: string }
+  | { kind: "project"; name: string; archived: boolean }
   | { kind: "none" }
   | { kind: "new" };
 
@@ -12,6 +12,8 @@ interface ProjectPickerOverlayProps {
   onSelect: (name: string | null) => void;
   onClose: () => void;
   onArchive?: (name: string) => void;
+  onUnarchive?: (name: string) => void;
+  onToggleShowArchived?: () => void;
 }
 
 export default function ProjectPickerOverlay({
@@ -19,10 +21,16 @@ export default function ProjectPickerOverlay({
   onSelect,
   onClose,
   onArchive,
+  onUnarchive,
+  onToggleShowArchived,
 }: ProjectPickerOverlayProps) {
   const entries: Entry[] = [
     { kind: "none" as const },
-    ...projects.map((p) => ({ kind: "project" as const, name: p.name })),
+    ...projects.map((p) => ({
+      kind: "project" as const,
+      name: p.name,
+      archived: p.archived,
+    })),
     { kind: "new" as const },
   ];
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -73,9 +81,18 @@ export default function ProjectPickerOverlay({
 
     if (input === "a" && !key.ctrl && !key.meta) {
       const selected = entries[selectedIdx];
-      if (selected?.kind === "project" && onArchive) {
-        onArchive(selected.name);
+      if (selected?.kind === "project") {
+        if (selected.archived && onUnarchive) {
+          onUnarchive(selected.name);
+        } else if (!selected.archived && onArchive) {
+          onArchive(selected.name);
+        }
       }
+      return;
+    }
+
+    if (input === "A" && !key.ctrl && !key.meta) {
+      onToggleShowArchived?.();
     }
   });
 
@@ -93,6 +110,7 @@ export default function ProjectPickerOverlay({
         {entries.map((entry, idx) => {
           const isSelected = idx === selectedIdx;
           const isSpecial = entry.kind !== "project";
+          const isArchived = entry.kind === "project" && entry.archived;
           const baseLabel =
             entry.kind === "project"
               ? entry.name
@@ -105,9 +123,13 @@ export default function ProjectPickerOverlay({
           const isNewInput = entry.kind === "new" && isSelected;
           return (
             <Box key={key}>
-              <Text color={color} dimColor={isSpecial && !isSelected}>
+              <Text
+                color={color}
+                dimColor={(isSpecial || isArchived) && !isSelected}
+              >
                 {isSelected ? "> " : "  "}
                 {baseLabel}
+                {isArchived ? " (archived)" : ""}
                 {isNewInput ? ": " : ""}
                 {isNewInput ? newName : ""}
                 {isNewInput ? "_" : ""}
