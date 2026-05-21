@@ -6,14 +6,16 @@ import PmdrMenubarCore
 /// Reuses the existing `PmdrClient` so all mutations route through the CLI.
 final class ManageProjectsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     private let client: PmdrClient
+    private let onProjectsChanged: ([ProjectRecord]) -> Void
     private var projects: [ProjectRecord] = []
     private var showArchived: Bool = true
     private var tableView: NSTableView!
     private var showArchivedCheckbox: NSButton!
     private var emptyLabel: NSTextField!
 
-    init(client: PmdrClient) {
+    init(client: PmdrClient, onProjectsChanged: @escaping ([ProjectRecord]) -> Void = { _ in }) {
         self.client = client
+        self.onProjectsChanged = onProjectsChanged
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 360),
             styleMask: [.titled, .closable, .resizable],
@@ -145,6 +147,7 @@ final class ManageProjectsWindowController: NSWindowController, NSTableViewDataS
                     self.projects = self.showArchived ? fetched : fetched.filter { !$0.archived }
                     self.emptyLabel.isHidden = !self.projects.isEmpty
                     self.tableView.reloadData()
+                    self.onProjectsChanged(fetched)
                 }
             } catch {
                 await MainActor.run { self.surface(error: error) }

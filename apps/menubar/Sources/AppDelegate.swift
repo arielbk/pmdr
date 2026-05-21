@@ -248,7 +248,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func openManageProjects(_ sender: NSMenuItem) {
         guard let client else { return }
         if manageProjectsController == nil {
-            manageProjectsController = ManageProjectsWindowController(client: client)
+            manageProjectsController = ManageProjectsWindowController(client: client) { [weak self] projects in
+                guard let self else { return }
+                self.projects = projects
+                self.rebuildMenu()
+            }
         }
         manageProjectsController?.show()
     }
