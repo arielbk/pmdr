@@ -140,10 +140,29 @@ export default function ProjectPickerOverlay({
       </Box>
 
       <Box marginTop={1}>
-        <Text dimColor>
-          {onNewEntry
-            ? "type name · enter confirm · esc close"
-            : "↑↓ navigate · enter select · esc close"}
+        <Text>
+          {(onNewEntry
+            ? ([
+                ["type", "name"],
+                ["enter", "confirm"],
+                ["esc", "close"],
+              ] as const)
+            : ([
+                ["↑↓", "navigate"],
+                ["enter", "select"],
+                ["a", "archive"],
+                ["A", "show archived"],
+                ["esc", "close"],
+              ] as const)
+          ).map(([key, desc], i) => (
+            <React.Fragment key={key}>
+              {i > 0 ? <Text dimColor>{"  ·  "}</Text> : null}
+              <Text color="cyan" bold>
+                {key}
+              </Text>
+              <Text dimColor>{` ${desc}`}</Text>
+            </React.Fragment>
+          ))}
         </Text>
       </Box>
     </Box>
