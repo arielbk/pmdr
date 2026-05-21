@@ -18,6 +18,7 @@ afterEach(() => {
 
 const alpha: ProjectRecord = { name: "alpha", archived: false, createdAt: "2026-01-01T00:00:00.000Z" };
 const beta: ProjectRecord = { name: "beta", archived: false, createdAt: "2026-01-02T00:00:00.000Z" };
+const gamma: ProjectRecord = { name: "gamma", archived: true, createdAt: "2026-01-03T00:00:00.000Z" };
 
 describe("ProjectPickerOverlay — list rendering", () => {
   it("shows all project names", () => {
@@ -245,6 +246,149 @@ describe("ProjectPickerOverlay — new project creation", () => {
   });
 });
 
+describe("ProjectPickerOverlay — archive keybinding", () => {
+  it("pressing 'a' on a highlighted project row calls onArchive with that name", async () => {
+    const onArchive = vi.fn();
+    const { stdin } = render(
+      <ProjectPickerOverlay
+        projects={[alpha, beta]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        onArchive={onArchive}
+      />,
+    );
+
+    stdin.write("\x1B[B"); // past None to alpha
+    await flush();
+    stdin.write("a");
+    await flush();
+
+    expect(onArchive).toHaveBeenCalledWith("alpha");
+  });
+
+  it("pressing 'a' while highlighting None does not call onArchive", async () => {
+    const onArchive = vi.fn();
+    const { stdin } = render(
+      <ProjectPickerOverlay
+        projects={[alpha]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        onArchive={onArchive}
+      />,
+    );
+
+    // selectedIdx starts at 0 = None
+    stdin.write("a");
+    await flush();
+
+    expect(onArchive).not.toHaveBeenCalled();
+  });
+
+  it("pressing 'a' while on the New entry types 'a' into the buffer (no archive)", async () => {
+    const onArchive = vi.fn();
+    const onSelect = vi.fn();
+    const { stdin } = render(
+      <ProjectPickerOverlay
+        projects={[]}
+        onSelect={onSelect}
+        onClose={vi.fn()}
+        onArchive={onArchive}
+      />,
+    );
+
+    stdin.write("\x1B[B"); // down to New
+    await flush();
+    stdin.write("a");
+    await flush();
+    stdin.write("\r");
+    await flush();
+
+    expect(onArchive).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith("a");
+  });
+});
+
+describe("ProjectPickerOverlay — show-archived toggle and unarchive", () => {
+  it("pressing 'A' (shift+a) calls onToggleShowArchived", async () => {
+    const onToggleShowArchived = vi.fn();
+    const { stdin } = render(
+      <ProjectPickerOverlay
+        projects={[alpha]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        onToggleShowArchived={onToggleShowArchived}
+      />,
+    );
+
+    stdin.write("\x1B[B"); // past None to alpha (avoid the New-entry typing path)
+    await flush();
+    stdin.write("A");
+    await flush();
+
+    expect(onToggleShowArchived).toHaveBeenCalledTimes(1);
+  });
+
+  it("pressing 'A' while on the New entry types into the buffer (no toggle)", async () => {
+    const onToggleShowArchived = vi.fn();
+    const onSelect = vi.fn();
+    const { stdin } = render(
+      <ProjectPickerOverlay
+        projects={[]}
+        onSelect={onSelect}
+        onClose={vi.fn()}
+        onToggleShowArchived={onToggleShowArchived}
+      />,
+    );
+
+    stdin.write("\x1B[B"); // down to New
+    await flush();
+    stdin.write("A");
+    await flush();
+    stdin.write("\r");
+    await flush();
+
+    expect(onToggleShowArchived).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith("A");
+  });
+
+  it("pressing 'a' on a highlighted archived project calls onUnarchive (not onArchive)", async () => {
+    const onArchive = vi.fn();
+    const onUnarchive = vi.fn();
+    const { stdin } = render(
+      <ProjectPickerOverlay
+        projects={[alpha, gamma]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        onArchive={onArchive}
+        onUnarchive={onUnarchive}
+      />,
+    );
+
+    stdin.write("\x1B[B"); // None → alpha
+    await flush();
+    stdin.write("\x1B[B"); // alpha → gamma (archived)
+    await flush();
+    stdin.write("a");
+    await flush();
+
+    expect(onUnarchive).toHaveBeenCalledWith("gamma");
+    expect(onArchive).not.toHaveBeenCalled();
+  });
+
+  it("marks archived project rows with an '(archived)' suffix", () => {
+    const { lastFrame } = render(
+      <ProjectPickerOverlay
+        projects={[alpha, gamma]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("gamma (archived)");
+    expect(frame).not.toContain("alpha (archived)");
+  });
+});
+
 describe("App — project picker integration", () => {
   it("pressing p opens the project picker overlay", async () => {
     const { lastFrame, stdin } = render(
@@ -272,5 +416,103 @@ describe("App — project picker integration", () => {
 
     expect(lastFrame()).toContain("alpha");
     expect(lastFrame()).not.toContain("Applies from next block"); // overlay closed
+  });
+
+  it("pressing 'A' toggles show-archived: archived rows appear, getProjects called with includeArchived: true", async () => {
+    const getProjects = vi.fn(({ includeArchived }: { includeArchived: boolean }) =>
+      includeArchived ? [alpha, gamma] : [alpha],
+    );
+
+    const { lastFrame, stdin } = render(
+      <App getProjects={getProjects} readStateFn={() => null} />,
+    );
+
+    stdin.write("p");
+    await flush();
+
+    // initially active-only: alpha visible, gamma not
+    expect(lastFrame()).toMatch(/[> ] alpha/);
+    expect(lastFrame()).not.toContain("gamma");
+
+    stdin.write("\x1B[B"); // None → alpha (so 'A' isn't typed into New buffer)
+    await flush();
+    stdin.write("A"); // toggle show-archived ON
+    await flush();
+
+    expect(getProjects).toHaveBeenCalledWith({ includeArchived: true });
+    expect(lastFrame()).toContain("gamma");
+  });
+
+  it("pressing 'a' on an archived row calls unarchiveProjectFn and refreshes the list", async () => {
+    const unarchivedNames = new Set<string>();
+    const getProjects = vi.fn(({ includeArchived }: { includeArchived: boolean }) => {
+      const all = [alpha, { ...gamma, archived: !unarchivedNames.has(gamma.name) }];
+      return includeArchived ? all : all.filter((p) => !p.archived);
+    });
+    const unarchiveSpy = vi.fn((name: string) => {
+      unarchivedNames.add(name);
+    });
+
+    const { lastFrame, stdin } = render(
+      <App
+        getProjects={getProjects}
+        unarchiveProjectFn={unarchiveSpy}
+        readStateFn={() => null}
+      />,
+    );
+
+    stdin.write("p");
+    await flush();
+    stdin.write("\x1B[B"); // None → alpha
+    await flush();
+    stdin.write("A"); // toggle show-archived ON → gamma appears
+    await flush();
+    stdin.write("\x1B[B"); // alpha → gamma
+    await flush();
+    stdin.write("a"); // unarchive gamma
+    await flush();
+
+    expect(unarchiveSpy).toHaveBeenCalledWith("gamma");
+    // After unarchive, gamma is no longer archived; with showArchived still ON it
+    // still appears in the list (now as a regular active row).
+    expect(lastFrame()).toContain("gamma");
+  });
+
+  it("pressing 'a' on a highlighted project archives it and the row disappears", async () => {
+    // Simulate the projects store: after archive, the project is filtered out.
+    const archived = new Set<string>();
+    const getProjects = vi.fn(() =>
+      [alpha, beta].filter((p) => !archived.has(p.name)),
+    );
+    const archiveSpy = vi.fn((name: string) => {
+      archived.add(name);
+    });
+
+    const { lastFrame, stdin } = render(
+      <App
+        getProjects={getProjects}
+        archiveProjectFn={archiveSpy}
+        readStateFn={() => null}
+      />,
+    );
+
+    stdin.write("p");
+    await flush();
+
+    // initial frame contains both projects as picker rows
+    expect(lastFrame()).toMatch(/[> ] alpha/);
+    expect(lastFrame()).toMatch(/[> ] beta/);
+
+    stdin.write("\x1B[B"); // past None to alpha
+    await flush();
+    stdin.write("a"); // archive alpha
+    await flush();
+
+    expect(archiveSpy).toHaveBeenCalledWith("alpha");
+
+    const frame = lastFrame() ?? "";
+    // alpha row should be gone; beta still present
+    expect(frame).not.toMatch(/[> ] alpha/);
+    expect(frame).toMatch(/[> ] beta/);
   });
 });

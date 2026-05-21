@@ -6,7 +6,12 @@ import { derivePhaseState } from "./phase-state-machine.js";
 import CountdownView from "./CountdownView.js";
 import ProjectPickerOverlay from "./ProjectPickerOverlay.js";
 import HelpOverlay from "./HelpOverlay.js";
-import { listProjects, upsertProject } from "../projects.js";
+import {
+  archiveProject,
+  listProjects,
+  unarchiveProject,
+  upsertProject,
+} from "../projects.js";
 import { createStateModule, deriveState } from "../state.js";
 import { pauseTimer } from "../commands/pause.js";
 import { resumeTimer } from "../commands/resume.js";
@@ -21,8 +26,10 @@ import type { StateRecord } from "../state.js";
 type Store = ReturnType<typeof createStateModule>;
 
 interface AppProps {
-  getProjects?: () => ProjectRecord[];
+  getProjects?: (opts: { includeArchived: boolean }) => ProjectRecord[];
   upsertProjectFn?: (name: string) => ProjectRecord;
+  archiveProjectFn?: (name: string) => void;
+  unarchiveProjectFn?: (name: string) => void;
   store?: Store;
   readStateFn?: () => StateRecord | null;
   exitFn?: () => void;
@@ -45,8 +52,10 @@ function makeReadOnlyStore(readFn: () => StateRecord | null): Store {
 }
 
 export default function App({
-  getProjects = () => listProjects({ includeArchived: false }),
+  getProjects = (opts) => listProjects(opts),
   upsertProjectFn = upsertProject,
+  archiveProjectFn = archiveProject,
+  unarchiveProjectFn = unarchiveProject,
   store: providedStore,
   readStateFn,
   exitFn,
@@ -82,8 +91,9 @@ export default function App({
   const [currentProject, setCurrentProject] = useState<string | undefined>(
     initial.record?.project,
   );
+  const [pickerShowArchived, setPickerShowArchived] = useState(false);
   const [pickerProjects, setPickerProjects] = useState<ProjectRecord[]>(
-    initial.isAttached ? [] : getProjects(),
+    initial.isAttached ? [] : getProjects({ includeArchived: false }),
   );
 
   useEffect(() => {
@@ -131,10 +141,12 @@ export default function App({
         const after = store.readState();
         setViewState(derivePhaseState(after, now, store));
         setCurrentProject(after?.project);
-        setPickerProjects(getProjects());
+        setPickerShowArchived(false);
+        setPickerProjects(getProjects({ includeArchived: false }));
         setShowProjectPicker(true);
       } else if (input === "p") {
-        setPickerProjects(getProjects());
+        setPickerShowArchived(false);
+        setPickerProjects(getProjects({ includeArchived: false }));
         setShowProjectPicker(true);
       } else if (input === "?") {
         setShowHelp(true);
@@ -173,6 +185,24 @@ export default function App({
     setShowProjectPicker(false);
   }
 
+  function handleProjectArchive(name: string) {
+    archiveProjectFn(name);
+    setPickerProjects(getProjects({ includeArchived: pickerShowArchived }));
+  }
+
+  function handleProjectUnarchive(name: string) {
+    unarchiveProjectFn(name);
+    setPickerProjects(getProjects({ includeArchived: pickerShowArchived }));
+  }
+
+  function handleToggleShowArchived() {
+    setPickerShowArchived((prev) => {
+      const next = !prev;
+      setPickerProjects(getProjects({ includeArchived: next }));
+      return next;
+    });
+  }
+
   return (
     <>
       <CountdownView {...viewState} project={currentProject} />
@@ -181,6 +211,9 @@ export default function App({
           projects={pickerProjects}
           onSelect={handleProjectSelect}
           onClose={handlePickerClose}
+          onArchive={handleProjectArchive}
+          onUnarchive={handleProjectUnarchive}
+          onToggleShowArchived={handleToggleShowArchived}
         />
       )}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
