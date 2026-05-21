@@ -11,12 +11,14 @@ interface ProjectPickerOverlayProps {
   projects: ProjectRecord[];
   onSelect: (name: string | null) => void;
   onClose: () => void;
+  onArchive?: (name: string) => void;
 }
 
 export default function ProjectPickerOverlay({
   projects,
   onSelect,
   onClose,
+  onArchive,
 }: ProjectPickerOverlayProps) {
   const entries: Entry[] = [
     { kind: "none" as const },
@@ -65,6 +67,14 @@ export default function ProjectPickerOverlay({
         setNewName((prev) => prev.slice(0, -1));
       } else if (input && !key.ctrl && !key.meta) {
         setNewName((prev) => prev + input);
+      }
+      return;
+    }
+
+    if (input === "a" && !key.ctrl && !key.meta) {
+      const selected = entries[selectedIdx];
+      if (selected?.kind === "project" && onArchive) {
+        onArchive(selected.name);
       }
     }
   });

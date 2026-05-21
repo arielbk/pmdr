@@ -6,7 +6,7 @@ import { derivePhaseState } from "./phase-state-machine.js";
 import CountdownView from "./CountdownView.js";
 import ProjectPickerOverlay from "./ProjectPickerOverlay.js";
 import HelpOverlay from "./HelpOverlay.js";
-import { listProjects, upsertProject } from "../projects.js";
+import { archiveProject, listProjects, upsertProject } from "../projects.js";
 import { createStateModule, deriveState } from "../state.js";
 import { pauseTimer } from "../commands/pause.js";
 import { resumeTimer } from "../commands/resume.js";
@@ -23,6 +23,7 @@ type Store = ReturnType<typeof createStateModule>;
 interface AppProps {
   getProjects?: () => ProjectRecord[];
   upsertProjectFn?: (name: string) => ProjectRecord;
+  archiveProjectFn?: (name: string) => void;
   store?: Store;
   readStateFn?: () => StateRecord | null;
   exitFn?: () => void;
@@ -47,6 +48,7 @@ function makeReadOnlyStore(readFn: () => StateRecord | null): Store {
 export default function App({
   getProjects = () => listProjects({ includeArchived: false }),
   upsertProjectFn = upsertProject,
+  archiveProjectFn = archiveProject,
   store: providedStore,
   readStateFn,
   exitFn,
@@ -173,6 +175,11 @@ export default function App({
     setShowProjectPicker(false);
   }
 
+  function handleProjectArchive(name: string) {
+    archiveProjectFn(name);
+    setPickerProjects(getProjects());
+  }
+
   return (
     <>
       <CountdownView {...viewState} project={currentProject} />
@@ -181,6 +188,7 @@ export default function App({
           projects={pickerProjects}
           onSelect={handleProjectSelect}
           onClose={handlePickerClose}
+          onArchive={handleProjectArchive}
         />
       )}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}

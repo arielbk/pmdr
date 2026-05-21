@@ -245,6 +245,68 @@ describe("ProjectPickerOverlay — new project creation", () => {
   });
 });
 
+describe("ProjectPickerOverlay — archive keybinding", () => {
+  it("pressing 'a' on a highlighted project row calls onArchive with that name", async () => {
+    const onArchive = vi.fn();
+    const { stdin } = render(
+      <ProjectPickerOverlay
+        projects={[alpha, beta]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        onArchive={onArchive}
+      />,
+    );
+
+    stdin.write("\x1B[B"); // past None to alpha
+    await flush();
+    stdin.write("a");
+    await flush();
+
+    expect(onArchive).toHaveBeenCalledWith("alpha");
+  });
+
+  it("pressing 'a' while highlighting None does not call onArchive", async () => {
+    const onArchive = vi.fn();
+    const { stdin } = render(
+      <ProjectPickerOverlay
+        projects={[alpha]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        onArchive={onArchive}
+      />,
+    );
+
+    // selectedIdx starts at 0 = None
+    stdin.write("a");
+    await flush();
+
+    expect(onArchive).not.toHaveBeenCalled();
+  });
+
+  it("pressing 'a' while on the New entry types 'a' into the buffer (no archive)", async () => {
+    const onArchive = vi.fn();
+    const onSelect = vi.fn();
+    const { stdin } = render(
+      <ProjectPickerOverlay
+        projects={[]}
+        onSelect={onSelect}
+        onClose={vi.fn()}
+        onArchive={onArchive}
+      />,
+    );
+
+    stdin.write("\x1B[B"); // down to New
+    await flush();
+    stdin.write("a");
+    await flush();
+    stdin.write("\r");
+    await flush();
+
+    expect(onArchive).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith("a");
+  });
+});
+
 describe("App — project picker integration", () => {
   it("pressing p opens the project picker overlay", async () => {
     const { lastFrame, stdin } = render(
@@ -272,5 +334,43 @@ describe("App — project picker integration", () => {
 
     expect(lastFrame()).toContain("alpha");
     expect(lastFrame()).not.toContain("Applies from next block"); // overlay closed
+  });
+
+  it("pressing 'a' on a highlighted project archives it and the row disappears", async () => {
+    // Simulate the projects store: after archive, the project is filtered out.
+    const archived = new Set<string>();
+    const getProjects = vi.fn(() =>
+      [alpha, beta].filter((p) => !archived.has(p.name)),
+    );
+    const archiveSpy = vi.fn((name: string) => {
+      archived.add(name);
+    });
+
+    const { lastFrame, stdin } = render(
+      <App
+        getProjects={getProjects}
+        archiveProjectFn={archiveSpy}
+        readStateFn={() => null}
+      />,
+    );
+
+    stdin.write("p");
+    await flush();
+
+    // initial frame contains both projects as picker rows
+    expect(lastFrame()).toMatch(/[> ] alpha/);
+    expect(lastFrame()).toMatch(/[> ] beta/);
+
+    stdin.write("\x1B[B"); // past None to alpha
+    await flush();
+    stdin.write("a"); // archive alpha
+    await flush();
+
+    expect(archiveSpy).toHaveBeenCalledWith("alpha");
+
+    const frame = lastFrame() ?? "";
+    // alpha row should be gone; beta still present
+    expect(frame).not.toMatch(/[> ] alpha/);
+    expect(frame).toMatch(/[> ] beta/);
   });
 });
