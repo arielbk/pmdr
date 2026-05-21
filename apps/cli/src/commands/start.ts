@@ -64,13 +64,20 @@ type ProjectResolver = Pick<
   "upsertProject"
 >;
 
+type LastProjectResolver = Pick<
+  ReturnType<typeof createProjectsModule>,
+  "resolveLastActiveProject"
+>;
+
 export function resolveStartProject(
   projectArg: string | undefined,
   projects: ProjectResolver,
+  lastProjectResolver?: LastProjectResolver,
 ): string {
-  return projectArg
-    ? projects.upsertProject(projectArg).name
-    : UNASSIGNED_PROJECT;
+  if (projectArg) return projects.upsertProject(projectArg).name;
+  const last = lastProjectResolver?.resolveLastActiveProject() ?? null;
+  if (last) return last;
+  return UNASSIGNED_PROJECT;
 }
 
 export async function pickProject(options: {
@@ -185,6 +192,12 @@ export default defineCommand({
       type: "string",
       description: "Project to attribute this pomodoro to",
     },
+    "no-project": {
+      type: "boolean",
+      description:
+        "Force unassigned, bypassing the last-used-project fallback",
+      default: false,
+    },
     force: {
       type: "boolean",
       description: "Replace any active timer before starting",
@@ -208,10 +221,13 @@ export default defineCommand({
     }
 
     const projectArg = args.project as string | undefined;
+    const noProject = args["no-project"] as boolean;
 
+    const projectsModule = createProjectsModule(STATE_DIR);
     const project = resolveStartProject(
       projectArg,
-      createProjectsModule(STATE_DIR),
+      projectsModule,
+      noProject ? undefined : projectsModule,
     );
 
     const store = createStateModule(STATE_DIR);
@@ -225,6 +241,9 @@ export default defineCommand({
         store.clearState();
       }
       initTimer({ store, durationMs, now, project });
+      if (project !== UNASSIGNED_PROJECT) {
+        projectsModule.writeLastProject(project);
+      }
     } catch (e) {
       console.error((e as Error).message);
       process.exit(1);

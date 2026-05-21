@@ -124,6 +124,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         switch lastStatus {
         case .idle:
+            if let last = lastUsedProject() {
+                let restart = NSMenuItem(
+                    title: "Start \(last)",
+                    action: #selector(startLastFromMenu(_:)),
+                    keyEquivalent: ""
+                )
+                restart.target = self
+                restart.representedObject = last
+                menu.addItem(restart)
+            }
             let startItem = NSMenuItem(title: "Start", action: nil, keyEquivalent: "")
             startItem.submenu = projectPickerSubmenu(
                 current: nil,
@@ -227,8 +237,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         startProject(project)
     }
 
+    @objc private func startLastFromMenu(_ sender: NSMenuItem) {
+        guard let project = sender.representedObject as? String else { return }
+        startProject(project)
+    }
+
     @objc private func startNoneFromMenu(_ sender: NSMenuItem) {
-        performClientAction { try await $0.start(project: nil) }
+        performClientAction { try await $0.start(project: nil, forceUnassigned: true) }
     }
 
     @objc private func newProjectFromMenu(_ sender: NSMenuItem) {
@@ -345,18 +360,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func lastUsedProject() -> String? {
         let home = client?.environment["HOME"] ?? NSHomeDirectory()
         let url = URL(fileURLWithPath: home)
-            .appendingPathComponent(".local/state/pmdr/completions.jsonl")
+            .appendingPathComponent(".local/state/pmdr/last-project.json")
         guard
-            let content = try? String(contentsOf: url, encoding: .utf8),
-            let line = content.split(separator: "\n").last,
-            let data = String(line).data(using: .utf8),
+            let data = try? Data(contentsOf: url),
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let project = object["project"] as? String
+            let project = object["name"] as? String
         else {
             return nil
         }
         let trimmed = project.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty || trimmed == "(unassigned)" {
+            return nil
+        }
+        // Skip if the remembered project is archived or missing from the active list.
+        if let match = projects.first(where: { $0.name == trimmed }), match.archived {
             return nil
         }
         return trimmed

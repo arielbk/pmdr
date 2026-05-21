@@ -14,6 +14,7 @@ interface ProjectPickerOverlayProps {
   onArchive?: (name: string) => void;
   onUnarchive?: (name: string) => void;
   onToggleShowArchived?: () => void;
+  initialSelection?: string | null;
 }
 
 export default function ProjectPickerOverlay({
@@ -23,6 +24,7 @@ export default function ProjectPickerOverlay({
   onArchive,
   onUnarchive,
   onToggleShowArchived,
+  initialSelection,
 }: ProjectPickerOverlayProps) {
   const entries: Entry[] = [
     { kind: "none" as const },
@@ -33,7 +35,14 @@ export default function ProjectPickerOverlay({
     })),
     { kind: "new" as const },
   ];
-  const [selectedIdx, setSelectedIdx] = useState(0);
+  const initialIdx = (() => {
+    if (!initialSelection) return 0;
+    const idx = entries.findIndex(
+      (e) => e.kind === "project" && e.name === initialSelection,
+    );
+    return idx >= 0 ? idx : 0;
+  })();
+  const [selectedIdx, setSelectedIdx] = useState(initialIdx);
   const [newName, setNewName] = useState("");
 
   const onNewEntry = entries[selectedIdx]?.kind === "new";

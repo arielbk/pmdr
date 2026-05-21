@@ -9,8 +9,10 @@ import HelpOverlay from "./HelpOverlay.js";
 import {
   archiveProject,
   listProjects,
+  resolveLastActiveProject,
   unarchiveProject,
   upsertProject,
+  writeLastProject,
 } from "../projects.js";
 import { createStateModule, deriveState } from "../state.js";
 import { pauseTimer } from "../commands/pause.js";
@@ -30,6 +32,8 @@ interface AppProps {
   upsertProjectFn?: (name: string) => ProjectRecord;
   archiveProjectFn?: (name: string) => void;
   unarchiveProjectFn?: (name: string) => void;
+  resolveLastActiveProjectFn?: () => string | null;
+  writeLastProjectFn?: (name: string | null) => void;
   store?: Store;
   readStateFn?: () => StateRecord | null;
   exitFn?: () => void;
@@ -56,6 +60,8 @@ export default function App({
   upsertProjectFn = upsertProject,
   archiveProjectFn = archiveProject,
   unarchiveProjectFn = unarchiveProject,
+  resolveLastActiveProjectFn = resolveLastActiveProject,
+  writeLastProjectFn = writeLastProject,
   store: providedStore,
   readStateFn,
   exitFn,
@@ -176,6 +182,13 @@ export default function App({
         // ignore — read-only stores in tests
       }
     }
+    if (resolvedName) {
+      try {
+        writeLastProjectFn(resolvedName);
+      } catch {
+        // best-effort
+      }
+    }
     setViewState(derivePhaseState(store.readState(), now, store));
     setCurrentProject(resolvedName);
     setShowProjectPicker(false);
@@ -214,6 +227,7 @@ export default function App({
           onArchive={handleProjectArchive}
           onUnarchive={handleProjectUnarchive}
           onToggleShowArchived={handleToggleShowArchived}
+          initialSelection={resolveLastActiveProjectFn()}
         />
       )}
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}

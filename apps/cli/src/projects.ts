@@ -3,6 +3,7 @@ import {
   writeFileSync,
   mkdirSync,
   renameSync,
+  unlinkSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,8 +21,13 @@ interface ProjectsFile {
   projects: ProjectRecord[];
 }
 
+interface LastProjectFile {
+  name: string;
+}
+
 export function createProjectsModule(stateDir: string) {
   const projectsFile = join(stateDir, "projects.json");
+  const lastProjectFile = join(stateDir, "last-project.json");
 
   function readProjects(): ProjectRecord[] {
     try {
@@ -128,7 +134,49 @@ export function createProjectsModule(stateDir: string) {
     return projects[oldIdx]!;
   }
 
-  return { readProjects, writeProjects, findProject, upsertProject, archiveProject, unarchiveProject, listProjects, renameProject };
+  function readLastProject(): string | null {
+    try {
+      const raw = readFileSync(lastProjectFile, "utf8");
+      const data = JSON.parse(raw) as LastProjectFile;
+      const name = data.name?.trim();
+      if (!name || isUnassigned(name)) return null;
+      return name;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeLastProject(name: string | null): void {
+    if (name === null) {
+      try {
+        unlinkSync(lastProjectFile);
+      } catch {
+        // already clear
+      }
+      return;
+    }
+    const trimmed = name.trim();
+    if (!trimmed || isUnassigned(trimmed)) return;
+    mkdirSync(stateDir, { recursive: true });
+    const tmp = join(
+      tmpdir(),
+      `pmdr-last-project-${randomBytes(6).toString("hex")}.json`,
+    );
+    const data: LastProjectFile = { name: trimmed };
+    writeFileSync(tmp, JSON.stringify(data), "utf8");
+    renameSync(tmp, lastProjectFile);
+  }
+
+  function resolveLastActiveProject(): string | null {
+    const last = readLastProject();
+    if (!last) return null;
+    const project = findProject(last);
+    if (!project) return null;
+    if (project.archived) return null;
+    return project.name;
+  }
+
+  return { readProjects, writeProjects, findProject, upsertProject, archiveProject, unarchiveProject, listProjects, renameProject, readLastProject, writeLastProject, resolveLastActiveProject };
 }
 
 const _prod = createProjectsModule(join(homedir(), ".local", "state", "pmdr"));
@@ -141,3 +189,6 @@ export const archiveProject = (name: string): void => _prod.archiveProject(name)
 export const unarchiveProject = (name: string): void => _prod.unarchiveProject(name);
 export const listProjects = (opts: { includeArchived: boolean }): ProjectRecord[] => _prod.listProjects(opts);
 export const renameProject = (oldName: string, newName: string): ProjectRecord => _prod.renameProject(oldName, newName);
+export const readLastProject = (): string | null => _prod.readLastProject();
+export const writeLastProject = (name: string | null): void => _prod.writeLastProject(name);
+export const resolveLastActiveProject = (): string | null => _prod.resolveLastActiveProject();
