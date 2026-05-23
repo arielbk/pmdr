@@ -6,14 +6,19 @@ public struct FloatingTimerViewModel: Equatable, Sendable {
     public let projectName: String
     public let isMuted: Bool
 
-    public init(status: Status, lastProject: String?) {
+    public init(status: Status, lastProject: String?, elapsedSincePoll: TimeInterval = 0) {
         switch status {
         case .idle:
             time = "--:--"
             phaseLabel = "idle"
             projectName = lastProject ?? ""
             isMuted = true
-        case .running(let active), .paused(let active):
+        case .running(let active):
+            time = Self.format(remainingMs: active.remainingMs - Int(elapsedSincePoll * 1000))
+            phaseLabel = active.phase.rawValue
+            projectName = active.project ?? ""
+            isMuted = false
+        case .paused(let active):
             time = Self.format(remainingMs: active.remainingMs)
             phaseLabel = active.phase.rawValue
             projectName = active.project ?? ""

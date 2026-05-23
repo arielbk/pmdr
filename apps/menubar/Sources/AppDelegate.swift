@@ -73,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         self.updateIcon(for: status)
                         self.rebuildMenu()
                         self.redrawTitle()
+                        self.redrawFloatingTimer()
                     }
                     if let notifier = self.notifier {
                         await notifier.handle(events)
@@ -92,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func startRedrawTimer() {
         let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.redrawTitle()
+            self?.redrawFloatingTimer()
         }
         RunLoop.main.add(timer, forMode: .common)
         redrawTimer = timer
@@ -329,6 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.updateIcon(for: status)
             self.rebuildMenu()
             self.redrawTitle()
+            self.redrawFloatingTimer()
         }
         await notifier?.handle(events)
     }
@@ -343,7 +346,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             HotkeyBinding(
                 keyCode: UInt32(kVK_ANSI_P),
                 modifiers: UInt32(controlKey | optionKey | cmdKey),
-                handler: { [weak self] in self?.floatingTimerPanelController?.toggle() }
+                handler: { [weak self] in
+                    self?.redrawFloatingTimer()
+                    self?.floatingTimerPanelController?.toggle()
+                }
             )
         ])
         do {
@@ -391,6 +397,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return nil
         }
         return trimmed
+    }
+
+    @MainActor
+    private func redrawFloatingTimer() {
+        let elapsed = max(0, Date().timeIntervalSince(lastPollAt))
+        floatingTimerPanelController?.update(
+            status: lastStatus,
+            lastProject: lastUsedProject(),
+            elapsedSincePoll: elapsed
+        )
     }
 
     private func surfaceClientErrorIfNeeded(_ error: Error) {

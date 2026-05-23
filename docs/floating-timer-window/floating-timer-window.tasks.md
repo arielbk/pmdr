@@ -64,7 +64,7 @@ The panel uses `styleMask = [.borderless, .nonactivatingPanel]`, `isFloatingPane
 
 ### `live-data` — Panel renders real timer state
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** With a timer running (started via CLI or menubar), the panel shows live `MM:SS` ticking down, the correct phase label (`focus` / `break`), and the active project. With no timer (idle), the panel shows `--:--`, `idle`, and the last-used project. Pause freezes the displayed time; resume continues it. `AppDelegate` pushes each `Status` update into the controller alongside the existing icon/title refresh.
 
