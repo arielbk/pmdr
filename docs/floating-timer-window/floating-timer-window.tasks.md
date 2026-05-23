@@ -20,7 +20,7 @@ Borderless floating panel that shows the active pomodoro's time, phase, and proj
 
 ### `view-model` — FloatingTimerViewModel pure mapping
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `FloatingTimerViewModel(status: Status, lastProject: String?)` exposes `time`, `phaseLabel`, `projectName`, `isMuted`. Idle → `"--:--"`, `"idle"`, last project (or `""`), `isMuted: true`. Running focus → `"MM:SS"`, `"focus"`, active project, `isMuted: false`. Same for running break and paused variants (paused renders frozen `MM:SS`, `isMuted: false`).
 
