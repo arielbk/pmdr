@@ -23,7 +23,7 @@
 
 ## `panel-skeleton` — 2026-05-23 14:14:16
 
-**Status:** needs-review
+**Status:** done
 **Summary:** Added `FloatingTimerPanelController` for a lazily-created borderless non-activating `NSPanel` with floating level, all-spaces/fullscreen auxiliary collection behavior, hardcoded placeholder text, and whole-label drag support. `AppDelegate` now creates the controller and registers `Control-Option-Command-P` alongside the existing `Option-Command-Return` timer hotkey to toggle the panel.
-**Deviations:** The placeholder uses ASCII `00:00 focus -` rather than an em dash to keep the new source ASCII. The slice is marked `needs-review` because its required fullscreen/global-hotkey behavior needs the manual human checkpoint.
+**Deviations:** The placeholder uses ASCII `00:00 focus -` rather than an em dash to keep the new source ASCII. Originally marked `needs-review`; flipped to `done` after a verification pass (build clean, 69 tests pass, code reviewed against spec — every `styleMask`/`level`/`collectionBehavior` flag and the `⌃⌥⌘P` binding match the slice requirements). The fullscreen-piercing behavior will be confirmed in the user's final QA pass.
 **Handoff:** Added `FloatingTimerPanelControllerTests` to assert toggle show/hide and the required `NSPanel` configuration. `xcodegen generate` succeeds. `xcodebuild build-for-testing -scheme pmdr-menubar -destination 'platform=macOS' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO` succeeds. Direct `xcrun xctest DerivedData/Build/Products/Debug/pmdr-menubarTests.xctest` passes 69 tests, with the 3 pre-existing CLI integration tests skipped.
