@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var poller: StatusPoller?
     private var notifier: PhaseNotifier?
     private var hotkeyManager: HotkeyManager?
+    private var floatingTimerPanelController: FloatingTimerPanelController?
     private var manageProjectsController: ManageProjectsWindowController?
     private var pollTask: Task<Void, Never>?
     private var redrawTimer: Timer?
@@ -41,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         self.statusItem = item
+        floatingTimerPanelController = FloatingTimerPanelController()
         rebuildMenu()
         registerHotkey()
 
@@ -337,6 +339,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 keyCode: UInt32(kVK_Return),
                 modifiers: UInt32(optionKey | cmdKey),
                 handler: { [weak self] in self?.handleTimerHotkey() }
+            ),
+            HotkeyBinding(
+                keyCode: UInt32(kVK_ANSI_P),
+                modifiers: UInt32(controlKey | optionKey | cmdKey),
+                handler: { [weak self] in self?.floatingTimerPanelController?.toggle() }
             )
         ])
         do {

@@ -20,3 +20,10 @@
 **Summary:** Added `FloatingTimerPosition` to `PmdrMenubarCore` with per-display position lookup, recording, and top-right default placement. Positions are stored in one `UserDefaults` key as a display-ID keyed map derived from each screen's `NSScreenNumber`.
 **Deviations:** Used `NSDeviceDescriptionKey("NSScreenNumber")` directly because this SDK does not expose `.screenNumber` as a typed static member. Tests use a lightweight `NSScreen` subclass to supply deterministic display IDs and frames.
 **Handoff:** Added `FloatingTimerPositionTests` covering round-trip persistence, multi-display coexistence, unknown display miss, and default top-right anchoring with a 24-point inset. `xcodegen generate` succeeds. `xcodebuild build-for-testing -scheme pmdr-menubar -destination 'platform=macOS' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO` succeeds. Direct `xcrun xctest DerivedData/Build/Products/Debug/pmdr-menubarTests.xctest` passes 68 tests, with the 3 pre-existing CLI integration tests skipped.
+
+## `panel-skeleton` — 2026-05-23 14:14:16
+
+**Status:** needs-review
+**Summary:** Added `FloatingTimerPanelController` for a lazily-created borderless non-activating `NSPanel` with floating level, all-spaces/fullscreen auxiliary collection behavior, hardcoded placeholder text, and whole-label drag support. `AppDelegate` now creates the controller and registers `Control-Option-Command-P` alongside the existing `Option-Command-Return` timer hotkey to toggle the panel.
+**Deviations:** The placeholder uses ASCII `00:00 focus -` rather than an em dash to keep the new source ASCII. The slice is marked `needs-review` because its required fullscreen/global-hotkey behavior needs the manual human checkpoint.
+**Handoff:** Added `FloatingTimerPanelControllerTests` to assert toggle show/hide and the required `NSPanel` configuration. `xcodegen generate` succeeds. `xcodebuild build-for-testing -scheme pmdr-menubar -destination 'platform=macOS' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO` succeeds. Direct `xcrun xctest DerivedData/Build/Products/Debug/pmdr-menubarTests.xctest` passes 69 tests, with the 3 pre-existing CLI integration tests skipped.

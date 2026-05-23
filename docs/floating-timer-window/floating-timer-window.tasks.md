@@ -48,7 +48,7 @@ Borderless floating panel that shows the active pomodoro's time, phase, and proj
 
 ### `panel-skeleton` — Borderless fullscreen-piercing panel toggled by hotkey
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** Pressing `⌃⌥⌘P` in any app — including a fullscreen app on a separate Space — summons a small borderless `NSPanel` that floats above that app; pressing again hides it. Panel renders hardcoded placeholder text (e.g. `"00:00 focus —"`). Whole-window drag works. The panel does not steal focus from the underlying app.
 
