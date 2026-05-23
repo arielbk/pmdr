@@ -43,7 +43,7 @@ final class FloatingTimerPanelController {
 
     func saveCurrentPosition() {
         guard let panel,
-              let screen = screen(containing: panel.frame) ?? screenProvider()
+              let screen = screenProvider() ?? screen(containing: panel.frame)
         else {
             return
         }
