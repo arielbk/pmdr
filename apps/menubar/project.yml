@@ -57,6 +57,7 @@ targets:
     platform: macOS
     sources:
       - path: Tests/PmdrMenubarCoreTests
+      - path: Sources/HotkeyManager.swift
     dependencies:
       - target: PmdrMenubarCore
     settings:

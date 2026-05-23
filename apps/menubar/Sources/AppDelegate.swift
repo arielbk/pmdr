@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Foundation
 import os.log
 import PmdrMenubarCore
@@ -331,9 +332,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func registerHotkey() {
-        let manager = HotkeyManager { [weak self] in
-            self?.handleHotkey()
-        }
+        let manager = HotkeyManager(bindings: [
+            HotkeyBinding(
+                keyCode: UInt32(kVK_Return),
+                modifiers: UInt32(optionKey | cmdKey),
+                handler: { [weak self] in self?.handleTimerHotkey() }
+            )
+        ])
         do {
             try manager.register()
             hotkeyManager = manager
@@ -344,7 +349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @MainActor
-    private func handleHotkey() {
+    private func handleTimerHotkey() {
         switch lastStatus {
         case .idle:
             guard let project = lastUsedProject() else {
@@ -404,7 +409,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Hotkey unavailable"
-        alert.informativeText = "Another app is already using Ctrl-Option-Command-P."
+        alert.informativeText = "Another app is already using Option-Command-Return."
         alert.addButton(withTitle: "OK")
         alert.runModal()
     }
