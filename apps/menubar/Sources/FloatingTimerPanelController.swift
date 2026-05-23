@@ -13,7 +13,12 @@ final class FloatingTimerPanelController {
     }
 
     private static let focusGoal = 8
-    private static let panelSize = NSSize(width: 240, height: 136)
+    private static let visualSize = NSSize(width: 240, height: 136)
+    private static let shadowMargin: CGFloat = 20
+    private static let panelSize = NSSize(
+        width: visualSize.width + shadowMargin * 2,
+        height: visualSize.height + shadowMargin * 2
+    )
     private static let cornerRadius: CGFloat = 14
 
     private var panel: NSPanel?
@@ -35,7 +40,12 @@ final class FloatingTimerPanelController {
 
     init(
         positionStore: FloatingTimerPosition = FloatingTimerPosition(),
-        screenProvider: @escaping () -> NSScreen? = { NSScreen.main ?? NSScreen.screens.first }
+        screenProvider: @escaping () -> NSScreen? = {
+            let mouse = NSEvent.mouseLocation
+            return NSScreen.screens.first { $0.frame.contains(mouse) }
+                ?? NSScreen.main
+                ?? NSScreen.screens.first
+        }
     ) {
         self.positionStore = positionStore
         self.screenProvider = screenProvider
@@ -72,7 +82,7 @@ final class FloatingTimerPanelController {
 
     func saveCurrentPosition() {
         guard let panel,
-              let screen = screenProvider() ?? screen(containing: panel.frame)
+              let screen = screen(containing: panel.frame) ?? screenProvider()
         else {
             return
         }
@@ -156,9 +166,23 @@ final class FloatingTimerPanelController {
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
+        // hasShadow = true lets the window server compute the shadow from visible pixels.
+        // The panel is larger than the visual content (shadowMargin padding on each side)
+        // so the system sees a rounded inset shape and casts a rounded shadow.
         panel.hasShadow = true
 
-        let effect = FloatingTimerBackgroundView(frame: frame)
+        // Outer clear view fills the enlarged panel frame
+        let contentView = NSView(frame: frame)
+        contentView.wantsLayer = true
+        contentView.autoresizingMask = [.width, .height]
+
+        // Visual content is inset by shadowMargin — transparent corners let the system
+        // compute a rounded shadow rather than a rectangular one
+        let effectFrame = CGRect(
+            x: Self.shadowMargin, y: Self.shadowMargin,
+            width: Self.visualSize.width, height: Self.visualSize.height
+        )
+        let effect = FloatingTimerBackgroundView(frame: effectFrame)
         effect.material = .hudWindow
         effect.blendingMode = .behindWindow
         effect.state = .active
@@ -166,7 +190,6 @@ final class FloatingTimerPanelController {
         effect.wantsLayer = true
         effect.layer?.cornerRadius = Self.cornerRadius
         effect.layer?.masksToBounds = true
-        effect.autoresizingMask = [.width, .height]
 
         let phase = FloatingTimerLabel(labelWithString: snapshot.phaseLabel)
         phase.font = .systemFont(ofSize: 10, weight: .semibold)
@@ -208,7 +231,8 @@ final class FloatingTimerPanelController {
             stack.centerYAnchor.constraint(equalTo: effect.centerYAnchor)
         ])
 
-        panel.contentView = effect
+        contentView.addSubview(effect)
+        panel.contentView = contentView
 
         phaseField = phase
         projectField = project
@@ -229,7 +253,8 @@ final class FloatingTimerPanelController {
     static var defaultPanelSize: NSSize { panelSize }
 
     private func screen(containing frame: NSRect) -> NSScreen? {
-        NSScreen.screens.first { $0.frame.intersects(frame) }
+        let center = NSPoint(x: frame.midX, y: frame.midY)
+        return NSScreen.screens.first { $0.frame.contains(center) }
     }
 }
 
