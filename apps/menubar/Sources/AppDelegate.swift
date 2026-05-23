@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Foundation
 import os.log
 import PmdrMenubarCore
@@ -9,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var poller: StatusPoller?
     private var notifier: PhaseNotifier?
     private var hotkeyManager: HotkeyManager?
+    private var floatingTimerPanelController: FloatingTimerPanelController?
     private var manageProjectsController: ManageProjectsWindowController?
     private var pollTask: Task<Void, Never>?
     private var redrawTimer: Timer?
@@ -40,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         self.statusItem = item
+        floatingTimerPanelController = FloatingTimerPanelController()
         rebuildMenu()
         registerHotkey()
 
@@ -51,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        floatingTimerPanelController?.saveCurrentPosition()
         pollTask?.cancel()
         redrawTimer?.invalidate()
     }
@@ -70,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         self.updateIcon(for: status)
                         self.rebuildMenu()
                         self.redrawTitle()
+                        self.redrawFloatingTimer()
                     }
                     if let notifier = self.notifier {
                         await notifier.handle(events)
@@ -89,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func startRedrawTimer() {
         let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.redrawTitle()
+            self?.redrawFloatingTimer()
         }
         RunLoop.main.add(timer, forMode: .common)
         redrawTimer = timer
@@ -326,14 +332,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.updateIcon(for: status)
             self.rebuildMenu()
             self.redrawTitle()
+            self.redrawFloatingTimer()
         }
         await notifier?.handle(events)
     }
 
     private func registerHotkey() {
-        let manager = HotkeyManager { [weak self] in
-            self?.handleHotkey()
-        }
+        let manager = HotkeyManager(bindings: [
+            HotkeyBinding(
+                keyCode: UInt32(kVK_Return),
+                modifiers: UInt32(optionKey | cmdKey),
+                handler: { [weak self] in self?.handleTimerHotkey() }
+            ),
+            HotkeyBinding(
+                keyCode: UInt32(kVK_ANSI_P),
+                modifiers: UInt32(controlKey | optionKey | cmdKey),
+                handler: { [weak self] in
+                    self?.redrawFloatingTimer()
+                    self?.floatingTimerPanelController?.toggle()
+                }
+            )
+        ])
         do {
             try manager.register()
             hotkeyManager = manager
@@ -344,7 +363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @MainActor
-    private func handleHotkey() {
+    private func handleTimerHotkey() {
         switch lastStatus {
         case .idle:
             guard let project = lastUsedProject() else {
@@ -381,6 +400,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return trimmed
     }
 
+    @MainActor
+    private func redrawFloatingTimer() {
+        let elapsed = max(0, Date().timeIntervalSince(lastPollAt))
+        floatingTimerPanelController?.update(
+            status: lastStatus,
+            lastProject: lastUsedProject(),
+            elapsedSincePoll: elapsed
+        )
+    }
+
     private func surfaceClientErrorIfNeeded(_ error: Error) {
         if case PmdrClientError.binaryNotFound = error {
             showBinaryAlertIfNeeded()
@@ -404,7 +433,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Hotkey unavailable"
-        alert.informativeText = "Another app is already using Ctrl-Option-Command-P."
+        alert.informativeText = "Another app is already using Option-Command-Return."
         alert.addButton(withTitle: "OK")
         alert.runModal()
     }

@@ -57,6 +57,8 @@ targets:
     platform: macOS
     sources:
       - path: Tests/PmdrMenubarCoreTests
+      - path: Sources/HotkeyManager.swift
+      - path: Sources/FloatingTimerPanelController.swift
     dependencies:
       - target: PmdrMenubarCore
     settings:
