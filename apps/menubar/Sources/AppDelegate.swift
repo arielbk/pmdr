@@ -59,24 +59,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let poller else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
+                guard let self else { return }
                 do {
                     let events = try await poller.pollOnce()
                     let now = Date()
                     let status = await poller.currentStatus() ?? .idle
                     await MainActor.run {
-                        self?.lastStatus = status
-                        self?.lastPollAt = now
-                        self?.updateIcon(for: status)
-                        self?.rebuildMenu()
-                        self?.redrawTitle()
+                        self.lastStatus = status
+                        self.lastPollAt = now
+                        self.updateIcon(for: status)
+                        self.rebuildMenu()
+                        self.redrawTitle()
                     }
-                    if let notifier = self?.notifier {
+                    if let notifier = self.notifier {
                         await notifier.handle(events)
                     }
                 } catch {
-                    os_log("Failed to poll pmdr status: %{public}@", log: self?.log ?? .default, type: .error, String(describing: error))
+                    os_log("Failed to poll pmdr status: %{public}@", log: self.log, type: .error, String(describing: error))
                     await MainActor.run {
-                        self?.surfaceClientErrorIfNeeded(error)
+                        self.surfaceClientErrorIfNeeded(error)
                     }
                 }
                 let cadence = await poller.cadence
@@ -299,13 +300,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func performClientAction(_ action: @escaping @Sendable (PmdrClient) async throws -> Void) {
         guard let client else { return }
         Task { [weak self] in
+            guard let self else { return }
             do {
                 try await action(client)
-                try await self?.refreshFromCLI()
+                try await self.refreshFromCLI()
             } catch {
-                os_log("Failed to mutate pmdr state: %{public}@", log: self?.log ?? .default, type: .error, String(describing: error))
+                os_log("Failed to mutate pmdr state: %{public}@", log: self.log, type: .error, String(describing: error))
                 await MainActor.run {
-                    self?.surfaceClientErrorIfNeeded(error)
+                    self.surfaceClientErrorIfNeeded(error)
                 }
             }
         }

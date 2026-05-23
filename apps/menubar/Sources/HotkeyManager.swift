@@ -60,7 +60,7 @@ final class HotkeyManager {
             throw HotkeyManagerError.registrationFailed(installStatus)
         }
 
-        var hotKeyID = EventHotKeyID(signature: Self.signature, id: 1)
+        let hotKeyID = EventHotKeyID(signature: Self.signature, id: 1)
         let registerStatus = RegisterEventHotKey(
             UInt32(kVK_ANSI_P),
             UInt32(controlKey | optionKey | cmdKey),

@@ -15,17 +15,19 @@ Lives outside the Turbo pipeline — separate Xcode toolchain.
 From the repo root:
 
 ```sh
-pnpm menubar
+pnpm menubar       # build Debug and launch pmdr.app
+pnpm menubar:gen   # regenerate pmdr-menubar.xcodeproj after editing project.yml
 ```
 
-Regenerates the Xcode project, builds Debug, and launches `pmdr.app` directly — no Xcode needed.
+These wrap [`scripts/menubar-run.sh`](../../scripts/menubar-run.sh) and [`scripts/menubar-gen.sh`](../../scripts/menubar-gen.sh). The run script generates the project on first use, builds Debug, kills any running `pmdr` menubar instance, and launches the freshly built `.app` — no Xcode UI needed.
+
+If `xcodebuild` fails to load a plug-in (e.g. `IDESimulatorFoundation`, common after an Xcode update), run `xcodebuild -runFirstLaunch` once to install missing components, then retry.
 
 To work in Xcode instead:
 
 ```sh
-cd apps/menubar
-xcodegen generate
-open pmdr-menubar.xcodeproj
+pnpm menubar:gen
+open apps/menubar/pmdr-menubar.xcodeproj
 ```
 
 The app is configured with `LSUIElement = true`, so it appears only in the menubar — no Dock icon, no main window. Click the `pmdr` item in the menubar and choose **Quit** (⌘Q) to terminate.

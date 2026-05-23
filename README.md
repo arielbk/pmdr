@@ -58,9 +58,12 @@ Open as many terminals as you want — they all read and write the same session.
 ## Running the menubar app
 
 ```sh
-pnpm menubar      # regenerates the Xcode project and opens it
+pnpm menubar           # build Debug and launch pmdr.app
+pnpm menubar:gen       # regenerate pmdr-menubar.xcodeproj (run after editing project.yml)
 ```
 
-Hit Run in Xcode. The app appears only in the menubar (no Dock icon). It needs the `pmdr` CLI on your PATH — `pnpm setup` handles that.
+`pnpm menubar` calls [`scripts/menubar-run.sh`](scripts/menubar-run.sh): it generates the Xcode project on first run, builds the Debug scheme, kills any running `pmdr` menubar instance, then launches the freshly built `.app`. The app appears only in the menubar (no Dock icon). It needs the `pmdr` CLI on your PATH — `pnpm setup` handles that.
+
+**First-time setup gotcha:** if `xcodebuild` fails to load `IDESimulatorFoundation` or another plug-in (common right after an Xcode update), run `xcodebuild -runFirstLaunch` to install missing components, then retry.
 
 See [`apps/menubar/README.md`](apps/menubar/README.md) for build/test details and the global hotkey.
