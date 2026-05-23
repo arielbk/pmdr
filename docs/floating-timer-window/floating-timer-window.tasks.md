@@ -78,7 +78,7 @@ The panel uses `styleMask = [.borderless, .nonactivatingPanel]`, `isFloatingPane
 
 ### `position-persistence` — Drag remembers per display across sessions
 
-**Status:** not-started
+**Status:** in-progress
 
 **Outside-in:** Drag the panel to a new spot, hide via `⌃⌥⌘P`, show again — it reappears at that spot. Quit the menubar app, relaunch, summon — it reappears at the same spot. On a setup with two displays, drag on display A, hide, move focus to display B, summon — panel appears on B at B's last position (or B's default if never positioned). Move focus back to A, summon — panel appears at A's saved spot. If a previously-saved display is no longer connected, summon falls back to the active display's default position.
 
