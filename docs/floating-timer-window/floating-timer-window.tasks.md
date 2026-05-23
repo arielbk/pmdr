@@ -34,7 +34,7 @@ Borderless floating panel that shows the active pomodoro's time, phase, and proj
 
 ### `position-store` — FloatingTimerPosition per-display persistence
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `FloatingTimerPosition` exposes `position(for: NSScreen) -> NSPoint?`, `record(_ point: NSPoint, for: NSScreen)`, `defaultPosition(for: NSScreen, windowSize: NSSize) -> NSPoint`. Backed by a `UserDefaults` suite with a single key holding a `[displayKey: NSPoint]` map keyed by `CGDirectDisplayID` from `NSScreen.deviceDescription[.screenNumber]`.
 
