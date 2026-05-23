@@ -68,17 +68,60 @@ final class FloatingTimerViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isMuted)
     }
 
+    func test_phaseColor_isMutedForIdle() {
+        let vm = FloatingTimerViewModel(status: .idle, lastProject: nil)
+        XCTAssertEqual(vm.phaseColor, .muted)
+    }
+
+    func test_phaseColor_isFocusForRunningFocus() {
+        let vm = FloatingTimerViewModel(
+            status: .running(active(remainingMs: 60_000, phase: .focus, project: nil)),
+            lastProject: nil
+        )
+        XCTAssertEqual(vm.phaseColor, .focus)
+    }
+
+    func test_phaseColor_isBreakForRunningBreak() {
+        let vm = FloatingTimerViewModel(
+            status: .running(active(remainingMs: 60_000, phase: .break, project: nil)),
+            lastProject: nil
+        )
+        XCTAssertEqual(vm.phaseColor, .break)
+    }
+
+    func test_phaseColor_isMutedForPaused() {
+        let vm = FloatingTimerViewModel(
+            status: .paused(active(remainingMs: 60_000, phase: .focus, project: nil)),
+            lastProject: nil
+        )
+        XCTAssertEqual(vm.phaseColor, .muted)
+    }
+
+    func test_completedFocusBlocks_isZeroForIdle() {
+        let vm = FloatingTimerViewModel(status: .idle, lastProject: nil)
+        XCTAssertEqual(vm.completedFocusBlocks, 0)
+    }
+
+    func test_completedFocusBlocks_reflectsActiveValue() {
+        let vm = FloatingTimerViewModel(
+            status: .running(active(remainingMs: 60_000, phase: .focus, project: nil, completedFocusBlocks: 3)),
+            lastProject: nil
+        )
+        XCTAssertEqual(vm.completedFocusBlocks, 3)
+    }
+
     private func active(
         remainingMs: Int,
         phase: Phase,
-        project: String?
+        project: String?,
+        completedFocusBlocks: Int = 0
     ) -> Status.Active {
         Status.Active(
             remainingMs: remainingMs,
             durationMs: 1_500_000,
             startedAt: 0,
             phase: phase,
-            completedFocusBlocks: 0,
+            completedFocusBlocks: completedFocusBlocks,
             project: project
         )
     }

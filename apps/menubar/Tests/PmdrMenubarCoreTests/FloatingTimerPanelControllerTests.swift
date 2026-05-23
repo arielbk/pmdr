@@ -55,7 +55,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
 
         controller.show()
 
-        let expected = store.defaultPosition(for: right, windowSize: controller.panelForTesting!.frame.size)
+        let expected = store.defaultPosition(for: right, windowSize: FloatingTimerPanelController.defaultPanelSize)
         XCTAssertEqual(controller.panelForTesting?.frame.origin, expected)
     }
 
@@ -78,7 +78,17 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertTrue(panel.collectionBehavior.contains(.stationary))
         XCTAssertFalse(panel.hidesOnDeactivate)
         XCTAssertTrue(panel.isMovableByWindowBackground)
-        XCTAssertEqual((panel.contentView as? NSTextField)?.stringValue, "00:00 focus -")
+        XCTAssertFalse(panel.isOpaque)
+        XCTAssertEqual(panel.backgroundColor, .clear)
+
+        let effect = panel.contentView as? NSVisualEffectView
+        XCTAssertNotNil(effect)
+        XCTAssertEqual(effect?.material, .hudWindow)
+        XCTAssertEqual(effect?.blendingMode, .behindWindow)
+        XCTAssertEqual(effect?.state, .active)
+        XCTAssertEqual(effect?.appearance?.name, NSAppearance.Name.vibrantDark)
+        XCTAssertEqual(effect?.layer?.cornerRadius, 14)
+        XCTAssertEqual(effect?.layer?.masksToBounds, true)
 
         controller.toggle()
 
@@ -90,12 +100,33 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         controller.show()
 
         controller.update(
-            status: .running(active(remainingMs: 1_499_000, phase: .focus, project: "Deep Work")),
+            status: .running(active(remainingMs: 1_499_000, phase: .focus, project: "Deep Work", completedFocusBlocks: 2)),
             lastProject: "Admin",
             elapsedSincePoll: 0
         )
 
-        XCTAssertEqual((controller.panelForTesting?.contentView as? NSTextField)?.stringValue, "24:59 focus Deep Work")
+        let snapshot = controller.snapshotForTesting
+        XCTAssertEqual(snapshot.time, "24:59")
+        XCTAssertEqual(snapshot.phaseLabel, "FOCUS")
+        XCTAssertEqual(snapshot.projectName, "Deep Work")
+        XCTAssertEqual(snapshot.phaseColor, .systemRed)
+        XCTAssertFalse(snapshot.isMuted)
+        XCTAssertEqual(snapshot.completedFocusBlocks, 2)
+    }
+
+    func testUpdateRendersBreakInGreen() {
+        let controller = FloatingTimerPanelController()
+        controller.show()
+
+        controller.update(
+            status: .running(active(remainingMs: 300_000, phase: .break, project: "Deep Work")),
+            lastProject: nil,
+            elapsedSincePoll: 0
+        )
+
+        let snapshot = controller.snapshotForTesting
+        XCTAssertEqual(snapshot.phaseLabel, "BREAK")
+        XCTAssertEqual(snapshot.phaseColor, .systemGreen)
     }
 
     func testUpdateTicksRunningTimerButLeavesPausedTimerFrozen() {
@@ -107,14 +138,16 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
             lastProject: nil,
             elapsedSincePoll: 3
         )
-        XCTAssertEqual((controller.panelForTesting?.contentView as? NSTextField)?.stringValue, "00:07 focus Deep Work")
+        XCTAssertEqual(controller.snapshotForTesting.time, "00:07")
 
         controller.update(
             status: .paused(active(remainingMs: 10_000, phase: .focus, project: "Deep Work")),
             lastProject: nil,
             elapsedSincePoll: 3
         )
-        XCTAssertEqual((controller.panelForTesting?.contentView as? NSTextField)?.stringValue, "00:10 focus Deep Work")
+        let paused = controller.snapshotForTesting
+        XCTAssertEqual(paused.time, "00:10")
+        XCTAssertEqual(paused.phaseColor, .secondaryLabelColor)
     }
 
     func testUpdateBeforeShowIsRenderedWhenPanelAppears() {
@@ -127,22 +160,26 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         )
         controller.show()
 
-        let label = controller.panelForTesting?.contentView as? NSTextField
-        XCTAssertEqual(label?.stringValue, "--:-- idle Writing")
-        XCTAssertEqual(label?.textColor, .secondaryLabelColor)
+        let snapshot = controller.snapshotForTesting
+        XCTAssertEqual(snapshot.phaseLabel, "IDLE")
+        XCTAssertEqual(snapshot.time, "--:--")
+        XCTAssertEqual(snapshot.projectName, "Writing")
+        XCTAssertTrue(snapshot.isMuted)
+        XCTAssertEqual(snapshot.phaseColor, .secondaryLabelColor)
     }
 
     private func active(
         remainingMs: Int,
         phase: Phase,
-        project: String?
+        project: String?,
+        completedFocusBlocks: Int = 0
     ) -> Status.Active {
         Status.Active(
             remainingMs: remainingMs,
             durationMs: 1_500_000,
             startedAt: 0,
             phase: phase,
-            completedFocusBlocks: 0,
+            completedFocusBlocks: completedFocusBlocks,
             project: project
         )
     }

@@ -1,10 +1,18 @@
 import Foundation
 
 public struct FloatingTimerViewModel: Equatable, Sendable {
+    public enum PhaseColor: Equatable, Sendable {
+        case focus
+        case `break`
+        case muted
+    }
+
     public let time: String
     public let phaseLabel: String
     public let projectName: String
     public let isMuted: Bool
+    public let phaseColor: PhaseColor
+    public let completedFocusBlocks: Int
 
     public init(status: Status, lastProject: String?, elapsedSincePoll: TimeInterval = 0) {
         switch status {
@@ -13,16 +21,22 @@ public struct FloatingTimerViewModel: Equatable, Sendable {
             phaseLabel = "idle"
             projectName = lastProject ?? ""
             isMuted = true
+            phaseColor = .muted
+            completedFocusBlocks = 0
         case .running(let active):
             time = Self.format(remainingMs: active.remainingMs - Int(elapsedSincePoll * 1000))
             phaseLabel = active.phase.rawValue
             projectName = active.project ?? ""
             isMuted = false
+            phaseColor = active.phase == .focus ? .focus : .break
+            completedFocusBlocks = active.completedFocusBlocks
         case .paused(let active):
             time = Self.format(remainingMs: active.remainingMs)
             phaseLabel = active.phase.rawValue
             projectName = active.project ?? ""
             isMuted = false
+            phaseColor = .muted
+            completedFocusBlocks = active.completedFocusBlocks
         }
     }
 
