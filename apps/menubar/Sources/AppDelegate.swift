@@ -54,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        floatingTimerPanelController?.saveCurrentPosition()
         pollTask?.cancel()
         redrawTimer?.invalidate()
     }

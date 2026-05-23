@@ -4,6 +4,61 @@ import PmdrMenubarCore
 
 @MainActor
 final class FloatingTimerPanelControllerTests: XCTestCase {
+    func testShowUsesSavedPositionForActiveDisplay() {
+        let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let store = FloatingTimerPosition(defaults: makeDefaults())
+        store.record(NSPoint(x: 123, y: 456), for: screen)
+        let controller = FloatingTimerPanelController(positionStore: store, screenProvider: { screen })
+
+        controller.show()
+
+        XCTAssertEqual(controller.panelForTesting?.frame.origin, NSPoint(x: 123, y: 456))
+    }
+
+    func testHideRecordsCurrentPositionForPanelDisplay() {
+        let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let store = FloatingTimerPosition(defaults: makeDefaults())
+        let controller = FloatingTimerPanelController(positionStore: store, screenProvider: { screen })
+        controller.show()
+        controller.panelForTesting?.setFrameOrigin(NSPoint(x: 333, y: 444))
+
+        controller.hide()
+
+        XCTAssertEqual(store.position(for: screen), NSPoint(x: 333, y: 444))
+    }
+
+    func testShowUsesPositionForCurrentActiveDisplay() {
+        let left = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let right = TestScreen(displayID: 200, frame: NSRect(x: 1440, y: 0, width: 1920, height: 1080))
+        var activeScreen: NSScreen? = left
+        let store = FloatingTimerPosition(defaults: makeDefaults())
+        store.record(NSPoint(x: 111, y: 222), for: left)
+        store.record(NSPoint(x: 1555, y: 777), for: right)
+        let controller = FloatingTimerPanelController(positionStore: store, screenProvider: { activeScreen })
+
+        controller.show()
+        XCTAssertEqual(controller.panelForTesting?.frame.origin, NSPoint(x: 111, y: 222))
+
+        controller.hide()
+        activeScreen = right
+        controller.show()
+
+        XCTAssertEqual(controller.panelForTesting?.frame.origin, NSPoint(x: 1555, y: 777))
+    }
+
+    func testShowFallsBackToDefaultPositionForActiveDisplayWithoutSavedPosition() {
+        let left = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let right = TestScreen(displayID: 200, frame: NSRect(x: 1440, y: 0, width: 1920, height: 1080))
+        let store = FloatingTimerPosition(defaults: makeDefaults())
+        store.record(NSPoint(x: 111, y: 222), for: left)
+        let controller = FloatingTimerPanelController(positionStore: store, screenProvider: { right })
+
+        controller.show()
+
+        let expected = store.defaultPosition(for: right, windowSize: controller.panelForTesting!.frame.size)
+        XCTAssertEqual(controller.panelForTesting?.frame.origin, expected)
+    }
+
     func testToggleShowsAndHidesConfiguredFloatingPanel() {
         let controller = FloatingTimerPanelController()
 
@@ -90,5 +145,35 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
             completedFocusBlocks: 0,
             project: project
         )
+    }
+
+    private func makeDefaults() -> UserDefaults {
+        let suiteName = "FloatingTimerPanelControllerTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
+    }
+}
+
+private final class TestScreen: NSScreen {
+    private let testDisplayID: CGDirectDisplayID
+    private let testFrame: NSRect
+
+    init(displayID: CGDirectDisplayID, frame: NSRect) {
+        self.testDisplayID = displayID
+        self.testFrame = frame
+        super.init()
+    }
+
+    override var frame: NSRect {
+        testFrame
+    }
+
+    override var visibleFrame: NSRect {
+        testFrame
+    }
+
+    override var deviceDescription: [NSDeviceDescriptionKey: Any] {
+        [NSDeviceDescriptionKey("NSScreenNumber"): NSNumber(value: testDisplayID)]
     }
 }
