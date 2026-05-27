@@ -13,11 +13,14 @@ if [ ! -e pmdr-menubar.xcodeproj ]; then
   xcodegen generate
 fi
 
-xcodebuild -quiet -scheme pmdr-menubar -configuration Debug build
+arch=$(uname -m)
+destination="platform=macOS,arch=${arch}"
+
+xcodebuild -quiet -scheme pmdr-menubar -configuration Debug -destination "$destination" build
 
 pkill -x pmdr 2>/dev/null || true
 
-built_dir=$(xcodebuild -scheme pmdr-menubar -configuration Debug -showBuildSettings \
+built_dir=$(xcodebuild -scheme pmdr-menubar -configuration Debug -destination "$destination" -showBuildSettings \
   | awk -F' = ' '/ BUILT_PRODUCTS_DIR /{print $2; exit}')
 
 open "$built_dir/pmdr.app"

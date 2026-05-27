@@ -202,42 +202,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertTrue(controller.availableProjects().isEmpty)
     }
 
-    func testPanelChromeUsesTitledClosableAndFullSizeContentView() {
-        let controller = FloatingTimerPanelController()
-
-        controller.show()
-
-        guard let panel = controller.panelForTesting else {
-            XCTFail("Expected show() to create a panel")
-            return
-        }
-        XCTAssertTrue(panel.styleMask.contains(.titled))
-        XCTAssertTrue(panel.styleMask.contains(.closable))
-        XCTAssertTrue(panel.styleMask.contains(.fullSizeContentView))
-        XCTAssertTrue(panel.styleMask.contains(.nonactivatingPanel))
-        XCTAssertEqual(panel.titleVisibility, .hidden)
-        XCTAssertTrue(panel.titlebarAppearsTransparent)
-    }
-
-    func testMiniaturizeAndZoomButtonsAreHidden() {
-        let controller = FloatingTimerPanelController()
-
-        controller.show()
-
-        guard let panel = controller.panelForTesting else {
-            XCTFail("Expected show() to create a panel")
-            return
-        }
-        // Buttons are either nil (absent from styleMask) or explicitly hidden.
-        if let miniaturize = panel.standardWindowButton(.miniaturizeButton) {
-            XCTAssertTrue(miniaturize.isHidden)
-        }
-        if let zoom = panel.standardWindowButton(.zoomButton) {
-            XCTAssertTrue(zoom.isHidden)
-        }
-    }
-
-    func testCloseButtonTargetActionInvokesHide() {
+    func testCloseButtonInvokesHide() {
         let controller = FloatingTimerPanelController()
         controller.show()
 
@@ -247,13 +212,11 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         }
         XCTAssertTrue(panel.isVisible)
 
-        guard let closeButton = panel.standardWindowButton(.closeButton) else {
-            XCTFail("Expected a standard close button")
-            return
-        }
-        XCTAssertFalse(closeButton.isHidden)
-        guard let target = closeButton.target, let action = closeButton.action else {
-            XCTFail("Expected close button to have target/action wired")
+        guard let closeButton = controller.closeButtonForTesting,
+              let target = closeButton.target,
+              let action = closeButton.action
+        else {
+            XCTFail("Expected custom close button with target/action wired")
             return
         }
         _ = (target as AnyObject).perform(action, with: closeButton)
@@ -261,7 +224,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertFalse(panel.isVisible)
     }
 
-    func testPanelFrameSizeIsUnchangedByTitledChrome() {
+    func testPanelFrameSizeMatchesDefaults() {
         let controller = FloatingTimerPanelController()
 
         controller.show()
@@ -280,16 +243,32 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         controller.show()
         controller.panelForTesting?.setFrameOrigin(NSPoint(x: 222, y: 333))
 
-        guard let closeButton = controller.panelForTesting?.standardWindowButton(.closeButton),
+        guard let closeButton = controller.closeButtonForTesting,
               let target = closeButton.target,
               let action = closeButton.action
         else {
-            XCTFail("Expected close button target/action")
+            XCTFail("Expected custom close button target/action")
             return
         }
         _ = (target as AnyObject).perform(action, with: closeButton)
 
         XCTAssertEqual(store.position(for: screen), NSPoint(x: 222, y: 333))
+    }
+
+    func testCloseButtonIsHiddenWhenNotHoveredAndVisibleOnHover() {
+        let controller = FloatingTimerPanelController()
+        controller.show()
+
+        XCTAssertEqual(controller.closeButtonAlphaForTesting, 0)
+        XCTAssertEqual(controller.closeButtonForTesting?.isHidden, true)
+
+        controller.setHoveredForTesting(true)
+        XCTAssertEqual(controller.closeButtonAlphaForTesting, 1)
+        XCTAssertEqual(controller.closeButtonForTesting?.isHidden, false)
+
+        controller.setHoveredForTesting(false)
+        XCTAssertEqual(controller.closeButtonAlphaForTesting, 0)
+        XCTAssertEqual(controller.closeButtonForTesting?.isHidden, true)
     }
 
     func testHoverTrackingTogglesIsHovered() {

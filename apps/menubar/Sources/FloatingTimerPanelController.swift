@@ -30,6 +30,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
     private var controlsRow: NSStackView?
     private var toggleButton: NSButton?
     private var stopButton: NSButton?
+    private var closeButton: NSButton?
     private weak var effectView: FloatingTimerBackgroundView?
     private(set) var isHovered = false
     private var didRefreshProjectPopupDuringHover = false
@@ -90,6 +91,14 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
 
     var controlsAlphaForTesting: CGFloat {
         controlsRow?.alphaValue ?? 0
+    }
+
+    var closeButtonAlphaForTesting: CGFloat {
+        closeButton?.alphaValue ?? 0
+    }
+
+    var closeButtonForTesting: NSButton? {
+        closeButton
     }
 
     var projectLabelAlphaForTesting: CGFloat {
@@ -316,15 +325,35 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
     private func renderHoverState() {
         let controlsAlpha: CGFloat = isHovered ? 1 : 0
         let dotsAlpha: CGFloat = isHovered ? 0 : 1
-        dotsField?.alphaValue = dotsAlpha
-        controlsRow?.alphaValue = controlsAlpha
+        fadeAlpha(of: dotsField, to: dotsAlpha)
+        fadeAlpha(of: controlsRow, to: controlsAlpha)
+        fadeAlpha(of: projectField, to: dotsAlpha)
+        fadeAlpha(of: projectPopup, to: controlsAlpha)
+        fadeAlpha(of: closeButton, to: controlsAlpha)
         controlsRow?.isHidden = !isHovered
         dotsField?.isHidden = isHovered
-        projectField?.alphaValue = dotsAlpha
-        projectPopup?.alphaValue = controlsAlpha
         projectPopup?.isHidden = !isHovered
         projectField?.isHidden = isHovered
+        closeButton?.isHidden = !isHovered
     }
+
+    private func fadeAlpha(of view: NSView?, to target: CGFloat) {
+        guard let view else { return }
+        let previous = view.alphaValue
+        view.alphaValue = target
+        guard previous != target,
+              Self.hoverTransitionDuration > 0,
+              let layer = view.layer
+        else { return }
+        let anim = CABasicAnimation(keyPath: "opacity")
+        anim.fromValue = Float(previous)
+        anim.toValue = Float(target)
+        anim.duration = Self.hoverTransitionDuration
+        anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(anim, forKey: "hoverFade")
+    }
+
+    static var hoverTransitionDuration: TimeInterval = 0.12
 
     private static func color(for phaseColor: FloatingTimerViewModel.PhaseColor) -> NSColor {
         switch phaseColor {
@@ -361,24 +390,10 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         let frame = NSRect(origin: .zero, size: Self.panelSize)
         let panel = FloatingTimerPanel(
             contentRect: frame,
-            styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        // `.titled` causes NSWindow to inflate the frame by the title bar height
-        // when interpreting contentRect; force the frame back to panelSize so the
-        // visual footprint and saved per-monitor positions stay consistent.
-        panel.setFrame(NSRect(origin: .zero, size: Self.panelSize), display: false)
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
-        // The slice spec only asks for the close button; defensively hide the
-        // others in case a future styleMask change re-adds them.
-        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
-        panel.standardWindowButton(.zoomButton)?.isHidden = true
-        if let closeButton = panel.standardWindowButton(.closeButton) {
-            closeButton.target = self
-            closeButton.action = #selector(closeButtonClicked(_:))
-        }
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
@@ -493,7 +508,18 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         stack.edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
+        let close = Self.makeCloseButton(target: self, action: #selector(closeButtonClicked(_:)))
+        close.alphaValue = 0
+        close.isHidden = true
+
         effect.addSubview(stack)
+        effect.addSubview(close)
+        NSLayoutConstraint.activate([
+            close.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: 8),
+            close.topAnchor.constraint(equalTo: effect.topAnchor, constant: 8),
+            close.widthAnchor.constraint(equalToConstant: 14),
+            close.heightAnchor.constraint(equalToConstant: 14)
+        ])
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
@@ -505,7 +531,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
             project.widthAnchor.constraint(lessThanOrEqualTo: projectSlot.widthAnchor),
             popup.centerXAnchor.constraint(equalTo: projectSlot.centerXAnchor),
             popup.centerYAnchor.constraint(equalTo: projectSlot.centerYAnchor),
-            popup.widthAnchor.constraint(equalTo: projectSlot.widthAnchor),
+            popup.widthAnchor.constraint(lessThanOrEqualTo: projectSlot.widthAnchor),
             dotsSlot.widthAnchor.constraint(equalToConstant: Self.visualSize.width - 24),
             dotsSlot.heightAnchor.constraint(equalToConstant: 24),
             dots.centerXAnchor.constraint(equalTo: dotsSlot.centerXAnchor),
@@ -525,6 +551,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         controlsRow = controls
         toggleButton = toggle
         stopButton = stop
+        closeButton = close
         effectView = effect
 
         renderControls()
@@ -533,12 +560,31 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         return panel
     }
 
+    private static func makeCloseButton(target: AnyObject, action: Selector) -> NSButton {
+        let button = NSButton()
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.bezelStyle = .regularSquare
+        button.isBordered = false
+        button.title = ""
+        if let image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Close") {
+            let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+            button.image = image.withSymbolConfiguration(config)
+        }
+        button.imagePosition = .imageOnly
+        button.contentTintColor = .tertiaryLabelColor
+        button.target = target
+        button.action = action
+        button.toolTip = "Hide timer"
+        return button
+    }
+
     private static func makeControlButton(title: String, target: AnyObject, action: Selector) -> NSButton {
         let button = NSButton(title: title, target: target, action: action)
         button.bezelStyle = .texturedRounded
         button.controlSize = .small
         button.font = .systemFont(ofSize: 11, weight: .medium)
         button.setButtonType(.momentaryPushIn)
+        button.contentTintColor = .secondaryLabelColor
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }
