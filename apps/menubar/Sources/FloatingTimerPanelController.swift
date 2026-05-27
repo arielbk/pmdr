@@ -26,8 +26,13 @@ final class FloatingTimerPanelController: NSObject {
     private var projectField: NSTextField?
     private var timeField: NSTextField?
     private var dotsField: NSTextField?
+    private var controlsRow: NSStackView?
+    private var toggleButton: NSButton?
+    private var stopButton: NSButton?
     private weak var effectView: FloatingTimerBackgroundView?
     private(set) var isHovered = false
+    private var currentStatus: Status = .idle
+    private var toggleSymbolName = "play.fill"
     private var snapshot = Snapshot(
         phaseLabel: "IDLE",
         projectName: "",
@@ -73,9 +78,50 @@ final class FloatingTimerPanelController: NSObject {
         effectView?.trackingAreas.first
     }
 
+    var visualEffectViewForTesting: NSVisualEffectView? {
+        effectView
+    }
+
+    var dotsAlphaForTesting: CGFloat {
+        dotsField?.alphaValue ?? 0
+    }
+
+    var controlsAlphaForTesting: CGFloat {
+        controlsRow?.alphaValue ?? 0
+    }
+
+    var areControlsVisibleForTesting: Bool {
+        controlsRow?.isHidden == false
+    }
+
+    var toggleButtonTitleForTesting: String? {
+        toggleButton?.title
+    }
+
+    var toggleButtonSymbolNameForTesting: String {
+        toggleSymbolName
+    }
+
+    var isStopButtonEnabledForTesting: Bool {
+        stopButton?.isEnabled ?? false
+    }
+
+    func setHoveredForTesting(_ hovered: Bool) {
+        setHovered(hovered)
+    }
+
+    func clickToggleButtonForTesting() {
+        toggleButtonClicked(toggleButton)
+    }
+
+    func clickStopButtonForTesting() {
+        stopButtonClicked(stopButton)
+    }
+
     private func setHovered(_ hovered: Bool) {
         guard isHovered != hovered else { return }
         isHovered = hovered
+        renderHoverState()
     }
 
     func toggle() {
@@ -134,6 +180,7 @@ final class FloatingTimerPanelController: NSObject {
     }
 
     func update(status: Status, lastProject: String?, elapsedSincePoll: TimeInterval) {
+        currentStatus = status
         let viewModel = FloatingTimerViewModel(
             status: status,
             lastProject: lastProject,
@@ -150,6 +197,22 @@ final class FloatingTimerPanelController: NSObject {
         render()
     }
 
+    @objc private func toggleButtonClicked(_ sender: Any?) {
+        switch currentStatus {
+        case .idle:
+            startTimer(project: snapshot.projectName.isEmpty ? nil : snapshot.projectName)
+        case .running:
+            pauseTimer()
+        case .paused:
+            resumeTimer()
+        }
+    }
+
+    @objc private func stopButtonClicked(_ sender: Any?) {
+        guard stopButton?.isEnabled == true else { return }
+        stopTimer()
+    }
+
     private func render() {
         phaseField?.stringValue = snapshot.phaseLabel
         phaseField?.textColor = snapshot.isMuted ? .tertiaryLabelColor : .labelColor
@@ -161,6 +224,37 @@ final class FloatingTimerPanelController: NSObject {
             completed: snapshot.completedFocusBlocks,
             isMuted: snapshot.isMuted
         )
+        renderControls()
+        renderHoverState()
+    }
+
+    private func renderControls() {
+        switch currentStatus {
+        case .idle:
+            toggleButton?.title = "Start"
+            toggleSymbolName = "play.fill"
+            stopButton?.isEnabled = false
+        case .running:
+            toggleButton?.title = "Pause"
+            toggleSymbolName = "pause.fill"
+            stopButton?.isEnabled = true
+        case .paused:
+            toggleButton?.title = "Resume"
+            toggleSymbolName = "play.fill"
+            stopButton?.isEnabled = true
+        }
+
+        toggleButton?.image = NSImage(systemSymbolName: toggleSymbolName, accessibilityDescription: toggleButton?.title)
+        toggleButton?.imagePosition = .imageLeading
+    }
+
+    private func renderHoverState() {
+        let controlsAlpha: CGFloat = isHovered ? 1 : 0
+        let dotsAlpha: CGFloat = isHovered ? 0 : 1
+        dotsField?.alphaValue = dotsAlpha
+        controlsRow?.alphaValue = controlsAlpha
+        controlsRow?.isHidden = !isHovered
+        dotsField?.isHidden = isHovered
     }
 
     private static func color(for phaseColor: FloatingTimerViewModel.PhaseColor) -> NSColor {
@@ -283,7 +377,28 @@ final class FloatingTimerPanelController: NSObject {
             isMuted: snapshot.isMuted
         )
 
-        let stack = NSStackView(views: [phase, project, time, dots])
+        let toggle = Self.makeControlButton(title: "Start", target: self, action: #selector(toggleButtonClicked(_:)))
+        let stop = Self.makeControlButton(title: "Stop", target: self, action: #selector(stopButtonClicked(_:)))
+        if let image = NSImage(systemSymbolName: "stop.fill", accessibilityDescription: "Stop") {
+            stop.image = image
+            stop.imagePosition = .imageLeading
+        }
+        let controls = NSStackView(views: [toggle, stop])
+        controls.orientation = .horizontal
+        controls.alignment = .centerY
+        controls.distribution = .gravityAreas
+        controls.spacing = 8
+        controls.alphaValue = 0
+        controls.isHidden = true
+        controls.translatesAutoresizingMaskIntoConstraints = false
+
+        let dotsSlot = NSView()
+        dotsSlot.translatesAutoresizingMaskIntoConstraints = false
+        dots.translatesAutoresizingMaskIntoConstraints = false
+        dotsSlot.addSubview(dots)
+        dotsSlot.addSubview(controls)
+
+        let stack = NSStackView(views: [phase, project, time, dotsSlot])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 2
@@ -296,7 +411,13 @@ final class FloatingTimerPanelController: NSObject {
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
-            stack.centerYAnchor.constraint(equalTo: effect.centerYAnchor)
+            stack.centerYAnchor.constraint(equalTo: effect.centerYAnchor),
+            dotsSlot.widthAnchor.constraint(equalToConstant: Self.visualSize.width - 24),
+            dotsSlot.heightAnchor.constraint(equalToConstant: 24),
+            dots.centerXAnchor.constraint(equalTo: dotsSlot.centerXAnchor),
+            dots.centerYAnchor.constraint(equalTo: dotsSlot.centerYAnchor),
+            controls.centerXAnchor.constraint(equalTo: dotsSlot.centerXAnchor),
+            controls.centerYAnchor.constraint(equalTo: dotsSlot.centerYAnchor)
         ])
 
         contentView.addSubview(effect)
@@ -306,9 +427,25 @@ final class FloatingTimerPanelController: NSObject {
         projectField = project
         timeField = time
         dotsField = dots
+        controlsRow = controls
+        toggleButton = toggle
+        stopButton = stop
         effectView = effect
 
+        renderControls()
+        renderHoverState()
+
         return panel
+    }
+
+    private static func makeControlButton(title: String, target: AnyObject, action: Selector) -> NSButton {
+        let button = NSButton(title: title, target: target, action: action)
+        button.bezelStyle = .texturedRounded
+        button.controlSize = .small
+        button.font = .systemFont(ofSize: 11, weight: .medium)
+        button.setButtonType(.momentaryPushIn)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
     }
 
     private func position(_ panel: NSPanel, on screen: NSScreen?) {

@@ -81,7 +81,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertFalse(panel.isOpaque)
         XCTAssertEqual(panel.backgroundColor, .clear)
 
-        let effect = panel.contentView as? NSVisualEffectView
+        let effect = controller.visualEffectViewForTesting
         XCTAssertNotNil(effect)
         XCTAssertEqual(effect?.material, .hudWindow)
         XCTAssertEqual(effect?.blendingMode, .behindWindow)
@@ -315,6 +315,116 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
 
         owner.mouseExited(with: enterExitEvent(.mouseExited))
         XCTAssertFalse(controller.isHovered)
+    }
+
+    func testDotsAreVisibleAndControlsHiddenWhenNotHovered() {
+        let controller = FloatingTimerPanelController()
+        controller.show()
+
+        controller.setHoveredForTesting(false)
+
+        XCTAssertEqual(controller.dotsAlphaForTesting, 1)
+        XCTAssertEqual(controller.controlsAlphaForTesting, 0)
+        XCTAssertFalse(controller.areControlsVisibleForTesting)
+    }
+
+    func testControlsAreVisibleAndDotsHiddenWhenHovered() {
+        let controller = FloatingTimerPanelController()
+        controller.show()
+
+        controller.setHoveredForTesting(true)
+
+        XCTAssertEqual(controller.dotsAlphaForTesting, 0)
+        XCTAssertEqual(controller.controlsAlphaForTesting, 1)
+        XCTAssertTrue(controller.areControlsVisibleForTesting)
+    }
+
+    func testToggleButtonStartsWhenIdle() {
+        let sink = RecordingActionSink()
+        let controller = FloatingTimerPanelController(actions: sink)
+        controller.show()
+        controller.update(status: .idle, lastProject: "Writing", elapsedSincePoll: 0)
+
+        XCTAssertEqual(controller.toggleButtonTitleForTesting, "Start")
+        XCTAssertEqual(controller.toggleButtonSymbolNameForTesting, "play.fill")
+
+        controller.clickToggleButtonForTesting()
+
+        XCTAssertEqual(sink.calls, [.start(project: "Writing")])
+    }
+
+    func testToggleButtonPausesWhenRunning() {
+        let sink = RecordingActionSink()
+        let controller = FloatingTimerPanelController(actions: sink)
+        controller.show()
+        controller.update(
+            status: .running(active(remainingMs: 60_000, phase: .focus, project: "Deep Work")),
+            lastProject: nil,
+            elapsedSincePoll: 0
+        )
+
+        XCTAssertEqual(controller.toggleButtonTitleForTesting, "Pause")
+        XCTAssertEqual(controller.toggleButtonSymbolNameForTesting, "pause.fill")
+
+        controller.clickToggleButtonForTesting()
+
+        XCTAssertEqual(sink.calls, [.pause])
+    }
+
+    func testToggleButtonResumesWhenPaused() {
+        let sink = RecordingActionSink()
+        let controller = FloatingTimerPanelController(actions: sink)
+        controller.show()
+        controller.update(
+            status: .paused(active(remainingMs: 60_000, phase: .break, project: "Break")),
+            lastProject: nil,
+            elapsedSincePoll: 0
+        )
+
+        XCTAssertEqual(controller.toggleButtonTitleForTesting, "Resume")
+        XCTAssertEqual(controller.toggleButtonSymbolNameForTesting, "play.fill")
+
+        controller.clickToggleButtonForTesting()
+
+        XCTAssertEqual(sink.calls, [.resume])
+    }
+
+    func testStopButtonEnabledStateFollowsStatusAndCallsStop() {
+        let sink = RecordingActionSink()
+        let controller = FloatingTimerPanelController(actions: sink)
+        controller.show()
+
+        controller.update(status: .idle, lastProject: nil, elapsedSincePoll: 0)
+        XCTAssertFalse(controller.isStopButtonEnabledForTesting)
+
+        controller.update(
+            status: .running(active(remainingMs: 60_000, phase: .focus, project: "Deep Work")),
+            lastProject: nil,
+            elapsedSincePoll: 0
+        )
+        XCTAssertTrue(controller.isStopButtonEnabledForTesting)
+        controller.clickStopButtonForTesting()
+
+        controller.update(
+            status: .paused(active(remainingMs: 60_000, phase: .focus, project: "Deep Work")),
+            lastProject: nil,
+            elapsedSincePoll: 0
+        )
+        XCTAssertTrue(controller.isStopButtonEnabledForTesting)
+
+        XCTAssertEqual(sink.calls, [.stop])
+    }
+
+    func testPanelFrameIsIdenticalAcrossHoverStates() {
+        let controller = FloatingTimerPanelController()
+        controller.show()
+        let initialFrame = controller.panelForTesting?.frame
+
+        controller.setHoveredForTesting(true)
+        XCTAssertEqual(controller.panelForTesting?.frame, initialFrame)
+
+        controller.setHoveredForTesting(false)
+        XCTAssertEqual(controller.panelForTesting?.frame, initialFrame)
     }
 
     private func enterExitEvent(_ type: NSEvent.EventType) -> NSEvent {

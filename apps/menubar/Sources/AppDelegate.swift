@@ -515,7 +515,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
 
     // MARK: FloatingTimerActions
 
-    @MainActor
     func start(project: String?) {
         if let project {
             startProject(project)
@@ -526,27 +525,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         }
     }
 
-    @MainActor
     func pause() {
         performClientAction(optimistic: optimisticPause()) { try await $0.pause() }
     }
 
-    @MainActor
     func resume() {
         performClientAction(optimistic: optimisticResume()) { try await $0.resume() }
     }
 
-    @MainActor
     func stop() {
         performClientAction { try await $0.stop() }
     }
 
-    @MainActor
     func setProject(_ project: String?) {
         performClientAction { try await $0.setProject(project) }
     }
 
-    @MainActor
     func listProjects() -> [ProjectRecord] {
         projects.filter { !$0.archived }
     }

@@ -48,7 +48,7 @@ Adds a native macOS close button and hover-revealed controls (play/pause toggle,
 
 ### `controls-row` — Crossfade play/pause + stop into the dots slot on hover
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** On hover, the dots row crossfades to a horizontal row containing a play/pause toggle button and a stop button. Toggle button's symbol/action follows the state-to-control table in the PRD (Start when IDLE, Pause when running, Resume when paused). Stop is disabled in IDLE. Clicks invoke the corresponding action-sink method. No layout shift.
 

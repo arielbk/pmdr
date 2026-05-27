@@ -2,7 +2,6 @@ import Foundation
 
 /// Action sink for the floating timer panel. Implementers map UI events to
 /// concrete CLI calls without leaking `PmdrClient` into the controller.
-@MainActor
 public protocol FloatingTimerActions: AnyObject {
     func start(project: String?)
     func pause()
