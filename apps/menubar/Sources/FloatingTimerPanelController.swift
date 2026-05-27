@@ -2,7 +2,7 @@ import AppKit
 import PmdrMenubarCore
 
 @MainActor
-final class FloatingTimerPanelController: NSObject {
+final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
     struct Snapshot: Equatable {
         var phaseLabel: String
         var projectName: String
@@ -24,6 +24,7 @@ final class FloatingTimerPanelController: NSObject {
     private var panel: NSPanel?
     private var phaseField: NSTextField?
     private var projectField: NSTextField?
+    private var projectPopup: NSPopUpButton?
     private var timeField: NSTextField?
     private var dotsField: NSTextField?
     private var controlsRow: NSStackView?
@@ -31,6 +32,7 @@ final class FloatingTimerPanelController: NSObject {
     private var stopButton: NSButton?
     private weak var effectView: FloatingTimerBackgroundView?
     private(set) var isHovered = false
+    private var didRefreshProjectPopupDuringHover = false
     private var currentStatus: Status = .idle
     private var toggleSymbolName = "play.fill"
     private var snapshot = Snapshot(
@@ -90,6 +92,26 @@ final class FloatingTimerPanelController: NSObject {
         controlsRow?.alphaValue ?? 0
     }
 
+    var projectLabelAlphaForTesting: CGFloat {
+        projectField?.alphaValue ?? 0
+    }
+
+    var projectPopupAlphaForTesting: CGFloat {
+        projectPopup?.alphaValue ?? 0
+    }
+
+    var isProjectPopupVisibleForTesting: Bool {
+        projectPopup?.isHidden == false
+    }
+
+    var projectPopupItemTitlesForTesting: [String] {
+        projectPopup?.itemTitles ?? []
+    }
+
+    var selectedProjectPopupTitleForTesting: String? {
+        projectPopup?.titleOfSelectedItem
+    }
+
     var areControlsVisibleForTesting: Bool {
         controlsRow?.isHidden == false
     }
@@ -118,9 +140,22 @@ final class FloatingTimerPanelController: NSObject {
         stopButtonClicked(stopButton)
     }
 
+    func selectProjectPopupItemForTesting(title: String) {
+        projectPopup?.selectItem(withTitle: title)
+        projectPopupSelectionChanged(projectPopup)
+    }
+
+    func openProjectPopupForTesting() {
+        guard let menu = projectPopup?.menu else { return }
+        menuWillOpen(menu)
+    }
+
     private func setHovered(_ hovered: Bool) {
         guard isHovered != hovered else { return }
         isHovered = hovered
+        if !hovered {
+            didRefreshProjectPopupDuringHover = false
+        }
         renderHoverState()
     }
 
@@ -137,6 +172,7 @@ final class FloatingTimerPanelController: NSObject {
         self.panel = panel
         position(panel, on: screenProvider())
         render()
+        refreshProjectPopup()
         panel.orderFrontRegardless()
     }
 
@@ -200,7 +236,7 @@ final class FloatingTimerPanelController: NSObject {
     @objc private func toggleButtonClicked(_ sender: Any?) {
         switch currentStatus {
         case .idle:
-            startTimer(project: snapshot.projectName.isEmpty ? nil : snapshot.projectName)
+            startTimer(project: selectedProjectForStarting())
         case .running:
             pauseTimer()
         case .paused:
@@ -211,6 +247,23 @@ final class FloatingTimerPanelController: NSObject {
     @objc private func stopButtonClicked(_ sender: Any?) {
         guard stopButton?.isEnabled == true else { return }
         stopTimer()
+    }
+
+    private func selectedProjectForStarting() -> String? {
+        if let selected = projectPopup?.titleOfSelectedItem, !selected.isEmpty {
+            return selected
+        }
+        return snapshot.projectName.isEmpty ? nil : snapshot.projectName
+    }
+
+    @objc private func projectPopupSelectionChanged(_ sender: Any?) {
+        selectProject(projectPopup?.titleOfSelectedItem)
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === projectPopup?.menu, isHovered, !didRefreshProjectPopupDuringHover else { return }
+        didRefreshProjectPopupDuringHover = true
+        refreshProjectPopup()
     }
 
     private func render() {
@@ -226,6 +279,18 @@ final class FloatingTimerPanelController: NSObject {
         )
         renderControls()
         renderHoverState()
+    }
+
+    private func refreshProjectPopup() {
+        guard let projectPopup else { return }
+
+        let selectedTitle = snapshot.projectName.isEmpty ? projectPopup.titleOfSelectedItem : snapshot.projectName
+        let projects = availableProjects().filter { !$0.archived }
+        projectPopup.removeAllItems()
+        projectPopup.addItems(withTitles: projects.map(\.name))
+        if let selectedTitle, !selectedTitle.isEmpty {
+            projectPopup.selectItem(withTitle: selectedTitle)
+        }
     }
 
     private func renderControls() {
@@ -255,6 +320,10 @@ final class FloatingTimerPanelController: NSObject {
         controlsRow?.alphaValue = controlsAlpha
         controlsRow?.isHidden = !isHovered
         dotsField?.isHidden = isHovered
+        projectField?.alphaValue = dotsAlpha
+        projectPopup?.alphaValue = controlsAlpha
+        projectPopup?.isHidden = !isHovered
+        projectField?.isHidden = isHovered
     }
 
     private static func color(for phaseColor: FloatingTimerViewModel.PhaseColor) -> NSColor {
@@ -365,6 +434,23 @@ final class FloatingTimerPanelController: NSObject {
         project.lineBreakMode = .byTruncatingTail
         project.maximumNumberOfLines = 1
 
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        popup.controlSize = .small
+        popup.font = .systemFont(ofSize: 11, weight: .regular)
+        popup.bezelStyle = .texturedRounded
+        popup.target = self
+        popup.action = #selector(projectPopupSelectionChanged(_:))
+        popup.alphaValue = 0
+        popup.isHidden = true
+        popup.translatesAutoresizingMaskIntoConstraints = false
+        popup.menu?.delegate = self
+
+        let projectSlot = NSView()
+        projectSlot.translatesAutoresizingMaskIntoConstraints = false
+        project.translatesAutoresizingMaskIntoConstraints = false
+        projectSlot.addSubview(project)
+        projectSlot.addSubview(popup)
+
         let time = FloatingTimerLabel(labelWithString: snapshot.time)
         time.font = .monospacedDigitSystemFont(ofSize: 36, weight: .semibold)
         time.textColor = snapshot.phaseColor
@@ -398,11 +484,11 @@ final class FloatingTimerPanelController: NSObject {
         dotsSlot.addSubview(dots)
         dotsSlot.addSubview(controls)
 
-        let stack = NSStackView(views: [phase, project, time, dotsSlot])
+        let stack = NSStackView(views: [phase, projectSlot, time, dotsSlot])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 2
-        stack.setCustomSpacing(6, after: project)
+        stack.setCustomSpacing(6, after: projectSlot)
         stack.setCustomSpacing(6, after: time)
         stack.edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -412,6 +498,14 @@ final class FloatingTimerPanelController: NSObject {
             stack.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
             stack.centerYAnchor.constraint(equalTo: effect.centerYAnchor),
+            projectSlot.widthAnchor.constraint(equalToConstant: Self.visualSize.width - 24),
+            projectSlot.heightAnchor.constraint(equalToConstant: 22),
+            project.centerXAnchor.constraint(equalTo: projectSlot.centerXAnchor),
+            project.centerYAnchor.constraint(equalTo: projectSlot.centerYAnchor),
+            project.widthAnchor.constraint(lessThanOrEqualTo: projectSlot.widthAnchor),
+            popup.centerXAnchor.constraint(equalTo: projectSlot.centerXAnchor),
+            popup.centerYAnchor.constraint(equalTo: projectSlot.centerYAnchor),
+            popup.widthAnchor.constraint(equalTo: projectSlot.widthAnchor),
             dotsSlot.widthAnchor.constraint(equalToConstant: Self.visualSize.width - 24),
             dotsSlot.heightAnchor.constraint(equalToConstant: 24),
             dots.centerXAnchor.constraint(equalTo: dotsSlot.centerXAnchor),
@@ -425,6 +519,7 @@ final class FloatingTimerPanelController: NSObject {
 
         phaseField = phase
         projectField = project
+        projectPopup = popup
         timeField = time
         dotsField = dots
         controlsRow = controls

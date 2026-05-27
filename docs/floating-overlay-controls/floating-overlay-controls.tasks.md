@@ -62,7 +62,7 @@ Adds a native macOS close button and hover-revealed controls (play/pause toggle,
 
 ### `project-popup` — Crossfade an NSPopUpButton into the project-label slot on hover
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** On hover, the project name label crossfades to an `NSPopUpButton` populated from `listProjects()` (active project preselected). Selecting an item calls `setProject(_:)` via the action sink. List refreshes on panel show; refresh again the first time the popup is opened during a hover session.
 

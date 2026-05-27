@@ -343,6 +343,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         let sink = RecordingActionSink()
         let controller = FloatingTimerPanelController(actions: sink)
         controller.show()
+        sink.calls.removeAll()
         controller.update(status: .idle, lastProject: "Writing", elapsedSincePoll: 0)
 
         XCTAssertEqual(controller.toggleButtonTitleForTesting, "Start")
@@ -357,6 +358,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         let sink = RecordingActionSink()
         let controller = FloatingTimerPanelController(actions: sink)
         controller.show()
+        sink.calls.removeAll()
         controller.update(
             status: .running(active(remainingMs: 60_000, phase: .focus, project: "Deep Work")),
             lastProject: nil,
@@ -375,6 +377,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         let sink = RecordingActionSink()
         let controller = FloatingTimerPanelController(actions: sink)
         controller.show()
+        sink.calls.removeAll()
         controller.update(
             status: .paused(active(remainingMs: 60_000, phase: .break, project: "Break")),
             lastProject: nil,
@@ -393,6 +396,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         let sink = RecordingActionSink()
         let controller = FloatingTimerPanelController(actions: sink)
         controller.show()
+        sink.calls.removeAll()
 
         controller.update(status: .idle, lastProject: nil, elapsedSincePoll: 0)
         XCTAssertFalse(controller.isStopButtonEnabledForTesting)
@@ -416,6 +420,150 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
     }
 
     func testPanelFrameIsIdenticalAcrossHoverStates() {
+        let controller = FloatingTimerPanelController()
+        controller.show()
+        let initialFrame = controller.panelForTesting?.frame
+
+        controller.setHoveredForTesting(true)
+        XCTAssertEqual(controller.panelForTesting?.frame, initialFrame)
+
+        controller.setHoveredForTesting(false)
+        XCTAssertEqual(controller.panelForTesting?.frame, initialFrame)
+    }
+
+    func testProjectLabelIsVisibleAndPopupHiddenWhenNotHovered() {
+        let controller = FloatingTimerPanelController()
+        controller.show()
+
+        controller.setHoveredForTesting(false)
+
+        XCTAssertEqual(controller.projectLabelAlphaForTesting, 1)
+        XCTAssertEqual(controller.projectPopupAlphaForTesting, 0)
+        XCTAssertFalse(controller.isProjectPopupVisibleForTesting)
+    }
+
+    func testProjectPopupIsVisibleAndLabelHiddenWhenHovered() {
+        let controller = FloatingTimerPanelController()
+        controller.show()
+
+        controller.setHoveredForTesting(true)
+
+        XCTAssertEqual(controller.projectLabelAlphaForTesting, 0)
+        XCTAssertEqual(controller.projectPopupAlphaForTesting, 1)
+        XCTAssertTrue(controller.isProjectPopupVisibleForTesting)
+    }
+
+    func testProjectPopupItemsFilterArchivedProjects() {
+        let sink = RecordingActionSink()
+        sink.stubbedProjects = [
+            ProjectRecord(name: "Deep Work", archived: false, createdAt: "2026-01-01"),
+            ProjectRecord(name: "Old Work", archived: true, createdAt: "2026-01-02"),
+            ProjectRecord(name: "Admin", archived: false, createdAt: "2026-01-03"),
+        ]
+        let controller = FloatingTimerPanelController(actions: sink)
+
+        controller.show()
+
+        XCTAssertEqual(controller.projectPopupItemTitlesForTesting, ["Deep Work", "Admin"])
+        XCTAssertEqual(sink.calls, [.listProjects])
+    }
+
+    func testProjectPopupPreselectsCurrentActiveProject() {
+        let sink = RecordingActionSink()
+        sink.stubbedProjects = [
+            ProjectRecord(name: "Deep Work", archived: false, createdAt: "2026-01-01"),
+            ProjectRecord(name: "Admin", archived: false, createdAt: "2026-01-02"),
+        ]
+        let controller = FloatingTimerPanelController(actions: sink)
+        controller.update(
+            status: .running(active(remainingMs: 60_000, phase: .focus, project: "Admin")),
+            lastProject: nil,
+            elapsedSincePoll: 0
+        )
+
+        controller.show()
+
+        XCTAssertEqual(controller.selectedProjectPopupTitleForTesting, "Admin")
+    }
+
+    func testProjectPopupPreselectsLastProjectWhenIdle() {
+        let sink = RecordingActionSink()
+        sink.stubbedProjects = [
+            ProjectRecord(name: "Deep Work", archived: false, createdAt: "2026-01-01"),
+            ProjectRecord(name: "Admin", archived: false, createdAt: "2026-01-02"),
+        ]
+        let controller = FloatingTimerPanelController(actions: sink)
+        controller.update(status: .idle, lastProject: "Deep Work", elapsedSincePoll: 0)
+
+        controller.show()
+
+        XCTAssertEqual(controller.selectedProjectPopupTitleForTesting, "Deep Work")
+    }
+
+    func testSelectingProjectPopupItemInvokesSetProject() {
+        let sink = RecordingActionSink()
+        sink.stubbedProjects = [
+            ProjectRecord(name: "Deep Work", archived: false, createdAt: "2026-01-01"),
+            ProjectRecord(name: "Admin", archived: false, createdAt: "2026-01-02"),
+        ]
+        let controller = FloatingTimerPanelController(actions: sink)
+        controller.show()
+        sink.calls.removeAll()
+
+        controller.selectProjectPopupItemForTesting(title: "Admin")
+
+        XCTAssertEqual(sink.calls, [.setProject("Admin")])
+    }
+
+    func testStartUsesSelectedProjectPopupItemWhenIdle() {
+        let sink = RecordingActionSink()
+        sink.stubbedProjects = [
+            ProjectRecord(name: "Writing", archived: false, createdAt: "2026-01-01"),
+            ProjectRecord(name: "Admin", archived: false, createdAt: "2026-01-02"),
+        ]
+        let controller = FloatingTimerPanelController(actions: sink)
+        controller.update(status: .idle, lastProject: "Writing", elapsedSincePoll: 0)
+        controller.show()
+        controller.setHoveredForTesting(true)
+
+        controller.selectProjectPopupItemForTesting(title: "Admin")
+        sink.calls.removeAll()
+        controller.clickToggleButtonForTesting()
+
+        XCTAssertEqual(sink.calls, [.start(project: "Admin")])
+    }
+
+    func testProjectPopupRefreshesOnceWhenOpenedDuringHoverSession() {
+        let sink = RecordingActionSink()
+        sink.stubbedProjects = [
+            ProjectRecord(name: "Deep Work", archived: false, createdAt: "2026-01-01"),
+        ]
+        let controller = FloatingTimerPanelController(actions: sink)
+        controller.show()
+        sink.calls.removeAll()
+
+        controller.setHoveredForTesting(true)
+        sink.stubbedProjects = [
+            ProjectRecord(name: "Deep Work", archived: false, createdAt: "2026-01-01"),
+            ProjectRecord(name: "Admin", archived: false, createdAt: "2026-01-02"),
+        ]
+
+        controller.openProjectPopupForTesting()
+        controller.openProjectPopupForTesting()
+
+        XCTAssertEqual(controller.projectPopupItemTitlesForTesting, ["Deep Work", "Admin"])
+        XCTAssertEqual(sink.calls, [.listProjects])
+
+        controller.setHoveredForTesting(false)
+        controller.setHoveredForTesting(true)
+        sink.calls.removeAll()
+
+        controller.openProjectPopupForTesting()
+
+        XCTAssertEqual(sink.calls, [.listProjects])
+    }
+
+    func testPanelFrameIsIdenticalAcrossProjectPopupHoverStates() {
         let controller = FloatingTimerPanelController()
         controller.show()
         let initialFrame = controller.panelForTesting?.frame
