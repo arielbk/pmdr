@@ -20,7 +20,7 @@ Adds a native macOS close button and hover-revealed controls (play/pause toggle,
 
 ### `native-close-button` — Replace borderless chrome with transparent-titlebar + close button
 
-**Status:** needs-review
+**Status:** done
 
 **Outside-in:** The floating panel shows a real macOS close traffic-light in the top-left corner. Clicking it calls the same `hide()` path as the toggle hotkey. No miniaturize/zoom buttons. Panel visual size unchanged; no extra vertical space added.
 
@@ -48,7 +48,7 @@ Adds a native macOS close button and hover-revealed controls (play/pause toggle,
 
 ### `controls-row` — Crossfade play/pause + stop into the dots slot on hover
 
-**Status:** needs-review
+**Status:** done
 
 **Outside-in:** On hover, the dots row crossfades to a horizontal row containing a play/pause toggle button and a stop button. Toggle button's symbol/action follows the state-to-control table in the PRD (Start when IDLE, Pause when running, Resume when paused). Stop is disabled in IDLE. Clicks invoke the corresponding action-sink method. No layout shift.
 
