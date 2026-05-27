@@ -99,12 +99,12 @@ export function setProjectLogic(
   }
 
   const file = stateStore.readState();
-  if (!file) {
-    throw new Error("No timer is running");
-  }
 
   if (hasNone) {
-    stateStore.writeState({ ...file, project: "(unassigned)" });
+    if (file) {
+      stateStore.writeState({ ...file, project: "(unassigned)" });
+    }
+    projectsStore.writeLastProject(null);
     return { name: "(unassigned)" };
   }
 
@@ -116,7 +116,10 @@ export function setProjectLogic(
   }
 
   const record = projectsStore.upsertProject(trimmed);
-  stateStore.writeState({ ...file, project: record.name });
+  if (file) {
+    stateStore.writeState({ ...file, project: record.name });
+  }
+  projectsStore.writeLastProject(record.name);
   return { name: record.name };
 }
 
@@ -246,7 +249,10 @@ const unarchiveCmd = defineCommand({
 });
 
 const setCmd = defineCommand({
-  meta: { description: "Reassign the currently running session to a project" },
+  meta: {
+    description:
+      "Set the active project — reassigns a running session and remembers it for the next start when idle",
+  },
   args: {
     name: {
       type: "positional",
@@ -271,7 +277,12 @@ const setCmd = defineCommand({
       console.error((e as Error).message);
       process.exit(1);
     }
-    console.log(`Session reassigned to "${result.name}"`);
+    const file = stateStore.readState();
+    if (file) {
+      console.log(`Session reassigned to "${result.name}"`);
+    } else {
+      console.log(`Remembered "${result.name}" for the next session`);
+    }
   },
 });
 
