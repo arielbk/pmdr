@@ -100,7 +100,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         controller.show()
 
         controller.update(
-            status: .running(active(remainingMs: 1_499_000, phase: .focus, project: "Deep Work", completedFocusBlocks: 2)),
+            status: .running(active(remainingMs: 1_499_000, phase: .focus, project: "Deep Work", todayFocusBlocks: 2)),
             lastProject: "Admin",
             elapsedSincePoll: 0
         )
@@ -168,11 +168,46 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertEqual(snapshot.phaseColor, .secondaryLabelColor)
     }
 
+    func testActionMethodsRouteToInjectedSink() {
+        let sink = RecordingActionSink()
+        sink.stubbedProjects = [
+            ProjectRecord(name: "Deep Work", archived: false, createdAt: "2026-01-01"),
+            ProjectRecord(name: "Admin", archived: false, createdAt: "2026-01-02"),
+        ]
+        let controller = FloatingTimerPanelController(actions: sink)
+
+        controller.startTimer(project: "Deep Work")
+        controller.pauseTimer()
+        controller.resumeTimer()
+        controller.stopTimer()
+        controller.selectProject("Admin")
+        controller.selectProject(nil)
+        let projects = controller.availableProjects()
+
+        XCTAssertEqual(sink.calls, [
+            .start(project: "Deep Work"),
+            .pause,
+            .resume,
+            .stop,
+            .setProject("Admin"),
+            .setProject(nil),
+            .listProjects,
+        ])
+        XCTAssertEqual(projects.map(\.name), ["Deep Work", "Admin"])
+    }
+
+    func testAvailableProjectsReturnsEmptyWhenNoSinkInjected() {
+        let controller = FloatingTimerPanelController()
+
+        XCTAssertTrue(controller.availableProjects().isEmpty)
+    }
+
     private func active(
         remainingMs: Int,
         phase: Phase,
         project: String?,
-        completedFocusBlocks: Int = 0
+        completedFocusBlocks: Int = 0,
+        todayFocusBlocks: Int = 0
     ) -> Status.Active {
         Status.Active(
             remainingMs: remainingMs,
@@ -180,6 +215,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
             startedAt: 0,
             phase: phase,
             completedFocusBlocks: completedFocusBlocks,
+            todayFocusBlocks: todayFocusBlocks,
             project: project
         )
     }
@@ -189,6 +225,31 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         return defaults
+    }
+}
+
+@MainActor
+private final class RecordingActionSink: FloatingTimerActions {
+    enum Call: Equatable {
+        case start(project: String?)
+        case pause
+        case resume
+        case stop
+        case setProject(String?)
+        case listProjects
+    }
+
+    var calls: [Call] = []
+    var stubbedProjects: [ProjectRecord] = []
+
+    func start(project: String?) { calls.append(.start(project: project)) }
+    func pause() { calls.append(.pause) }
+    func resume() { calls.append(.resume) }
+    func stop() { calls.append(.stop) }
+    func setProject(_ project: String?) { calls.append(.setProject(project)) }
+    func listProjects() -> [ProjectRecord] {
+        calls.append(.listProjects)
+        return stubbedProjects
     }
 }
 

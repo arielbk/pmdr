@@ -37,6 +37,7 @@ final class FloatingTimerPanelController {
 
     private let positionStore: FloatingTimerPosition
     private let screenProvider: () -> NSScreen?
+    private weak var actions: FloatingTimerActions?
 
     init(
         positionStore: FloatingTimerPosition = FloatingTimerPosition(),
@@ -45,10 +46,12 @@ final class FloatingTimerPanelController {
             return NSScreen.screens.first { $0.frame.contains(mouse) }
                 ?? NSScreen.main
                 ?? NSScreen.screens.first
-        }
+        },
+        actions: FloatingTimerActions? = nil
     ) {
         self.positionStore = positionStore
         self.screenProvider = screenProvider
+        self.actions = actions
     }
 
     var panelForTesting: NSPanel? {
@@ -88,6 +91,30 @@ final class FloatingTimerPanelController {
         }
 
         positionStore.record(panel.frame.origin, for: screen)
+    }
+
+    func startTimer(project: String?) {
+        actions?.start(project: project)
+    }
+
+    func pauseTimer() {
+        actions?.pause()
+    }
+
+    func resumeTimer() {
+        actions?.resume()
+    }
+
+    func stopTimer() {
+        actions?.stop()
+    }
+
+    func selectProject(_ project: String?) {
+        actions?.setProject(project)
+    }
+
+    func availableProjects() -> [ProjectRecord] {
+        actions?.listProjects() ?? []
     }
 
     func update(status: Status, lastProject: String?, elapsedSincePoll: TimeInterval) {
