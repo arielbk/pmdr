@@ -4,7 +4,7 @@ import Foundation
 import os.log
 import PmdrMenubarCore
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, FloatingTimerActions {
     private var statusItem: NSStatusItem?
     private var client: PmdrClient?
     private var poller: StatusPoller?
@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var redrawTimer: Timer?
     private var lastStatus: Status = .idle
     private var lastPollAt: Date = .distantPast
+    private var stateGeneration: UInt64 = 0
+    private var mutationChain: Task<Void, Never>?
     private var projects: [ProjectRecord] = []
     private var didShowBinaryAlert = false
     private var didShowHotkeyAlert = false
@@ -42,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         self.statusItem = item
-        floatingTimerPanelController = FloatingTimerPanelController()
+        floatingTimerPanelController = FloatingTimerPanelController(actions: self)
         rebuildMenu()
         registerHotkey()
 
@@ -65,10 +67,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             while !Task.isCancelled {
                 guard let self else { return }
                 do {
+                    let generationAtStart = await MainActor.run { self.stateGeneration }
                     let events = try await poller.pollOnce()
                     let now = Date()
                     let status = await poller.currentStatus() ?? .idle
                     await MainActor.run {
+                        guard self.stateGeneration == generationAtStart else { return }
                         self.lastStatus = status
                         self.lastPollAt = now
                         self.updateIcon(for: status)
@@ -228,11 +232,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func pauseFromMenu(_ sender: NSMenuItem) {
-        performClientAction { try await $0.pause() }
+        performClientAction(optimistic: optimisticPause()) { try await $0.pause() }
     }
 
     @objc private func resumeFromMenu(_ sender: NSMenuItem) {
-        performClientAction { try await $0.resume() }
+        performClientAction(optimistic: optimisticResume()) { try await $0.resume() }
     }
 
     @objc private func stopFromMenu(_ sender: NSMenuItem) {
@@ -250,7 +254,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func startNoneFromMenu(_ sender: NSMenuItem) {
-        performClientAction { try await $0.start(project: nil, forceUnassigned: true) }
+        performClientAction(optimistic: optimisticStart(project: nil)) {
+            try await $0.start(project: nil, forceUnassigned: true)
+        }
     }
 
     @objc private func newProjectFromMenu(_ sender: NSMenuItem) {
@@ -285,7 +291,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func startProject(_ project: String) {
-        performClientAction { try await $0.start(project: project) }
+        performClientAction(optimistic: optimisticStart(project: project)) {
+            try await $0.start(project: project)
+        }
     }
 
     private func promptForNewProjectName(confirmTitle: String) -> String? {
@@ -303,29 +311,93 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private func performClientAction(_ action: @escaping @Sendable (PmdrClient) async throws -> Void) {
+    private func performClientAction(
+        optimistic: Status? = nil,
+        _ action: @escaping @Sendable (PmdrClient) async throws -> Void
+    ) {
         guard let client else { return }
-        Task { [weak self] in
+        if let optimistic {
+            MainActor.assumeIsolated {
+                applyOptimisticStatus(optimistic)
+            }
+        }
+        let hadOptimistic = optimistic != nil
+        let previous = mutationChain
+        let task = Task { [weak self] in
+            await previous?.value
             guard let self else { return }
             do {
                 try await action(client)
                 try await self.refreshFromCLI()
             } catch {
                 os_log("Failed to mutate pmdr state: %{public}@", log: self.log, type: .error, String(describing: error))
+                if hadOptimistic {
+                    try? await self.refreshFromCLI()
+                }
                 await MainActor.run {
                     self.surfaceClientErrorIfNeeded(error)
                 }
             }
         }
+        mutationChain = task
+    }
+
+    @MainActor
+    private func applyOptimisticStatus(_ status: Status) {
+        self.stateGeneration &+= 1
+        self.lastStatus = status
+        self.lastPollAt = Date()
+        self.updateIcon(for: status)
+        self.rebuildMenu()
+        self.redrawTitle()
+        self.redrawFloatingTimer()
+    }
+
+    private func optimisticPause() -> Status? {
+        guard case .running(let active) = lastStatus else { return nil }
+        let elapsedMs = Int(Date().timeIntervalSince(lastPollAt) * 1000)
+        let remaining = max(0, active.remainingMs - elapsedMs)
+        let paused = Status.Active(
+            remainingMs: remaining,
+            durationMs: active.durationMs,
+            startedAt: active.startedAt,
+            phase: active.phase,
+            completedFocusBlocks: active.completedFocusBlocks,
+            todayFocusBlocks: active.todayFocusBlocks,
+            project: active.project
+        )
+        return .paused(paused)
+    }
+
+    private func optimisticResume() -> Status? {
+        guard case .paused(let active) = lastStatus else { return nil }
+        return .running(active)
+    }
+
+    private func optimisticStart(project: String?) -> Status {
+        let duration = 25 * 60 * 1_000
+        let active = Status.Active(
+            remainingMs: duration,
+            durationMs: duration,
+            startedAt: Int(Date().timeIntervalSince1970 * 1000),
+            phase: .focus,
+            completedFocusBlocks: 0,
+            todayFocusBlocks: 0,
+            project: project
+        )
+        return .running(active)
     }
 
     private func refreshFromCLI() async throws {
         guard let poller else { return }
+        let generationAtStart = await MainActor.run { self.stateGeneration }
         let events = try await poller.pollOnce()
         let status = await poller.currentStatus() ?? .idle
         let projects = try await client?.listProjects() ?? []
         let now = Date()
-        await MainActor.run {
+        let applied = await MainActor.run { () -> Bool in
+            guard self.stateGeneration == generationAtStart else { return false }
+            self.stateGeneration &+= 1
             self.lastStatus = status
             self.lastPollAt = now
             self.projects = projects
@@ -333,8 +405,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.rebuildMenu()
             self.redrawTitle()
             self.redrawFloatingTimer()
+            return true
         }
-        await notifier?.handle(events)
+        if applied {
+            await notifier?.handle(events)
+        }
     }
 
     private func registerHotkey() {
@@ -372,9 +447,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             startProject(project)
         case .running:
-            performClientAction { try await $0.pause() }
+            performClientAction(optimistic: optimisticPause()) { try await $0.pause() }
         case .paused:
-            performClientAction { try await $0.resume() }
+            performClientAction(optimistic: optimisticResume()) { try await $0.resume() }
         }
     }
 
@@ -436,6 +511,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.informativeText = "Another app is already using Option-Command-Return."
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+
+    // MARK: FloatingTimerActions
+
+    func start(project: String?) {
+        if let project {
+            startProject(project)
+        } else {
+            performClientAction(optimistic: optimisticStart(project: nil)) {
+                try await $0.start(project: nil, forceUnassigned: true)
+            }
+        }
+    }
+
+    func pause() {
+        performClientAction(optimistic: optimisticPause()) { try await $0.pause() }
+    }
+
+    func resume() {
+        performClientAction(optimistic: optimisticResume()) { try await $0.resume() }
+    }
+
+    func stop() {
+        performClientAction { try await $0.stop() }
+    }
+
+    func setProject(_ project: String?) {
+        performClientAction { try await $0.setProject(project) }
+    }
+
+    func listProjects() -> [ProjectRecord] {
+        projects.filter { !$0.archived }
     }
 
     // MARK: NSMenuDelegate

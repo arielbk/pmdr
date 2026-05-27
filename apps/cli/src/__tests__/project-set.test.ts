@@ -93,10 +93,18 @@ describe("setProjectLogic", () => {
     });
   });
 
-  it("throws when no session is running", () => {
-    expect(() => setProjectLogic(projects, store, { name: "anything" })).toThrow(
-      /no.*(timer|session).*running/i,
-    );
+  it("remembers the project for next run when no session is active", () => {
+    const result = setProjectLogic(projects, store, { name: "anything" });
+    expect(result.name).toBe("anything");
+    expect(projects.readLastProject()).toBe("anything");
+    expect(store.readState()).toBeNull();
+  });
+
+  it("clears the remembered project with --none when idle", () => {
+    projects.writeLastProject("Alpha");
+    const result = setProjectLogic(projects, store, { none: true });
+    expect(result.name).toBe("(unassigned)");
+    expect(projects.readLastProject()).toBeNull();
   });
 
   it("throws when both name and --none are given", () => {

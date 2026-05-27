@@ -29,14 +29,14 @@ public struct FloatingTimerViewModel: Equatable, Sendable {
             projectName = active.project ?? ""
             isMuted = false
             phaseColor = active.phase == .focus ? .focus : .break
-            completedFocusBlocks = active.completedFocusBlocks
+            completedFocusBlocks = active.todayFocusBlocks
         case .paused(let active):
             time = Self.format(remainingMs: active.remainingMs)
             phaseLabel = active.phase.rawValue
             projectName = active.project ?? ""
             isMuted = false
             phaseColor = .muted
-            completedFocusBlocks = active.completedFocusBlocks
+            completedFocusBlocks = active.todayFocusBlocks
         }
     }
 

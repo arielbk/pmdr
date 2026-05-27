@@ -104,7 +104,7 @@ final class FloatingTimerViewModelTests: XCTestCase {
 
     func test_completedFocusBlocks_reflectsActiveValue() {
         let vm = FloatingTimerViewModel(
-            status: .running(active(remainingMs: 60_000, phase: .focus, project: nil, completedFocusBlocks: 3)),
+            status: .running(active(remainingMs: 60_000, phase: .focus, project: nil, todayFocusBlocks: 3)),
             lastProject: nil
         )
         XCTAssertEqual(vm.completedFocusBlocks, 3)
@@ -114,7 +114,8 @@ final class FloatingTimerViewModelTests: XCTestCase {
         remainingMs: Int,
         phase: Phase,
         project: String?,
-        completedFocusBlocks: Int = 0
+        completedFocusBlocks: Int = 0,
+        todayFocusBlocks: Int = 0
     ) -> Status.Active {
         Status.Active(
             remainingMs: remainingMs,
@@ -122,6 +123,7 @@ final class FloatingTimerViewModelTests: XCTestCase {
             startedAt: 0,
             phase: phase,
             completedFocusBlocks: completedFocusBlocks,
+            todayFocusBlocks: todayFocusBlocks,
             project: project
         )
     }

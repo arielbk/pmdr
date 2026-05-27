@@ -40,3 +40,6 @@ yarn-error.log*
 
 # ccusage / local tool output
 report.json
+
+# Claude Code local runtime state
+.claude/scheduled_tasks.lock
