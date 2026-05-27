@@ -16,8 +16,25 @@ export type StatusResult =
       startedAt: number;
       phase: "focus" | "break";
       completedFocusBlocks: number;
+      todayFocusBlocks: number;
       project?: string;
     };
+
+function countTodayFocusBlocks(
+  store: ReturnType<typeof createStateModule>,
+  now: number,
+): number {
+  const completions = store.readCompletions();
+  const today = new Date(now);
+  return completions.filter((c) => {
+    const d = new Date(c.completedAt);
+    return (
+      d.getFullYear() === today.getFullYear() &&
+      d.getMonth() === today.getMonth() &&
+      d.getDate() === today.getDate()
+    );
+  }).length;
+}
 
 export function getStatus(opts: {
   store: ReturnType<typeof createStateModule>;
@@ -34,6 +51,8 @@ export function getStatus(opts: {
     return { state: "idle" };
   }
 
+  const todayFocusBlocks = countTodayFocusBlocks(store, now);
+
   const base = {
     state: derived.kind,
     remainingMs: derived.remainingMs,
@@ -41,6 +60,7 @@ export function getStatus(opts: {
     startedAt: file!.startedAt,
     phase: file!.phase ?? "focus",
     completedFocusBlocks: file!.completedFocusBlocks ?? 0,
+    todayFocusBlocks,
   } as const;
 
   return file!.project ? { ...base, project: file!.project } : base;

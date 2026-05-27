@@ -34,7 +34,7 @@ Adds a native macOS close button and hover-revealed controls (play/pause toggle,
 
 ### `hover-tracking` — Add hover state to the panel
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `FloatingTimerPanelController` exposes an observable `isHovered` flag driven by an `NSTrackingArea` on the visual-effect view (`.mouseEnteredAndExited | .activeAlways | .inVisibleRect`).
 

@@ -202,6 +202,45 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertTrue(controller.availableProjects().isEmpty)
     }
 
+    func testHoverTrackingTogglesIsHovered() {
+        let controller = FloatingTimerPanelController()
+        controller.show()
+
+        XCTAssertFalse(controller.isHovered)
+
+        guard let trackingArea = controller.trackingAreaForTesting,
+              let owner = trackingArea.owner as? NSView
+        else {
+            XCTFail("Expected a tracking area owned by a view")
+            return
+        }
+
+        XCTAssertTrue(trackingArea.options.contains(.mouseEnteredAndExited))
+        XCTAssertTrue(trackingArea.options.contains(.activeAlways))
+        XCTAssertTrue(trackingArea.options.contains(.inVisibleRect))
+        XCTAssertEqual(trackingArea.rect, owner.bounds)
+
+        owner.mouseEntered(with: enterExitEvent(.mouseEntered))
+        XCTAssertTrue(controller.isHovered)
+
+        owner.mouseExited(with: enterExitEvent(.mouseExited))
+        XCTAssertFalse(controller.isHovered)
+    }
+
+    private func enterExitEvent(_ type: NSEvent.EventType) -> NSEvent {
+        NSEvent.enterExitEvent(
+            with: type,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 0,
+            trackingNumber: 0,
+            userData: nil
+        )!
+    }
+
     private func active(
         remainingMs: Int,
         phase: Phase,

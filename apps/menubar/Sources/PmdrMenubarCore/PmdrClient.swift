@@ -18,6 +18,7 @@ public enum Status: Equatable, Sendable {
         public let startedAt: Int
         public let phase: Phase
         public let completedFocusBlocks: Int
+        public let todayFocusBlocks: Int
         public let project: String?
 
         public init(
@@ -26,6 +27,7 @@ public enum Status: Equatable, Sendable {
             startedAt: Int,
             phase: Phase,
             completedFocusBlocks: Int,
+            todayFocusBlocks: Int = 0,
             project: String? = nil
         ) {
             self.remainingMs = remainingMs
@@ -33,6 +35,7 @@ public enum Status: Equatable, Sendable {
             self.startedAt = startedAt
             self.phase = phase
             self.completedFocusBlocks = completedFocusBlocks
+            self.todayFocusBlocks = todayFocusBlocks
             self.project = project
         }
     }
@@ -143,6 +146,7 @@ public struct PmdrClient: Sendable {
         let startedAt: Int?
         let phase: Phase?
         let completedFocusBlocks: Int?
+        let todayFocusBlocks: Int?
         let project: String?
     }
 
@@ -184,6 +188,7 @@ public struct PmdrClient: Sendable {
                 startedAt: startedAt,
                 phase: phase,
                 completedFocusBlocks: blocks,
+                todayFocusBlocks: raw.todayFocusBlocks ?? 0,
                 project: raw.project
             )
             return raw.state == "running" ? .running(active) : .paused(active)

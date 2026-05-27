@@ -26,6 +26,8 @@ final class FloatingTimerPanelController {
     private var projectField: NSTextField?
     private var timeField: NSTextField?
     private var dotsField: NSTextField?
+    private weak var effectView: FloatingTimerBackgroundView?
+    private(set) var isHovered = false
     private var snapshot = Snapshot(
         phaseLabel: "IDLE",
         projectName: "",
@@ -60,6 +62,15 @@ final class FloatingTimerPanelController {
 
     var snapshotForTesting: Snapshot {
         snapshot
+    }
+
+    var trackingAreaForTesting: NSTrackingArea? {
+        effectView?.trackingAreas.first
+    }
+
+    private func setHovered(_ hovered: Bool) {
+        guard isHovered != hovered else { return }
+        isHovered = hovered
     }
 
     func toggle() {
@@ -218,6 +229,17 @@ final class FloatingTimerPanelController {
         effect.layer?.cornerRadius = Self.cornerRadius
         effect.layer?.masksToBounds = true
 
+        let trackingArea = NSTrackingArea(
+            rect: effect.bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: effect,
+            userInfo: nil
+        )
+        effect.addTrackingArea(trackingArea)
+        effect.onHoverChange = { [weak self] hovered in
+            self?.setHovered(hovered)
+        }
+
         let phase = FloatingTimerLabel(labelWithString: snapshot.phaseLabel)
         phase.font = .systemFont(ofSize: 10, weight: .semibold)
         phase.textColor = snapshot.isMuted ? .tertiaryLabelColor : .labelColor
@@ -265,6 +287,7 @@ final class FloatingTimerPanelController {
         projectField = project
         timeField = time
         dotsField = dots
+        effectView = effect
 
         return panel
     }
@@ -292,8 +315,18 @@ private final class FloatingTimerPanel: NSPanel {
 }
 
 private final class FloatingTimerBackgroundView: NSVisualEffectView {
+    var onHoverChange: ((Bool) -> Void)?
+
     override var mouseDownCanMoveWindow: Bool {
         true
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHoverChange?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHoverChange?(false)
     }
 }
 

@@ -51,6 +51,7 @@ describe("getStatus", () => {
       startedAt: NOW - 5_000,
       phase: "focus",
       completedFocusBlocks: 0,
+      todayFocusBlocks: 0,
     });
   });
 
@@ -72,6 +73,7 @@ describe("getStatus", () => {
       startedAt: NOW - 10_000,
       phase: "focus",
       completedFocusBlocks: 2,
+      todayFocusBlocks: 0,
     });
   });
 
@@ -210,6 +212,7 @@ describe("formatStatus", () => {
       startedAt: 0,
       phase: "focus",
       completedFocusBlocks: 0,
+      todayFocusBlocks: 0,
     };
     // 1122000ms = 18m42s
     expect(formatStatus(r)).toBe("focus — 18:42 left (block 1/4)");
@@ -223,6 +226,7 @@ describe("formatStatus", () => {
       startedAt: 0,
       phase: "focus",
       completedFocusBlocks: 2,
+      todayFocusBlocks: 0,
     };
     expect(formatStatus(r)).toBe("focus paused — 18:42 left (block 3/4)");
   });
@@ -235,6 +239,7 @@ describe("formatStatus", () => {
       startedAt: 0,
       phase: "break",
       completedFocusBlocks: 1,
+      todayFocusBlocks: 1,
     };
     expect(formatStatus(r)).toBe("break — 4:30 left (1/4 done)");
   });
@@ -247,6 +252,7 @@ describe("formatStatus", () => {
       startedAt: 0,
       phase: "focus",
       completedFocusBlocks: 0,
+      todayFocusBlocks: 0,
     };
     expect(formatStatus(r)).toBe("focus — 0:00 left (block 1/4)");
   });
@@ -259,6 +265,7 @@ describe("formatStatus", () => {
       startedAt: 0,
       phase: "focus",
       completedFocusBlocks: 0,
+      todayFocusBlocks: 0,
     };
     expect(formatStatus(r)).toBe("focus — 1:05 left (block 1/4)");
   });
