@@ -202,6 +202,96 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertTrue(controller.availableProjects().isEmpty)
     }
 
+    func testPanelChromeUsesTitledClosableAndFullSizeContentView() {
+        let controller = FloatingTimerPanelController()
+
+        controller.show()
+
+        guard let panel = controller.panelForTesting else {
+            XCTFail("Expected show() to create a panel")
+            return
+        }
+        XCTAssertTrue(panel.styleMask.contains(.titled))
+        XCTAssertTrue(panel.styleMask.contains(.closable))
+        XCTAssertTrue(panel.styleMask.contains(.fullSizeContentView))
+        XCTAssertTrue(panel.styleMask.contains(.nonactivatingPanel))
+        XCTAssertEqual(panel.titleVisibility, .hidden)
+        XCTAssertTrue(panel.titlebarAppearsTransparent)
+    }
+
+    func testMiniaturizeAndZoomButtonsAreHidden() {
+        let controller = FloatingTimerPanelController()
+
+        controller.show()
+
+        guard let panel = controller.panelForTesting else {
+            XCTFail("Expected show() to create a panel")
+            return
+        }
+        // Buttons are either nil (absent from styleMask) or explicitly hidden.
+        if let miniaturize = panel.standardWindowButton(.miniaturizeButton) {
+            XCTAssertTrue(miniaturize.isHidden)
+        }
+        if let zoom = panel.standardWindowButton(.zoomButton) {
+            XCTAssertTrue(zoom.isHidden)
+        }
+    }
+
+    func testCloseButtonTargetActionInvokesHide() {
+        let controller = FloatingTimerPanelController()
+        controller.show()
+
+        guard let panel = controller.panelForTesting else {
+            XCTFail("Expected show() to create a panel")
+            return
+        }
+        XCTAssertTrue(panel.isVisible)
+
+        guard let closeButton = panel.standardWindowButton(.closeButton) else {
+            XCTFail("Expected a standard close button")
+            return
+        }
+        XCTAssertFalse(closeButton.isHidden)
+        guard let target = closeButton.target, let action = closeButton.action else {
+            XCTFail("Expected close button to have target/action wired")
+            return
+        }
+        _ = (target as AnyObject).perform(action, with: closeButton)
+
+        XCTAssertFalse(panel.isVisible)
+    }
+
+    func testPanelFrameSizeIsUnchangedByTitledChrome() {
+        let controller = FloatingTimerPanelController()
+
+        controller.show()
+
+        guard let panel = controller.panelForTesting else {
+            XCTFail("Expected show() to create a panel")
+            return
+        }
+        XCTAssertEqual(panel.frame.size, FloatingTimerPanelController.defaultPanelSize)
+    }
+
+    func testCloseButtonRoundTripsPerMonitorPosition() {
+        let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let store = FloatingTimerPosition(defaults: makeDefaults())
+        let controller = FloatingTimerPanelController(positionStore: store, screenProvider: { screen })
+        controller.show()
+        controller.panelForTesting?.setFrameOrigin(NSPoint(x: 222, y: 333))
+
+        guard let closeButton = controller.panelForTesting?.standardWindowButton(.closeButton),
+              let target = closeButton.target,
+              let action = closeButton.action
+        else {
+            XCTFail("Expected close button target/action")
+            return
+        }
+        _ = (target as AnyObject).perform(action, with: closeButton)
+
+        XCTAssertEqual(store.position(for: screen), NSPoint(x: 222, y: 333))
+    }
+
     func testHoverTrackingTogglesIsHovered() {
         let controller = FloatingTimerPanelController()
         controller.show()

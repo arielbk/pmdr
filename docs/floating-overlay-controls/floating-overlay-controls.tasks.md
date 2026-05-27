@@ -6,7 +6,7 @@ Adds a native macOS close button and hover-revealed controls (play/pause toggle,
 
 ### `action-sink` — Inject an action sink into the panel controller
 
-**Status:** needs-review
+**Status:** done
 
 **Outside-in:** `FloatingTimerPanelController` accepts an `actions` parameter (closure-set or small protocol) exposing `start(project:)`, `pause()`, `resume()`, `stop()`, `setProject(_:)`, `listProjects()`. `AppDelegate` injects an implementation backed by the existing `PmdrClient`.
 
@@ -20,7 +20,7 @@ Adds a native macOS close button and hover-revealed controls (play/pause toggle,
 
 ### `native-close-button` — Replace borderless chrome with transparent-titlebar + close button
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** The floating panel shows a real macOS close traffic-light in the top-left corner. Clicking it calls the same `hide()` path as the toggle hotkey. No miniaturize/zoom buttons. Panel visual size unchanged; no extra vertical space added.
 

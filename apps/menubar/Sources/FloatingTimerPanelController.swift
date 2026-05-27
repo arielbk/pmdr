@@ -2,7 +2,7 @@ import AppKit
 import PmdrMenubarCore
 
 @MainActor
-final class FloatingTimerPanelController {
+final class FloatingTimerPanelController: NSObject {
     struct Snapshot: Equatable {
         var phaseLabel: String
         var projectName: String
@@ -54,6 +54,11 @@ final class FloatingTimerPanelController {
         self.positionStore = positionStore
         self.screenProvider = screenProvider
         self.actions = actions
+        super.init()
+    }
+
+    @objc private func closeButtonClicked(_ sender: Any?) {
+        hide()
     }
 
     var panelForTesting: NSPanel? {
@@ -193,10 +198,24 @@ final class FloatingTimerPanelController {
         let frame = NSRect(origin: .zero, size: Self.panelSize)
         let panel = FloatingTimerPanel(
             contentRect: frame,
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
+        // `.titled` causes NSWindow to inflate the frame by the title bar height
+        // when interpreting contentRect; force the frame back to panelSize so the
+        // visual footprint and saved per-monitor positions stay consistent.
+        panel.setFrame(NSRect(origin: .zero, size: Self.panelSize), display: false)
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        // The slice spec only asks for the close button; defensively hide the
+        // others in case a future styleMask change re-adds them.
+        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.standardWindowButton(.zoomButton)?.isHidden = true
+        if let closeButton = panel.standardWindowButton(.closeButton) {
+            closeButton.target = self
+            closeButton.action = #selector(closeButtonClicked(_:))
+        }
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
