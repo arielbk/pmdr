@@ -318,7 +318,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
             stopButton?.isEnabled = true
         }
 
-        toggleButton?.image = NSImage(systemSymbolName: toggleSymbolName, accessibilityDescription: toggleButton?.title)
+        toggleButton?.image = Self.controlSymbolImage(named: toggleSymbolName, accessibility: toggleButton?.title)
         toggleButton?.imagePosition = .imageLeading
     }
 
@@ -453,6 +453,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         popup.controlSize = .small
         popup.font = .systemFont(ofSize: 11, weight: .regular)
         popup.bezelStyle = .texturedRounded
+        popup.contentTintColor = .secondaryLabelColor
         popup.target = self
         popup.action = #selector(projectPopupSelectionChanged(_:))
         popup.alphaValue = 0
@@ -480,7 +481,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
 
         let toggle = Self.makeControlButton(title: "Start", target: self, action: #selector(toggleButtonClicked(_:)))
         let stop = Self.makeControlButton(title: "Stop", target: self, action: #selector(stopButtonClicked(_:)))
-        if let image = NSImage(systemSymbolName: "stop.fill", accessibilityDescription: "Stop") {
+        if let image = Self.controlSymbolImage(named: "stop.fill", accessibility: "Stop") {
             stop.image = image
             stop.imagePosition = .imageLeading
         }
@@ -576,6 +577,14 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         button.action = action
         button.toolTip = "Hide timer"
         return button
+    }
+
+    private static func controlSymbolImage(named name: String, accessibility: String?) -> NSImage? {
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: accessibility) else {
+            return nil
+        }
+        let palette = NSImage.SymbolConfiguration(paletteColors: [.secondaryLabelColor])
+        return image.withSymbolConfiguration(palette) ?? image
     }
 
     private static func makeControlButton(title: String, target: AnyObject, action: Selector) -> NSButton {
