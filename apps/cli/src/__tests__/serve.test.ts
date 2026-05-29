@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -179,10 +179,58 @@ describe("pmdr serve status page", () => {
       fetch: async () => ({
         json: async () => status,
       }),
+      setInterval: () => 0,
+      clearInterval: () => undefined,
     });
     await new Promise((resolve) => setImmediate(resolve));
 
     return { document, nodes };
+  }
+
+  async function renderPageWithTimers(statusOrStatuses: unknown | unknown[]) {
+    vi.useFakeTimers({ now: NOW });
+    const html = getPageHtml();
+    const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
+    expect(script).toBeTruthy();
+    const statuses = Array.isArray(statusOrStatuses)
+      ? [...statusOrStatuses]
+      : [statusOrStatuses];
+    let fetchCount = 0;
+
+    const nodes = {
+      label: { textContent: "" },
+      countdown: { textContent: "" },
+      project: { textContent: "" },
+    };
+    const document = {
+      body: { dataset: {} as Record<string, string> },
+      querySelector(selector: string) {
+        if (selector === '[data-testid="status-label"]') return nodes.label;
+        if (selector === '[data-testid="countdown"]') return nodes.countdown;
+        if (selector === '[data-testid="project"]') return nodes.project;
+        return null;
+      },
+    };
+
+    runInNewContext(script!, {
+      document,
+      fetch: async () => {
+        const status =
+          statuses[Math.min(fetchCount, statuses.length - 1)] ?? {
+            state: "idle",
+          };
+        fetchCount += 1;
+        return {
+          json: async () => status,
+        };
+      },
+      Date,
+      setInterval,
+      clearInterval,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    return { document, nodes, fetchCount: () => fetchCount };
   }
 
   it("serves a self-contained page that can render running and idle status", () => {
@@ -245,5 +293,67 @@ describe("pmdr serve status page", () => {
     expect(nodes.label.textContent).toBe("Focus paused");
     expect(nodes.countdown.textContent).toBe("0:52");
     expect(nodes.project.textContent).toBe("deepwork");
+  });
+
+  it("ticks the running countdown locally between status polls", async () => {
+    try {
+      const { nodes } = await renderPageWithTimers({
+        state: "running",
+        remainingMs: 55_000,
+        duration: 60_000,
+        startedAt: NOW - 5_000,
+        phase: "focus",
+        completedFocusBlocks: 0,
+        todayFocusBlocks: 0,
+        project: "deepwork",
+      });
+
+      expect(nodes.countdown.textContent).toBe("0:55");
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      expect(nodes.countdown.textContent).toBe("0:54");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("polls status and updates the already loaded page", async () => {
+    try {
+      const { nodes, fetchCount } = await renderPageWithTimers([
+        {
+          state: "running",
+          remainingMs: 55_000,
+          duration: 60_000,
+          startedAt: NOW - 5_000,
+          phase: "focus",
+          completedFocusBlocks: 0,
+          todayFocusBlocks: 0,
+          project: "deepwork",
+        },
+        {
+          state: "paused",
+          remainingMs: 52_000,
+          duration: 60_000,
+          startedAt: NOW - 10_000,
+          phase: "focus",
+          completedFocusBlocks: 0,
+          todayFocusBlocks: 0,
+          project: "deepwork",
+        },
+      ]);
+
+      expect(fetchCount()).toBe(1);
+      expect(nodes.label.textContent).toBe("Focus");
+
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(fetchCount()).toBe(2);
+      expect(nodes.label.textContent).toBe("Focus paused");
+      expect(nodes.countdown.textContent).toBe("0:52");
+      expect(nodes.project.textContent).toBe("deepwork");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

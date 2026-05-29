@@ -146,6 +146,19 @@ const STATUS_PAGE_HTML = `<!doctype html>
       return status.state === "paused" ? phase + " paused" : phase;
     }
 
+    let currentStatus = null;
+    let statusReceivedAt = 0;
+
+    function visibleRemaining(status) {
+      if (status.state !== "running") return status.remainingMs;
+      return Math.max(0, status.remainingMs - (Date.now() - statusReceivedAt));
+    }
+
+    function renderCurrentStatus() {
+      if (!currentStatus) return;
+      render(currentStatus);
+    }
+
     function render(status) {
       document.body.dataset.state = status.state;
 
@@ -157,19 +170,29 @@ const STATUS_PAGE_HTML = `<!doctype html>
       }
 
       label.textContent = phaseLabel(status);
-      countdown.textContent = formatRemaining(status.remainingMs);
+      countdown.textContent = formatRemaining(visibleRemaining(status));
       project.textContent = status.project || "";
     }
 
-    fetch("/api/status", { cache: "no-store" })
+    function fetchStatus() {
+      return fetch("/api/status", { cache: "no-store" })
       .then((response) => response.json())
-      .then(render)
+      .then((status) => {
+        currentStatus = status;
+        statusReceivedAt = Date.now();
+        renderCurrentStatus();
+      })
       .catch(() => {
         document.body.dataset.state = "error";
         label.textContent = "Unavailable";
         countdown.textContent = "--:--";
         project.textContent = "";
       });
+    }
+
+    fetchStatus();
+    setInterval(renderCurrentStatus, 1000);
+    setInterval(fetchStatus, 5000);
   </script>
 </body>
 </html>`;

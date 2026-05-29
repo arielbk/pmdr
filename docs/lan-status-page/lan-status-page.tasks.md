@@ -52,7 +52,7 @@ review.
 
 ### `live-updates` — Self-updating countdown
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** The page keeps itself current with no reload: it ticks the
 countdown down locally every second from `remainingMs`, and polls `/api/status`

@@ -51,3 +51,12 @@
 - Socket/browser smoke test — blocked by sandbox `EPERM` on `listen()` for `127.0.0.1`; page behavior was verified through the public request handler and execution of the served inline script with seeded status payloads.
 
 **Notes:** The end-of-run human review remains responsible for visual styling fidelity against the macOS overlay, per the slice plan.
+
+---
+
+## `live-updates` — 2026-05-29 15:45:00
+
+**Status:** done
+**Summary:** The served status page now keeps the loaded status payload in page state, ticks a running countdown locally every second, and polls `/api/status` every five seconds so pause/resume/project/idle transitions appear without a reload. Added VM-executed page-script tests for local ticking and polling a running-to-paused transition.
+**Deviations:** The requested browser feedback loop could not be run because this sandbox rejects local socket listening; behavior was verified through the public request handler and served inline script instead.
+**Handoff:** `setInterval(renderCurrentStatus, 1000)` owns display-only ticking from the last fetched `remainingMs`, while `setInterval(fetchStatus, 5000)` refreshes from the server. Feedback run: `pnpm --filter cli test -- src/__tests__/serve.test.ts src/__tests__/status.test.ts` passed 28/28, `pnpm --filter cli check-types` passed, `pnpm --filter cli build` passed; `pnpm --filter cli lint` remains blocked by the existing ESLint 9 missing flat-config issue.
