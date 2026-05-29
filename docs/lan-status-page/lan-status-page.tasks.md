@@ -70,7 +70,7 @@ reflects the new state without a manual reload.
 
 ### `lan-reachability-and-docs` — LAN reachability + README
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** The page is reachable from another device on the LAN at
 `http://<machine-name>.local:<port>`, and `pmdr serve` is documented in the

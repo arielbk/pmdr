@@ -52,11 +52,18 @@
 
 **Notes:** The end-of-run human review remains responsible for visual styling fidelity against the macOS overlay, per the slice plan.
 
----
-
 ## `live-updates` — 2026-05-29 15:45:00
 
 **Status:** done
 **Summary:** The served status page now keeps the loaded status payload in page state, ticks a running countdown locally every second, and polls `/api/status` every five seconds so pause/resume/project/idle transitions appear without a reload. Added VM-executed page-script tests for local ticking and polling a running-to-paused transition.
 **Deviations:** The requested browser feedback loop could not be run because this sandbox rejects local socket listening; behavior was verified through the public request handler and served inline script instead.
 **Handoff:** `setInterval(renderCurrentStatus, 1000)` owns display-only ticking from the last fetched `remainingMs`, while `setInterval(fetchStatus, 5000)` refreshes from the server. Feedback run: `pnpm --filter cli test -- src/__tests__/serve.test.ts src/__tests__/status.test.ts` passed 28/28, `pnpm --filter cli check-types` passed, `pnpm --filter cli build` passed; `pnpm --filter cli lint` remains blocked by the existing ESLint 9 missing flat-config issue.
+
+---
+
+## `lan-reachability-and-docs` — 2026-05-29 15:47:34
+
+**Status:** needs-review
+**Summary:** Documented `pmdr serve` in the README's "Running the CLI" section, including the default long-running LAN status page command, `--port <port>`, and the `http://<machine-name>.local:<port>` URL to open from another device. Added a README documentation test so the CLI section keeps covering the LAN status-page command.
+**Deviations:** The requested second-device LAN reachability check cannot be performed from this sandbox, so the slice is settled as `needs-review` for manual verification.
+**Handoff:** Feedback run: `pnpm --filter cli test -- src/__tests__/readme.test.ts src/__tests__/serve.test.ts src/__tests__/status.test.ts` passed 29/29, `pnpm --filter cli check-types` passed, and `pnpm --filter cli build` passed. `pnpm --filter cli lint` remains blocked by the existing ESLint 9 missing flat-config issue.

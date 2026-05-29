@@ -43,3 +43,6 @@ report.json
 
 # Claude Code local runtime state
 .claude/scheduled_tasks.lock
+
+# Local design/implementation docs (specs, tasks, logs, QA) — not tracked
+docs/
