@@ -24,3 +24,30 @@
 - Ephemeral port boot was attempted but this sandbox rejects socket listening with `EPERM` even for a minimal Node HTTP server; endpoint behavior and server imports were structurally verified, but the actual `listen()` path needs runtime review outside the sandbox.
 
 **Notes:** Marked `needs-review` because the requested ephemeral-port feedback loop is a runtime/network gate unavailable in this environment.
+
+---
+
+## status-page — 2026-05-29
+
+**Slice:** `status-page` — Full-screen status page
+
+**Status:** done
+
+**What was implemented:**
+- Added `GET /` to the `pmdr serve` request handler, returning a self-contained HTML document with inline CSS and JavaScript.
+- Rendered the status-page overlay structure: status label, large monospace countdown, and project name.
+- Added idle rendering as "Available", paused rendering with a distinct state/label, and light/dark styling via `prefers-color-scheme`.
+- The page performs the initial no-cache `fetch("/api/status")` and renders the returned status without a build step or external assets.
+
+**Tests:**
+- Extended `serve.test.ts` with handler-level coverage for `GET /` returning HTML.
+- Added inline-script rendering coverage for running, idle, and paused status payloads using the same `/api/status` JSON path.
+
+**Feedback loop result:**
+- `pnpm --filter cli test -- src/__tests__/serve.test.ts src/__tests__/status.test.ts` — 26/26 tests pass.
+- `pnpm --filter cli check-types` — no errors.
+- `pnpm --filter cli build` — succeeds.
+- `pnpm --filter cli lint` — blocked by existing ESLint 9 flat-config issue: `eslint src` cannot find an `eslint.config.(js|mjs|cjs)` file.
+- Socket/browser smoke test — blocked by sandbox `EPERM` on `listen()` for `127.0.0.1`; page behavior was verified through the public request handler and execution of the served inline script with seeded status payloads.
+
+**Notes:** The end-of-run human review remains responsible for visual styling fidelity against the macOS overlay, per the slice plan.

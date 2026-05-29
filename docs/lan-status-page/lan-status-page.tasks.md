@@ -32,7 +32,7 @@ existing `status` command tests).
 
 ### `status-page` — Full-screen status page
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `GET /` serves a single self-contained HTML document (inlined
 CSS + JS, no build step, no external assets) that fetches `/api/status` once and
