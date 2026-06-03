@@ -11,3 +11,10 @@
 **Summary:** Added validated `pmdr config set <key> <value>` support with atomic config-file writes, set-then-get round trips, invalid-value rejection before write, and unknown-key preservation during read-modify-write.
 **Deviations:** Added `apps/cli/eslint.config.mjs` so the CLI package lint feedback loop can run; broader `pnpm --filter cli test` still fails on unrelated existing TUI/help snapshot/color assertions outside this slice.
 **Handoff:** Slice feedback passed with `pnpm --filter cli test -- config.test.ts`, `pnpm --filter cli check-types`, and `pnpm --filter cli lint` (lint exits 0 with existing warnings).
+
+## `durations-wiring` — 2026-06-04 01:12:33
+
+**Status:** done
+**Summary:** Wired effective config durations into CLI start defaults, TUI picker-start defaults, and focus-to-break phase advancement, including configured short/long break durations and long-break cadence.
+**Deviations:** none.
+**Handoff:** Slice feedback passed with `pnpm --filter cli test -- start.test.ts state.test.ts status.test.ts project-picker-overlay.test.tsx`, `pnpm --filter cli check-types`, and `pnpm --filter cli lint` (lint exits 0 with existing warnings outside this slice).

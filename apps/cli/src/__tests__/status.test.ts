@@ -3,6 +3,7 @@ import {
   mkdtempSync,
   rmSync,
   readFileSync,
+  writeFileSync,
   existsSync,
   symlinkSync,
   mkdirSync,
@@ -351,6 +352,48 @@ describe("pmdr status --json", () => {
     );
     expect(state).toMatchObject({
       durationMs: 10_000,
+      project: "alpha",
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+  });
+
+  it("pmdr start --detach uses configured focus duration when no duration is given", () => {
+    const binDir = join(tmpDir, "bin");
+    const homeDir = join(tmpDir, "home");
+    const configDir = join(homeDir, ".config", "pmdr");
+    mkdirSync(binDir);
+    mkdirSync(configDir, { recursive: true });
+    symlinkSync(cliDist, join(binDir, "pmdr"));
+    writeFileSync(
+      join(configDir, "config.json"),
+      JSON.stringify({ focusMinutes: 50 }),
+      "utf8",
+    );
+
+    const result = spawnSync(
+      "pmdr",
+      ["start", "--project", "alpha", "--detach"],
+      {
+        env: {
+          HOME: homeDir,
+          PATH: `${binDir}:${dirname(process.execPath)}:/usr/bin:/bin`,
+        },
+        input: "",
+        encoding: "utf8",
+        timeout: 2_000,
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("Starting 50m pomodoro... [alpha]");
+
+    const state = JSON.parse(
+      readFileSync(join(homeDir, ".local/state/pmdr/state.json"), "utf8"),
+    );
+    expect(state).toMatchObject({
+      durationMs: 50 * 60 * 1000,
       project: "alpha",
       phase: "focus",
       completedFocusBlocks: 0,

@@ -425,6 +425,45 @@ describe("advancePhaseIfExpired", () => {
     expect(file?.completedFocusBlocks).toBe(4);
     expect(file?.pausedAt).toBe(1000); // long break is also born paused
   });
+
+  it("uses configured short break, long break, and long-break cadence", () => {
+    const configuredStore = createStateModule(tmpDir, {
+      config: {
+        readEffectiveConfig: () => ({
+          focusMinutes: 25,
+          shortBreakMinutes: 7,
+          longBreakMinutes: 20,
+          longBreakEvery: 2,
+          focusEndSound: "Glass",
+          breakEndSound: "Submarine",
+        }),
+      },
+    });
+
+    configuredStore.writeState({
+      startedAt: 0,
+      durationMs: 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+    configuredStore.advancePhaseIfExpired(2000);
+    expect(configuredStore.readState()?.durationMs).toBe(7 * 60 * 1000);
+
+    configuredStore.writeState({
+      startedAt: 3000,
+      durationMs: 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 1,
+    });
+    configuredStore.advancePhaseIfExpired(5000);
+    const file = configuredStore.readState();
+    expect(file?.durationMs).toBe(20 * 60 * 1000);
+    expect(file?.completedFocusBlocks).toBe(2);
+  });
 });
 
 // Local type for JSON parsing in tests

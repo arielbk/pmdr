@@ -19,8 +19,8 @@ import { pauseTimer } from "../commands/pause.js";
 import { resumeTimer } from "../commands/resume.js";
 import { stopTimer } from "../commands/stop.js";
 import { initTimer } from "../commands/start.js";
+import { createConfigModule, type PmdrConfig } from "../config.js";
 
-const DEFAULT_DURATION_MS = 25 * 60 * 1_000;
 import type { DerivedPhaseState } from "./phase-state-machine.js";
 import type { ProjectRecord } from "../projects.js";
 import type { StateRecord } from "../state.js";
@@ -36,6 +36,7 @@ interface AppProps {
   writeLastProjectFn?: (name: string | null) => void;
   store?: Store;
   readStateFn?: () => StateRecord | null;
+  readEffectiveConfigFn?: () => PmdrConfig;
   exitFn?: () => void;
 }
 
@@ -64,6 +65,7 @@ export default function App({
   writeLastProjectFn = writeLastProject,
   store: providedStore,
   readStateFn,
+  readEffectiveConfigFn = () => createConfigModule().readEffectiveConfig(),
   exitFn,
 }: AppProps) {
   const { exit: inkExit } = useApp();
@@ -166,7 +168,8 @@ export default function App({
     const file = store.readState();
     const resolvedName = name === null ? undefined : upsertProjectFn(name).name;
     if (file) {
-      const { project: _drop, ...rest } = file;
+      const rest = { ...file };
+      delete rest.project;
       store.writeState(
         resolvedName ? { ...rest, project: resolvedName } : rest,
       );
@@ -174,7 +177,7 @@ export default function App({
       try {
         initTimer({
           store,
-          durationMs: DEFAULT_DURATION_MS,
+          durationMs: readEffectiveConfigFn().focusMinutes * 60_000,
           now,
           project: resolvedName,
         });

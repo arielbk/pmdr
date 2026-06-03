@@ -30,7 +30,7 @@ A CLI-owned config file (`~/.config/pmdr/config.json` + `pmdr config get/set`) f
 
 ### `durations-wiring` — CLI surfaces use effective durations
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** With `focusMinutes: 50` configured, `pmdr start` runs a 50-minute focus block (TUI default matches); `pmdr start 25` still wins for that session; with `longBreakEvery: 2` and configured break durations, the 2nd focus block yields the configured long break.
 
