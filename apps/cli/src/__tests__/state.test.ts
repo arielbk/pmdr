@@ -298,7 +298,7 @@ describe("advancePhaseIfExpired", () => {
     expect(existsSync(join(tmpDir, "completions.jsonl"))).toBe(false);
   });
 
-  it("expired focus → break running + one focus completion appended", () => {
+  it("expired focus → break born paused at completion moment + one focus completion appended", () => {
     store.writeState({ startedAt: 0, durationMs: 1000, pausedAt: null, accumulatedPauseMs: 0 });
     store.advancePhaseIfExpired(2000);
 
@@ -306,7 +306,13 @@ describe("advancePhaseIfExpired", () => {
     expect(file?.phase).toBe("break");
     expect(file?.completedFocusBlocks).toBe(1);
     expect(file?.startedAt).toBe(1000); // break starts at focus nominal end
-    expect(file?.pausedAt).toBeNull();
+    expect(file?.pausedAt).toBe(1000); // born paused at the completion moment
+    expect(file?.accumulatedPauseMs).toBe(0);
+
+    // The pending break derives as paused with the full break duration remaining.
+    const derived = deriveState({ file: file!, now: 2000 });
+    expect(derived.kind).toBe("paused");
+    expect(derived.remainingMs).toBe(5 * 60 * 1000); // full short break
 
     const completions = store.readCompletions();
     expect(completions).toHaveLength(1);
@@ -314,15 +320,51 @@ describe("advancePhaseIfExpired", () => {
     expect(completions[0]!.durationMs).toBe(1000);
   });
 
-  it("expired focus whose break also already expired → idle + one completion", () => {
-    // focus: 0→1000, break: 1000→1000+300_000=301000; at 302000 both expired
+  it("pending break's remaining time is stable arbitrarily long after focus expiry", () => {
+    store.writeState({ startedAt: 0, durationMs: 1000, pausedAt: null, accumulatedPauseMs: 0 });
+    // advance well past both the focus end and a hypothetical break end
+    store.advancePhaseIfExpired(999_999);
+
+    const file = store.readState();
+    expect(file?.phase).toBe("break");
+    expect(file?.pausedAt).toBe(1000);
+
+    // Hours later, the break is still paused with its full duration intact.
+    const muchLater = 1000 + 24 * 60 * 60 * 1000;
+    const derived = deriveState({ file: file!, now: muchLater });
+    expect(derived.kind).toBe("paused");
+    expect(derived.remainingMs).toBe(5 * 60 * 1000);
+  });
+
+  it("chained-expiry loop does not advance a pending break to idle", () => {
+    // focus: 0→1000; were the break born running it would expire by 302000.
+    // Born paused, it must stay a paused break no matter how far `now` is.
     store.writeState({ startedAt: 0, durationMs: 1000, pausedAt: null, accumulatedPauseMs: 0 });
     store.advancePhaseIfExpired(302_000);
 
-    expect(store.readState()).toBeNull();
+    const file = store.readState();
+    expect(file).not.toBeNull();
+    expect(file?.phase).toBe("break");
+    expect(file?.pausedAt).toBe(1000);
     const completions = store.readCompletions();
     expect(completions).toHaveLength(1);
     expect(completions[0]!.completedAt).toBe(1000);
+  });
+
+  it("a resumed pending break that expires clears to idle, no break completion logged", () => {
+    // born-paused break, then resumed (pausedAt cleared) — i.e. a running break.
+    store.writeState({
+      startedAt: 1000,
+      durationMs: 5 * 60 * 1000,
+      pausedAt: null, // resumed
+      accumulatedPauseMs: 0,
+      phase: "break",
+      completedFocusBlocks: 1,
+    });
+    store.advancePhaseIfExpired(1000 + 5 * 60 * 1000 + 1);
+
+    expect(store.readState()).toBeNull();
+    expect(existsSync(join(tmpDir, "completions.jsonl"))).toBe(false);
   });
 
   it("expired break → idle, no completion logged", () => {
@@ -381,6 +423,7 @@ describe("advancePhaseIfExpired", () => {
     const file = store.readState();
     expect(file?.durationMs).toBe(15 * 60 * 1000); // long break
     expect(file?.completedFocusBlocks).toBe(4);
+    expect(file?.pausedAt).toBe(1000); // long break is also born paused
   });
 });
 

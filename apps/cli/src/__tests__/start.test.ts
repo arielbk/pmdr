@@ -104,10 +104,11 @@ describe("initTimer", () => {
     );
   });
 
-  it("advances a fully expired session (focus+break) to idle, then starts a new timer", () => {
-    // startedAt far back enough that both the focus AND the 5-min break have expired
-    // focus: expires at NOW-400_000+60_000 = NOW-340_000
-    // break: starts at NOW-340_000, lasts 300_000ms → expires at NOW-40_000
+  it("lands a long-expired focus in a pending break, so a plain start refuses", () => {
+    // startedAt far back enough that the focus expired long ago. The break is
+    // now born paused at the focus completion moment and never auto-expires, so
+    // the user is left in a pending break. A plain start must refuse — skipping
+    // the break requires stop or start --force (covered in the cli-flows slice).
     store.writeState({
       startedAt: NOW - 400_000,
       durationMs: 60_000,
@@ -116,12 +117,15 @@ describe("initTimer", () => {
     });
     expect(() =>
       initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" }),
-    ).not.toThrow();
-    expect(store.readState()).toMatchObject({ durationMs: 10_000, startedAt: NOW, project: "test-proj", phase: "focus", completedFocusBlocks: 0 });
+    ).toThrow(/paused/i);
+    const file = store.readState();
+    expect(file?.phase).toBe("break");
+    expect(file?.pausedAt).toBe(NOW - 340_000); // born paused at focus completion
   });
 
-  it("throws when break is running after focus expired", () => {
-    // focus expired 10s ago; 5-min break just started → break is still running
+  it("refuses to start while a break is pending after focus expired", () => {
+    // focus expired 10s ago → break is born paused (pending). start must still
+    // refuse, now reporting the timer as paused rather than running.
     store.writeState({
       startedAt: NOW - 70_000,
       durationMs: 60_000,
@@ -130,7 +134,7 @@ describe("initTimer", () => {
     });
     expect(() =>
       initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" }),
-    ).toThrow(/already running/i);
+    ).toThrow(/paused/i);
   });
 });
 

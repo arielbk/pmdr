@@ -67,18 +67,19 @@ describe("pauseTimer", () => {
     expect(() => pauseTimer({ store, now: NOW })).toThrow(/already paused/i);
   });
 
-  it("advances an expired focus to break and pauses the break", () => {
-    // focus expired 10s ago → break auto-starts → pauseTimer pauses the break
+  it("advances an expired focus to a born-paused break; pausing it again throws", () => {
+    // focus expired 10s ago → break is born paused at the completion moment,
+    // so it is already paused and pauseTimer rejects it.
     store.writeState({
       startedAt: NOW - 70_000,
       durationMs: 60_000,
       pausedAt: null,
       accumulatedPauseMs: 0,
     });
-    expect(() => pauseTimer({ store, now: NOW })).not.toThrow();
+    expect(() => pauseTimer({ store, now: NOW })).toThrow(/already paused/i);
     const file = store.readState();
     expect(file?.phase).toBe("break");
-    expect(file?.pausedAt).toBe(NOW);
+    expect(file?.pausedAt).toBe(NOW - 10_000); // born paused at focus completion
     const completionsFile = join(tmpDir, "completions.jsonl");
     expect(existsSync(completionsFile)).toBe(true);
   });
@@ -139,16 +140,19 @@ describe("resumeTimer", () => {
     expect(store.readState()).toMatchObject({ accumulatedPauseMs: 13_000, pausedAt: null });
   });
 
-  it("advances an expired focus to break; resume throws because break is already running", () => {
-    // focus expired → break auto-starts (running) → resumeTimer throws "already running"
+  it("advances an expired focus to a born-paused break; resume starts the pending break", () => {
+    // focus expired → break is born paused; resume is the start affordance and
+    // succeeds, leaving the break running.
     store.writeState({
       startedAt: NOW - 70_000,
       durationMs: 60_000,
       pausedAt: null,
       accumulatedPauseMs: 0,
     });
-    expect(() => resumeTimer({ store, now: NOW })).toThrow(/already running/i);
-    expect(store.readState()?.phase).toBe("break");
+    expect(() => resumeTimer({ store, now: NOW })).not.toThrow();
+    const file = store.readState();
+    expect(file?.phase).toBe("break");
+    expect(file?.pausedAt).toBeNull(); // now running
   });
 });
 

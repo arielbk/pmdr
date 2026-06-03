@@ -108,19 +108,24 @@ describe("getStatus", () => {
     });
   });
 
-  it("advances an expired focus to break and returns the running break state", () => {
-    // focus: expires at NOW-70_000+60_000 = NOW-10_000
-    // break: startedAt=NOW-10_000, durationMs=300_000 → still running at NOW
+  it("advances an expired focus to a born-paused break with full duration remaining", () => {
+    // focus: expires at NOW-70_000+60_000 = NOW-10_000.
+    // The break is born paused at that completion moment, so minutes later
+    // status still reports it as paused with the full break duration left.
     store.writeState({
       startedAt: NOW - 70_000,
       durationMs: 60_000,
       pausedAt: null,
       accumulatedPauseMs: 0,
     });
-    const result = getStatus({ store, now: NOW });
-    expect(result.state).toBe("running");
+    expect(getStatus({ store, now: NOW })).toMatchObject({
+      state: "paused",
+      phase: "break",
+      remainingMs: 5 * 60 * 1000, // full short break, unconsumed
+    });
     const file = store.readState();
     expect(file?.phase).toBe("break");
+    expect(file?.pausedAt).toBe(NOW - 10_000); // paused at the focus completion moment
     expect(file?.completedFocusBlocks).toBe(1);
   });
 

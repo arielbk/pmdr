@@ -176,7 +176,7 @@ describe("getToday", () => {
   });
 
   it("advances an expired focus to break and includes the focus completion in today's count", () => {
-    // focus expired 10s ago → break auto-starts; one focus completion is logged
+    // focus expired 10s ago → break is born paused; one focus completion is logged
     const startedAt = NOW - 70_000;
     store.writeState({
       startedAt,
@@ -186,7 +186,7 @@ describe("getToday", () => {
     });
     const result = getToday({ store, now: NOW });
     expect(result.count).toBe(1);
-    // State is now a running break (not null)
+    // State is now a born-paused (pending) break, not null
     expect(store.readState()?.phase).toBe("break");
   });
 
