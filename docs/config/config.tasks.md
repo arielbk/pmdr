@@ -18,7 +18,7 @@ A CLI-owned config file (`~/.config/pmdr/config.json` + `pmdr config get/set`) f
 
 ### `config-set` — Config write command
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** `pmdr config set <key> <value>` validates and persists; `pmdr config get <key>` reflects it afterwards.
 

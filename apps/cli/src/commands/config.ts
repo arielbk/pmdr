@@ -1,16 +1,16 @@
 import { defineCommand } from "citty";
 import { createConfigModule, type PmdrConfig } from "../config.js";
 
-type ConfigReader = Pick<
-  ReturnType<typeof createConfigModule>,
-  "readEffectiveConfig"
->;
+type ConfigModule = ReturnType<typeof createConfigModule>;
+type ConfigReader = Pick<ConfigModule, "readEffectiveConfig"> &
+  Partial<Pick<ConfigModule, "setConfigValue">>;
 
 export function runConfigCommand(options: {
   args: {
     json?: boolean;
     command?: string;
     key?: string;
+    value?: string;
   };
   config?: ConfigReader;
   stdout?: (text: string) => void;
@@ -34,6 +34,18 @@ export function runConfigCommand(options: {
     return;
   }
 
+  if (options.args.command === "set") {
+    if (!options.args.key || options.args.value === undefined) {
+      throw new Error("Usage: pmdr config set <key> <value>");
+    }
+    if (!config.setConfigValue) {
+      throw new Error("Config writer is unavailable");
+    }
+    config.setConfigValue(options.args.key, options.args.value);
+    stdout(`${options.args.key}=${options.args.value}\n`);
+    return;
+  }
+
   stdout(`${JSON.stringify(effective, null, 2)}\n`);
 }
 
@@ -45,12 +57,17 @@ export default defineCommand({
     command: {
       type: "positional",
       required: false,
-      description: "Subcommand: get",
+      description: "Subcommand: get or set",
     },
     key: {
       type: "positional",
       required: false,
       description: "Config key for get",
+    },
+    value: {
+      type: "positional",
+      required: false,
+      description: "Config value for set",
     },
     json: {
       type: "boolean",
@@ -65,6 +82,7 @@ export default defineCommand({
           json: args.json as boolean,
           command: args.command as string | undefined,
           key: args.key as string | undefined,
+          value: args.value as string | undefined,
         },
       });
     } catch (error) {

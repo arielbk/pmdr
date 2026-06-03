@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createConfigModule } from "../config.js";
@@ -156,5 +163,73 @@ describe("config command reads", () => {
     });
 
     expect(writes.join("")).toBe("50\n");
+  });
+});
+
+describe("config command writes", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-config-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("persists set values so later gets reflect them", () => {
+    const config = createConfigModule(tmpDir);
+    const writes: string[] = [];
+
+    runConfigCommand({
+      args: { command: "set", key: "focusMinutes", value: "50" },
+      config,
+      stdout: (text) => writes.push(text),
+    });
+
+    runConfigCommand({
+      args: { command: "get", key: "focusMinutes" },
+      config,
+      stdout: (text) => writes.push(text),
+    });
+
+    expect(writes.join("")).toBe("focusMinutes=50\n50\n");
+  });
+
+  it("rejects invalid set values without writing a config file", () => {
+    const config = createConfigModule(tmpDir);
+
+    expect(() =>
+      runConfigCommand({
+        args: { command: "set", key: "focusMinutes", value: "0" },
+        config,
+      }),
+    ).toThrow("Invalid config value for focusMinutes");
+
+    expect(existsSync(join(tmpDir, "config.json"))).toBe(false);
+  });
+
+  it("preserves unknown keys when setting a known value", () => {
+    mkdirSync(tmpDir, { recursive: true });
+    writeFileSync(
+      join(tmpDir, "config.json"),
+      JSON.stringify({ extraKey: "keep-me", focusMinutes: 25 }),
+      "utf8",
+    );
+    const config = createConfigModule(tmpDir);
+
+    runConfigCommand({
+      args: { command: "set", key: "shortBreakMinutes", value: "10" },
+      config,
+      stdout: () => {},
+    });
+
+    expect(
+      JSON.parse(readFileSync(join(tmpDir, "config.json"), "utf8")),
+    ).toEqual({
+      extraKey: "keep-me",
+      focusMinutes: 25,
+      shortBreakMinutes: 10,
+    });
   });
 });
