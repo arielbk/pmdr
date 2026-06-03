@@ -3,7 +3,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { parseDuration } from "../parse-duration.js";
-import { createStateModule, deriveState } from "../state.js";
+import {
+  createStateModule,
+  deriveState,
+  type StateRecord,
+} from "../state.js";
 import { createProjectsModule } from "../projects.js";
 import { select, text, cancel, isCancel } from "@clack/prompts";
 
@@ -17,11 +21,17 @@ export function initTimer(options: {
   now: number;
   project?: string;
   id?: string;
+  force?: boolean;
 }): void {
   const { store, durationMs, now } = options;
   const project = options.project ?? UNASSIGNED_PROJECT;
 
+  // Advance first so an expired focus still gets its completion logged, even
+  // when force then discards the resulting pending break.
   store.advancePhaseIfExpired(now);
+  if (options.force) {
+    store.clearState();
+  }
 
   const file = store.readState();
   const derived = deriveState({ file, now });
@@ -131,6 +141,13 @@ export async function pickProject(options: {
   return projects.upsertProject(selected as string).name;
 }
 
+export function countdownCompleteMessage(file: StateRecord | null): string {
+  if (file?.phase === "break" && file.pausedAt !== null) {
+    return "Pomodoro complete! Break ready — press space in the TUI or run `pmdr resume` to start it.";
+  }
+  return "Pomodoro complete!";
+}
+
 function formatRemaining(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
   const m = Math.floor(totalSec / 60);
@@ -167,7 +184,9 @@ async function runCountdown(
         store.advancePhaseIfExpired(now);
         clearInterval(interval);
         process.stdout.write("\r\x1b[K");
-        process.stdout.write("Pomodoro complete!\x07\n");
+        process.stdout.write(
+          `${countdownCompleteMessage(store.readState())}\x07\n`,
+        );
         resolve();
         return;
       }
@@ -236,11 +255,7 @@ export default defineCommand({
     const detach = args.detach as boolean;
 
     try {
-      if (force) {
-        store.advancePhaseIfExpired(now);
-        store.clearState();
-      }
-      initTimer({ store, durationMs, now, project });
+      initTimer({ store, durationMs, now, project, force });
       if (project !== UNASSIGNED_PROJECT) {
         projectsModule.writeLastProject(project);
       }

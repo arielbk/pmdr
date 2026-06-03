@@ -199,17 +199,21 @@ export function createStateModule(stateDir: string) {
           ...(file.id ? { id: file.id } : {}),
         });
         const newCompletedFocusBlocks = completedFocusBlocks + 1;
+        // Break is born paused at the focus completion moment: it waits at full
+        // duration until the user explicitly starts (resumes) it. A paused phase
+        // never derives as "expired", so the loop below terminates without
+        // advancing the pending break.
         writeState({
           startedAt: completedAt,
           durationMs: computeBreakDurationMs(newCompletedFocusBlocks),
-          pausedAt: null,
+          pausedAt: completedAt,
           accumulatedPauseMs: 0,
           project: file.project,
           phase: "break",
           completedFocusBlocks: newCompletedFocusBlocks,
           ...(file.id ? { id: file.id } : {}),
         });
-        // loop to check if the break also expired
+        // loop re-reads: the pending break derives as "paused", so we return
       } else {
         // break expired → return to idle, no completion logged
         clearState();

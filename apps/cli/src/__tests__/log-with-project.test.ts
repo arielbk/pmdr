@@ -125,7 +125,7 @@ describe("readToday grouping", () => {
     store.writeState({ startedAt, durationMs: 60_000, pausedAt: null, accumulatedPauseMs: 0 });
     const groups = store.readToday(NOW);
     expect(groups["(unassigned)"]).toHaveLength(1);
-    // State is now a running break (not null) after auto-advancing
+    // State is now a born-paused (pending) break after auto-advancing
     expect(store.readState()?.phase).toBe("break");
   });
 });

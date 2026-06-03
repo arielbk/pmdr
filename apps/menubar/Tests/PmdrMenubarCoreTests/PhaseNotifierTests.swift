@@ -14,6 +14,14 @@ private actor RecordingPresenter: NotificationPresenting {
     }
 }
 
+private final class RecordingSoundPlayer: SoundPlaying, @unchecked Sendable {
+    private(set) var played: [String] = []
+
+    func play(named name: String) {
+        played.append(name)
+    }
+}
+
 private func makeActive(phase: Phase = .focus) -> Status.Active {
     .init(
         remainingMs: 1_500_000,
@@ -25,7 +33,9 @@ private func makeActive(phase: Phase = .focus) -> Status.Active {
 }
 
 final class PhaseNotifierTests: XCTestCase {
-    func test_focus_to_break_presents_focus_done_banner() async {
+    // MARK: - Notification copy
+
+    func test_focus_to_break_presents_break_ready_banner() async {
         let presenter = RecordingPresenter()
         let notifier = PhaseNotifier(presenter: presenter)
         await notifier.handle([
@@ -34,7 +44,22 @@ final class PhaseNotifierTests: XCTestCase {
         ])
         let calls = await presenter.calls
         XCTAssertEqual(calls, [
-            .init(title: "Focus done", body: "Break started"),
+            .init(title: "Focus done", body: "Break ready"),
+        ])
+    }
+
+    func test_focus_to_break_paused_presents_break_ready_banner() async {
+        // Born-paused break: the new status arrives as .paused but the
+        // phaseTransition event still fires — notification must still appear.
+        let presenter = RecordingPresenter()
+        let notifier = PhaseNotifier(presenter: presenter)
+        await notifier.handle([
+            .statusChanged(.paused(makeActive(phase: .break))),
+            .phaseTransition(from: .focus, to: .break),
+        ])
+        let calls = await presenter.calls
+        XCTAssertEqual(calls, [
+            .init(title: "Focus done", body: "Break ready"),
         ])
     }
 
@@ -110,8 +135,65 @@ final class PhaseNotifierTests: XCTestCase {
         ])
         let calls = await presenter.calls
         XCTAssertEqual(calls, [
-            .init(title: "Focus done", body: "Break started"),
+            .init(title: "Focus done", body: "Break ready"),
             .init(title: "Break done", body: ""),
         ])
+    }
+
+    // MARK: - Sound player
+
+    func test_focus_to_break_plays_glass_sound() async {
+        let soundPlayer = RecordingSoundPlayer()
+        let notifier = PhaseNotifier(presenter: RecordingPresenter(), soundPlayer: soundPlayer)
+        await notifier.handle([
+            .statusChanged(.paused(makeActive(phase: .break))),
+            .phaseTransition(from: .focus, to: .break),
+        ])
+        let played = soundPlayer.played
+        XCTAssertEqual(played, [PhaseNotifier.SoundName.glass])
+    }
+
+    func test_break_to_idle_plays_submarine_sound() async {
+        let soundPlayer = RecordingSoundPlayer()
+        let notifier = PhaseNotifier(presenter: RecordingPresenter(), soundPlayer: soundPlayer)
+        await notifier.handle([
+            .statusChanged(.idle),
+            .sessionEnded(lastPhase: .break),
+        ])
+        let played = soundPlayer.played
+        XCTAssertEqual(played, [PhaseNotifier.SoundName.submarine])
+    }
+
+    func test_status_change_alone_plays_no_sound() async {
+        let soundPlayer = RecordingSoundPlayer()
+        let notifier = PhaseNotifier(presenter: RecordingPresenter(), soundPlayer: soundPlayer)
+        await notifier.handle([
+            .statusChanged(.running(makeActive(phase: .focus))),
+        ])
+        let played = soundPlayer.played
+        XCTAssertEqual(played, [])
+    }
+
+    func test_session_ended_focus_plays_no_sound() async {
+        let soundPlayer = RecordingSoundPlayer()
+        let notifier = PhaseNotifier(presenter: RecordingPresenter(), soundPlayer: soundPlayer)
+        await notifier.handle([
+            .statusChanged(.idle),
+            .sessionEnded(lastPhase: .focus),
+        ])
+        let played = soundPlayer.played
+        XCTAssertEqual(played, [])
+    }
+
+    func test_no_sound_player_does_not_crash() async {
+        // When no sound player is injected (nil), transitions must still fire
+        // notifications without crashing.
+        let presenter = RecordingPresenter()
+        let notifier = PhaseNotifier(presenter: presenter, soundPlayer: nil)
+        await notifier.handle([
+            .phaseTransition(from: .focus, to: .break),
+        ])
+        let calls = await presenter.calls
+        XCTAssertEqual(calls.count, 1)
     }
 }

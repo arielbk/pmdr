@@ -1,9 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseDuration } from "../parse-duration.js";
-import { initTimer, resolveStartProject } from "../commands/start.js";
+import {
+  countdownCompleteMessage,
+  initTimer,
+  resolveStartProject,
+} from "../commands/start.js";
 import { createStateModule } from "../state.js";
 import { createProjectsModule } from "../projects.js";
 
@@ -104,10 +108,11 @@ describe("initTimer", () => {
     );
   });
 
-  it("advances a fully expired session (focus+break) to idle, then starts a new timer", () => {
-    // startedAt far back enough that both the focus AND the 5-min break have expired
-    // focus: expires at NOW-400_000+60_000 = NOW-340_000
-    // break: starts at NOW-340_000, lasts 300_000ms → expires at NOW-40_000
+  it("lands a long-expired focus in a pending break, so a plain start refuses", () => {
+    // startedAt far back enough that the focus expired long ago. The break is
+    // now born paused at the focus completion moment and never auto-expires, so
+    // the user is left in a pending break. A plain start must refuse — skipping
+    // the break requires stop or start --force (covered in the cli-flows slice).
     store.writeState({
       startedAt: NOW - 400_000,
       durationMs: 60_000,
@@ -116,12 +121,15 @@ describe("initTimer", () => {
     });
     expect(() =>
       initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" }),
-    ).not.toThrow();
-    expect(store.readState()).toMatchObject({ durationMs: 10_000, startedAt: NOW, project: "test-proj", phase: "focus", completedFocusBlocks: 0 });
+    ).toThrow(/paused/i);
+    const file = store.readState();
+    expect(file?.phase).toBe("break");
+    expect(file?.pausedAt).toBe(NOW - 340_000); // born paused at focus completion
   });
 
-  it("throws when break is running after focus expired", () => {
-    // focus expired 10s ago; 5-min break just started → break is still running
+  it("refuses to start while a break is pending after focus expired", () => {
+    // focus expired 10s ago → break is born paused (pending). start must still
+    // refuse, now reporting the timer as paused rather than running.
     store.writeState({
       startedAt: NOW - 70_000,
       durationMs: 60_000,
@@ -130,7 +138,78 @@ describe("initTimer", () => {
     });
     expect(() =>
       initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" }),
-    ).toThrow(/already running/i);
+    ).toThrow(/paused/i);
+  });
+
+  it("force-starts over a pending break, keeping the focus completion", () => {
+    // focus expired 10s ago → pending break. force skips the break: the focus
+    // completion stays logged, the pending break is discarded, and a fresh
+    // focus timer starts.
+    store.writeState({
+      startedAt: NOW - 70_000,
+      durationMs: 60_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+    });
+    initTimer({
+      store,
+      durationMs: 10_000,
+      now: NOW,
+      project: "test-proj",
+      id: "forced-1",
+      force: true,
+    });
+    expect(store.readState()).toMatchObject({
+      startedAt: NOW,
+      durationMs: 10_000,
+      phase: "focus",
+      completedFocusBlocks: 0,
+      id: "forced-1",
+    });
+    const completions = readFileSync(join(tmpDir, "completions.jsonl"), "utf8")
+      .trim()
+      .split("\n");
+    expect(completions).toHaveLength(1);
+  });
+
+  it("force-starts over a running timer", () => {
+    store.writeState({
+      startedAt: NOW - 5_000,
+      durationMs: 60_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+    });
+    initTimer({
+      store,
+      durationMs: 10_000,
+      now: NOW,
+      project: "test-proj",
+      id: "forced-2",
+      force: true,
+    });
+    expect(store.readState()).toMatchObject({ startedAt: NOW, id: "forced-2" });
+  });
+});
+
+describe("countdownCompleteMessage", () => {
+  const NOW = 1_000_000;
+
+  it("announces the break as ready (not running) when a pending break follows the focus", () => {
+    const message = countdownCompleteMessage({
+      startedAt: NOW,
+      durationMs: 5 * 60 * 1000,
+      pausedAt: NOW,
+      accumulatedPauseMs: 0,
+      phase: "break",
+      completedFocusBlocks: 1,
+    });
+    expect(message).toContain("Break ready");
+    expect(message).toContain("pmdr resume");
+    expect(message).not.toMatch(/break started/i);
+  });
+
+  it("stays a plain completion when no pending break follows", () => {
+    expect(countdownCompleteMessage(null)).toBe("Pomodoro complete!");
   });
 });
 
