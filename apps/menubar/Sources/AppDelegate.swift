@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         self.client = client
         poller = StatusPoller(fetcher: client)
         let presenter = UserNotificationsPresenter()
-        notifier = PhaseNotifier(presenter: presenter)
+        notifier = PhaseNotifier(presenter: presenter, soundPlayer: NSSoundPlayer())
         Task { await presenter.requestAuthorization() }
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
