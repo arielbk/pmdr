@@ -53,6 +53,33 @@ public struct ProjectRecord: Equatable, Sendable {
     }
 }
 
+public struct PmdrConfig: Equatable, Sendable {
+    public static let defaults = PmdrConfig()
+
+    public let focusMinutes: Int
+    public let shortBreakMinutes: Int
+    public let longBreakMinutes: Int
+    public let longBreakEvery: Int
+    public let focusEndSound: String
+    public let breakEndSound: String
+
+    public init(
+        focusMinutes: Int = 25,
+        shortBreakMinutes: Int = 5,
+        longBreakMinutes: Int = 15,
+        longBreakEvery: Int = 4,
+        focusEndSound: String = "Glass",
+        breakEndSound: String = "Submarine"
+    ) {
+        self.focusMinutes = focusMinutes
+        self.shortBreakMinutes = shortBreakMinutes
+        self.longBreakMinutes = longBreakMinutes
+        self.longBreakEvery = longBreakEvery
+        self.focusEndSound = focusEndSound
+        self.breakEndSound = breakEndSound
+    }
+}
+
 public enum PmdrClientError: Error, Equatable {
     /// `pmdr` could not be located on PATH (or at the provided absolute path).
     case binaryNotFound
@@ -129,6 +156,11 @@ public struct PmdrClient: Sendable {
         return try Self.decodeProjects(from: data)
     }
 
+    public func config() async throws -> PmdrConfig {
+        let data = try await run(arguments: ["config", "--json"])
+        return try Self.decodeConfig(from: data)
+    }
+
     public func archiveProject(_ name: String) async throws {
         _ = try await run(arguments: ["project", "archive", name])
     }
@@ -158,6 +190,15 @@ public struct PmdrClient: Sendable {
         let name: String
         let archived: Bool
         let createdAt: String
+    }
+
+    private struct RawConfig: Decodable {
+        let focusMinutes: Int?
+        let shortBreakMinutes: Int?
+        let longBreakMinutes: Int?
+        let longBreakEvery: Int?
+        let focusEndSound: String?
+        let breakEndSound: String?
     }
 
     static func decodeStatus(from data: Data) throws -> Status {
@@ -205,6 +246,23 @@ public struct PmdrClient: Sendable {
             }
         } catch {
             throw PmdrClientError.decodingFailed("invalid projects JSON: \(error)")
+        }
+    }
+
+    static func decodeConfig(from data: Data) throws -> PmdrConfig {
+        do {
+            let raw = try JSONDecoder().decode(RawConfig.self, from: data)
+            let defaults = PmdrConfig.defaults
+            return PmdrConfig(
+                focusMinutes: raw.focusMinutes ?? defaults.focusMinutes,
+                shortBreakMinutes: raw.shortBreakMinutes ?? defaults.shortBreakMinutes,
+                longBreakMinutes: raw.longBreakMinutes ?? defaults.longBreakMinutes,
+                longBreakEvery: raw.longBreakEvery ?? defaults.longBreakEvery,
+                focusEndSound: raw.focusEndSound ?? defaults.focusEndSound,
+                breakEndSound: raw.breakEndSound ?? defaults.breakEndSound
+            )
+        } catch {
+            throw PmdrClientError.decodingFailed("invalid config JSON: \(error)")
         }
     }
 

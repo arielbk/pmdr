@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     private var stateGeneration: UInt64 = 0
     private var mutationChain: Task<Void, Never>?
     private var projects: [ProjectRecord] = []
+    private var currentConfig: PmdrConfig = .defaults
     private var didShowBinaryAlert = false
     private var didShowHotkeyAlert = false
     private let log = OSLog(subsystem: "dev.pmdr.menubar", category: "polling")
@@ -375,7 +376,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     }
 
     private func optimisticStart(project: String?) -> Status {
-        let duration = 25 * 60 * 1_000
+        let duration = currentConfig.focusMinutes * 60 * 1_000
         let active = Status.Active(
             remainingMs: duration,
             durationMs: duration,
@@ -394,6 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         let events = try await poller.pollOnce()
         let status = await poller.currentStatus() ?? .idle
         let projects = try await client?.listProjects() ?? []
+        let config = try await client?.config() ?? .defaults
         let now = Date()
         let applied = await MainActor.run { () -> Bool in
             guard self.stateGeneration == generationAtStart else { return false }
@@ -401,6 +403,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
             self.lastStatus = status
             self.lastPollAt = now
             self.projects = projects
+            self.currentConfig = config
+            self.notifier = self.notifier?.withConfig(config)
             self.updateIcon(for: status)
             self.rebuildMenu()
             self.redrawTitle()

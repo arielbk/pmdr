@@ -42,7 +42,7 @@ A CLI-owned config file (`~/.config/pmdr/config.json` + `pmdr config get/set`) f
 
 ### `menubar-config-client` — Menubar reads effective config
 
-**Status:** not-started
+**Status:** done
 
 **Outside-in:** Menubar fetches `pmdr config --json` on launch; optimistic start prediction shows the configured focus duration instead of the hardcoded 25 minutes; phase-end sounds play the configured names.
 

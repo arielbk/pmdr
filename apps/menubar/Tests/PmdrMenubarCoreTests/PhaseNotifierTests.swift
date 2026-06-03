@@ -196,4 +196,30 @@ final class PhaseNotifierTests: XCTestCase {
         let calls = await presenter.calls
         XCTAssertEqual(calls.count, 1)
     }
+
+    func test_focus_to_break_plays_configured_focus_end_sound() async {
+        let soundPlayer = RecordingSoundPlayer()
+        let notifier = PhaseNotifier(
+            presenter: RecordingPresenter(),
+            soundPlayer: soundPlayer,
+            config: .init(focusEndSound: "Ping", breakEndSound: "Pop")
+        )
+        await notifier.handle([
+            .phaseTransition(from: .focus, to: .break),
+        ])
+        XCTAssertEqual(soundPlayer.played, ["Ping"])
+    }
+
+    func test_break_to_idle_plays_configured_break_end_sound() async {
+        let soundPlayer = RecordingSoundPlayer()
+        let notifier = PhaseNotifier(
+            presenter: RecordingPresenter(),
+            soundPlayer: soundPlayer,
+            config: .init(focusEndSound: "Ping", breakEndSound: "Pop")
+        )
+        await notifier.handle([
+            .sessionEnded(lastPhase: .break),
+        ])
+        XCTAssertEqual(soundPlayer.played, ["Pop"])
+    }
 }

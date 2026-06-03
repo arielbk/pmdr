@@ -18,3 +18,10 @@
 **Summary:** Wired effective config durations into CLI start defaults, TUI picker-start defaults, and focus-to-break phase advancement, including configured short/long break durations and long-break cadence.
 **Deviations:** none.
 **Handoff:** Slice feedback passed with `pnpm --filter cli test -- start.test.ts state.test.ts status.test.ts project-picker-overlay.test.tsx`, `pnpm --filter cli check-types`, and `pnpm --filter cli lint` (lint exits 0 with existing warnings outside this slice).
+
+## `menubar-config-client` — 2026-06-04 01:15:51
+
+**Status:** done
+**Summary:** Added menubar config decoding/client fetch support, wired launch/refresh config into optimistic focus duration, and made phase-end sounds use configured sound names while preserving default Glass/Submarine behavior.
+**Deviations:** `xcodebuild test` with the normal runner built successfully but could not attach to `testmanagerd` under the sandbox, so the test bundle was run directly with `xcrun xctest`.
+**Handoff:** Slice feedback passed with `xcrun xctest apps/menubar/DerivedData/Build/Products/Debug/pmdr-menubarTests.xctest` (117 tests, 3 integration skips) and `xcodebuild build -project apps/menubar/pmdr-menubar.xcodeproj -scheme pmdr-menubar -derivedDataPath apps/menubar/DerivedData`.
