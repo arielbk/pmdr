@@ -18,6 +18,8 @@ packages/
 
 `apps/menubar` lives outside the Turbo pipeline — it has its own Xcode toolchain. Everything else is wired through Turborepo + pnpm.
 
+`docs/` holds per-feature specs, task breakdowns, implementation logs, and QA notes. It is **local-only and not tracked in Git** (see `.gitignore`) — these are working implementation details, not part of the shipped repo history.
+
 ## Requirements
 
 - Node 18+
@@ -51,9 +53,15 @@ pmdr resume
 pmdr stop
 pmdr today          # today's sessions
 pmdr project ...    # assign sessions to projects
+pmdr serve          # serve the read-only status page on the LAN
 ```
 
 Open as many terminals as you want — they all read and write the same session.
+
+`pmdr serve` starts a long-running HTTP server on port `7777` by default. Use
+`pmdr serve --port <port>` to choose another port, then open
+`http://<machine-name>.local:<port>` from another device on the same local
+network to view the live status page.
 
 ## Running the menubar app
 
