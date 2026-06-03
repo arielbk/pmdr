@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     private var hotkeyManager: HotkeyManager?
     private var floatingTimerPanelController: FloatingTimerPanelController?
     private var manageProjectsController: ManageProjectsWindowController?
+    private var settingsController: SettingsWindowController?
     private var pollTask: Task<Void, Never>?
     private var redrawTimer: Timer?
     private var lastStatus: Status = .idle
@@ -169,6 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         }
 
         menu.addItem(.separator())
+        menu.addItem(actionItem("Settings…", #selector(openSettings(_:)), keyEquivalent: ","))
         menu.addItem(actionItem("Manage projects…", #selector(openManageProjects(_:))))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(
@@ -179,8 +181,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         statusItem?.menu = menu
     }
 
-    private func actionItem(_ title: String, _ action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+    private func actionItem(
+        _ title: String,
+        _ action: Selector,
+        keyEquivalent: String = ""
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
         item.target = self
         return item
     }
@@ -284,6 +290,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
             }
         }
         manageProjectsController?.show()
+    }
+
+    @objc @MainActor private func openSettings(_ sender: NSMenuItem) {
+        guard let client else { return }
+        if settingsController == nil {
+            settingsController = SettingsWindowController(client: client) { [weak self] in
+                Task { try? await self?.refreshFromCLI() }
+            }
+        }
+        let fallback = currentConfig
+        Task { [weak self] in
+            let config = (try? await client.config()) ?? fallback
+            await MainActor.run {
+                self?.currentConfig = config
+                self?.settingsController?.show(config: config)
+            }
+        }
     }
 
     @objc private func newProjectForChangeFromMenu(_ sender: NSMenuItem) {
@@ -560,5 +583,238 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
 
     func menuDidClose(_ menu: NSMenu) {
         Task { await poller?.setMenuOpen(false) }
+    }
+}
+
+@MainActor
+private final class SettingsWindowController: NSObject {
+    private static let soundNames = [
+        "Basso",
+        "Blow",
+        "Bottle",
+        "Frog",
+        "Funk",
+        "Glass",
+        "Hero",
+        "Morse",
+        "Ping",
+        "Pop",
+        "Purr",
+        "Sosumi",
+        "Submarine",
+        "Tink",
+    ]
+
+    private let client: PmdrClient
+    private let onSaved: () -> Void
+    private let window: NSWindow
+    private let focusField = NSTextField()
+    private let shortBreakField = NSTextField()
+    private let longBreakField = NSTextField()
+    private let longBreakEveryField = NSTextField()
+    private let focusSoundPopup = NSPopUpButton()
+    private let breakSoundPopup = NSPopUpButton()
+    private let saveButton = NSButton(title: "Save", target: nil, action: nil)
+    private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
+    private var representedConfig = PmdrConfig.defaults
+
+    init(client: PmdrClient, onSaved: @escaping () -> Void) {
+        self.client = client
+        self.onSaved = onSaved
+        self.window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 316),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        super.init()
+        buildWindow()
+    }
+
+    func show(config: PmdrConfig) {
+        representedConfig = config
+        apply(config)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func buildWindow() {
+        window.title = "Settings"
+        window.isReleasedWhenClosed = false
+
+        let content = NSStackView()
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 12
+        content.translatesAutoresizingMaskIntoConstraints = false
+
+        for field in [
+            focusField,
+            shortBreakField,
+            longBreakField,
+            longBreakEveryField,
+        ] {
+            field.alignment = .right
+            field.formatter = positiveIntegerFormatter()
+            field.translatesAutoresizingMaskIntoConstraints = false
+            field.widthAnchor.constraint(equalToConstant: 72).isActive = true
+        }
+
+        configureSoundPopup(focusSoundPopup)
+        configureSoundPopup(breakSoundPopup)
+
+        content.addArrangedSubview(row(label: "Focus minutes", control: focusField))
+        content.addArrangedSubview(row(label: "Short break minutes", control: shortBreakField))
+        content.addArrangedSubview(row(label: "Long break minutes", control: longBreakField))
+        content.addArrangedSubview(row(label: "Long break cadence", control: longBreakEveryField))
+        content.addArrangedSubview(row(label: "Focus end sound", control: focusSoundPopup))
+        content.addArrangedSubview(row(label: "Break end sound", control: breakSoundPopup))
+        content.addArrangedSubview(buttonRow())
+
+        let root = NSView()
+        root.addSubview(content)
+        window.contentView = root
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 24),
+            content.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -24),
+            content.topAnchor.constraint(equalTo: root.topAnchor, constant: 24),
+            content.bottomAnchor.constraint(lessThanOrEqualTo: root.bottomAnchor, constant: -20),
+        ])
+    }
+
+    private func positiveIntegerFormatter() -> NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.allowsFloats = false
+        formatter.minimum = 1
+        formatter.maximum = 999
+        formatter.numberStyle = .none
+        return formatter
+    }
+
+    private func configureSoundPopup(_ popup: NSPopUpButton) {
+        popup.removeAllItems()
+        popup.addItems(withTitles: Self.soundNames)
+        popup.target = self
+        popup.action = #selector(playSelectedSound(_:))
+        popup.translatesAutoresizingMaskIntoConstraints = false
+        popup.widthAnchor.constraint(equalToConstant: 180).isActive = true
+    }
+
+    private func row(label: String, control: NSView) -> NSStackView {
+        let labelView = NSTextField(labelWithString: label)
+        labelView.alignment = .right
+        labelView.translatesAutoresizingMaskIntoConstraints = false
+        labelView.widthAnchor.constraint(equalToConstant: 156).isActive = true
+
+        let stack = NSStackView(views: [labelView, control])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 12
+        return stack
+    }
+
+    private func buttonRow() -> NSStackView {
+        saveButton.target = self
+        saveButton.action = #selector(save(_:))
+        saveButton.keyEquivalent = "\r"
+        cancelButton.target = self
+        cancelButton.action = #selector(cancel(_:))
+        cancelButton.keyEquivalent = "\u{1b}"
+
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+        let stack = NSStackView(views: [spacer, cancelButton, saveButton])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 8
+        stack.widthAnchor.constraint(equalToConstant: 372).isActive = true
+        return stack
+    }
+
+    private func apply(_ config: PmdrConfig) {
+        focusField.integerValue = config.focusMinutes
+        shortBreakField.integerValue = config.shortBreakMinutes
+        longBreakField.integerValue = config.longBreakMinutes
+        longBreakEveryField.integerValue = config.longBreakEvery
+        selectSound(config.focusEndSound, in: focusSoundPopup)
+        selectSound(config.breakEndSound, in: breakSoundPopup)
+    }
+
+    private func selectSound(_ sound: String, in popup: NSPopUpButton) {
+        if !Self.soundNames.contains(sound) {
+            popup.addItem(withTitle: sound)
+        }
+        popup.selectItem(withTitle: sound)
+    }
+
+    @objc private func playSelectedSound(_ sender: NSPopUpButton) {
+        guard let sound = sender.titleOfSelectedItem else { return }
+        NSSound(named: NSSound.Name(sound))?.play()
+    }
+
+    @objc private func cancel(_ sender: NSButton) {
+        apply(representedConfig)
+        window.close()
+    }
+
+    @objc private func save(_ sender: NSButton) {
+        guard
+            focusField.integerValue > 0,
+            shortBreakField.integerValue > 0,
+            longBreakField.integerValue > 0,
+            longBreakEveryField.integerValue > 0,
+            let focusSound = focusSoundPopup.titleOfSelectedItem,
+            let breakSound = breakSoundPopup.titleOfSelectedItem
+        else {
+            showValidationAlert()
+            return
+        }
+
+        saveButton.isEnabled = false
+        let updates = [
+            ("focusMinutes", "\(focusField.integerValue)"),
+            ("shortBreakMinutes", "\(shortBreakField.integerValue)"),
+            ("longBreakMinutes", "\(longBreakField.integerValue)"),
+            ("longBreakEvery", "\(longBreakEveryField.integerValue)"),
+            ("focusEndSound", focusSound),
+            ("breakEndSound", breakSound),
+        ]
+
+        Task { [client, onSaved, weak self] in
+            do {
+                for update in updates {
+                    try await client.setConfigValue(key: update.0, value: update.1)
+                }
+                await MainActor.run {
+                    self?.saveButton.isEnabled = true
+                    self?.window.close()
+                    onSaved()
+                }
+            } catch {
+                await MainActor.run {
+                    self?.saveButton.isEnabled = true
+                    self?.showSaveError(error)
+                }
+            }
+        }
+    }
+
+    private func showValidationAlert() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Invalid settings"
+        alert.informativeText = "Durations and cadence must be positive whole numbers."
+        alert.addButton(withTitle: "OK")
+        alert.beginSheetModal(for: window)
+    }
+
+    private func showSaveError(_ error: Error) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Could not save settings"
+        alert.informativeText = String(describing: error)
+        alert.addButton(withTitle: "OK")
+        alert.beginSheetModal(for: window)
     }
 }

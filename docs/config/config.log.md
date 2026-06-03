@@ -25,3 +25,10 @@
 **Summary:** Added menubar config decoding/client fetch support, wired launch/refresh config into optimistic focus duration, and made phase-end sounds use configured sound names while preserving default Glass/Submarine behavior.
 **Deviations:** `xcodebuild test` with the normal runner built successfully but could not attach to `testmanagerd` under the sandbox, so the test bundle was run directly with `xcrun xctest`.
 **Handoff:** Slice feedback passed with `xcrun xctest apps/menubar/DerivedData/Build/Products/Debug/pmdr-menubarTests.xctest` (117 tests, 3 integration skips) and `xcodebuild build -project apps/menubar/pmdr-menubar.xcodeproj -scheme pmdr-menubar -derivedDataPath apps/menubar/DerivedData`.
+
+## `settings-window` — 2026-06-04 01:19:34
+
+**Status:** needs-review
+**Summary:** Added a Command-comma Settings window with focus/short-break/long-break/cadence number fields, focus/break system-sound dropdowns that preview on selection, and save flow that shells out through `pmdr config set` before refetching menubar state.
+**Deviations:** The slice is explicitly a human checkpoint, so automated work is settled as `needs-review`; normal `xcodebuild test` still builds but cannot attach to `testmanagerd` in this sandbox, so the bundle was run directly with `xcrun xctest`.
+**Handoff:** Slice feedback passed with `xcrun xctest apps/menubar/DerivedData/Build/Products/Debug/pmdr-menubarTests.xctest` (118 tests, 3 integration skips) and `xcodebuild build -project apps/menubar/pmdr-menubar.xcodeproj -scheme pmdr-menubar -derivedDataPath apps/menubar/DerivedData`. Manual QA should verify the window saves values to `pmdr config get`, previews selected sounds audibly, picks up terminal-edited values on next open, and affects the next timer block/phase-end sound.

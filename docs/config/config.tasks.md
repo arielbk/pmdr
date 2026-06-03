@@ -54,7 +54,7 @@ A CLI-owned config file (`~/.config/pmdr/config.json` + `pmdr config get/set`) f
 
 ### `settings-window` — Menubar Settings window
 
-**Status:** not-started
+**Status:** needs-review
 
 **Outside-in:** "Settings…" menu item (⌘,) opens a window with four number fields (focus, short break, long break, long-break cadence) and two system-sound dropdowns that play the sound on selection; committed changes shell out to `pmdr config set` and the client refetches.
 

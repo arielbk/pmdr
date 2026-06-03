@@ -161,6 +161,10 @@ public struct PmdrClient: Sendable {
         return try Self.decodeConfig(from: data)
     }
 
+    public func setConfigValue(key: String, value: String) async throws {
+        _ = try await run(arguments: ["config", "set", key, value])
+    }
+
     public func archiveProject(_ name: String) async throws {
         _ = try await run(arguments: ["project", "archive", name])
     }

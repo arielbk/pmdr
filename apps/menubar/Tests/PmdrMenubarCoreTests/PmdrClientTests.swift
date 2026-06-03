@@ -145,6 +145,12 @@ final class PmdrClientArgvTests: XCTestCase {
         XCTAssertEqual(readArgv(argvLog), ["config", "--json"])
     }
 
+    func test_setConfigValue_invokes_config_set() async throws {
+        let (client, argvLog) = try makeArgvCapturingClient(stdout: "")
+        try await client.setConfigValue(key: "focusMinutes", value: "50")
+        XCTAssertEqual(readArgv(argvLog), ["config", "set", "focusMinutes", "50"])
+    }
+
     private func makeArgvCapturingClient(stdout: String) throws -> (PmdrClient, URL) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("pmdr-argv-\(UUID().uuidString)")
