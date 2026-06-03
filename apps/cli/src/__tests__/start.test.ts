@@ -1,9 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseDuration } from "../parse-duration.js";
-import { initTimer, resolveStartProject } from "../commands/start.js";
+import {
+  countdownCompleteMessage,
+  initTimer,
+  resolveStartProject,
+} from "../commands/start.js";
 import { createStateModule } from "../state.js";
 import { createProjectsModule } from "../projects.js";
 
@@ -135,6 +139,77 @@ describe("initTimer", () => {
     expect(() =>
       initTimer({ store, durationMs: 10_000, now: NOW, project: "test-proj" }),
     ).toThrow(/paused/i);
+  });
+
+  it("force-starts over a pending break, keeping the focus completion", () => {
+    // focus expired 10s ago → pending break. force skips the break: the focus
+    // completion stays logged, the pending break is discarded, and a fresh
+    // focus timer starts.
+    store.writeState({
+      startedAt: NOW - 70_000,
+      durationMs: 60_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+    });
+    initTimer({
+      store,
+      durationMs: 10_000,
+      now: NOW,
+      project: "test-proj",
+      id: "forced-1",
+      force: true,
+    });
+    expect(store.readState()).toMatchObject({
+      startedAt: NOW,
+      durationMs: 10_000,
+      phase: "focus",
+      completedFocusBlocks: 0,
+      id: "forced-1",
+    });
+    const completions = readFileSync(join(tmpDir, "completions.jsonl"), "utf8")
+      .trim()
+      .split("\n");
+    expect(completions).toHaveLength(1);
+  });
+
+  it("force-starts over a running timer", () => {
+    store.writeState({
+      startedAt: NOW - 5_000,
+      durationMs: 60_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+    });
+    initTimer({
+      store,
+      durationMs: 10_000,
+      now: NOW,
+      project: "test-proj",
+      id: "forced-2",
+      force: true,
+    });
+    expect(store.readState()).toMatchObject({ startedAt: NOW, id: "forced-2" });
+  });
+});
+
+describe("countdownCompleteMessage", () => {
+  const NOW = 1_000_000;
+
+  it("announces the break as ready (not running) when a pending break follows the focus", () => {
+    const message = countdownCompleteMessage({
+      startedAt: NOW,
+      durationMs: 5 * 60 * 1000,
+      pausedAt: NOW,
+      accumulatedPauseMs: 0,
+      phase: "break",
+      completedFocusBlocks: 1,
+    });
+    expect(message).toContain("Break ready");
+    expect(message).toContain("pmdr resume");
+    expect(message).not.toMatch(/break started/i);
+  });
+
+  it("stays a plain completion when no pending break follows", () => {
+    expect(countdownCompleteMessage(null)).toBe("Pomodoro complete!");
   });
 });
 

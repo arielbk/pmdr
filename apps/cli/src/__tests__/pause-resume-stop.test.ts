@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStateModule } from "../state.js";
+import { createStateModule, deriveState } from "../state.js";
 import { pauseTimer } from "../commands/pause.js";
 import { resumeTimer } from "../commands/resume.js";
 import { stopTimer } from "../commands/stop.js";
@@ -153,6 +153,26 @@ describe("resumeTimer", () => {
     const file = store.readState();
     expect(file?.phase).toBe("break");
     expect(file?.pausedAt).toBeNull(); // now running
+  });
+
+  it("resuming a pending break shifts its end: the full duration runs from the resume moment", () => {
+    // focus expired 10s ago → pending break born paused at NOW-10_000. Resuming
+    // at NOW counts those 10s as pause time, so the break still has its full
+    // 5 minutes ahead of it.
+    store.writeState({
+      startedAt: NOW - 70_000,
+      durationMs: 60_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+    });
+    resumeTimer({ store, now: NOW });
+    const file = store.readState();
+    expect(file?.accumulatedPauseMs).toBe(10_000);
+    const derived = deriveState({ file, now: NOW });
+    expect(derived).toMatchObject({
+      kind: "running",
+      remainingMs: 5 * 60 * 1000,
+    });
   });
 });
 
