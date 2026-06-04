@@ -9,6 +9,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { createConfigModule } from "./config.js";
 
 export interface StateRecord {
   startedAt: number;
@@ -21,16 +22,21 @@ export interface StateRecord {
   id?: string;
 }
 
-const DEFAULT_SHORT_BREAK_MS = 5 * 60 * 1000;
-const DEFAULT_LONG_BREAK_MS = 15 * 60 * 1000;
-const DEFAULT_LONG_BREAK_AFTER = 4;
-
 export const DEFAULT_FOCUS_GOAL = 8;
 
-function computeBreakDurationMs(completedFocusBlocks: number): number {
-  return completedFocusBlocks % DEFAULT_LONG_BREAK_AFTER === 0
-    ? DEFAULT_LONG_BREAK_MS
-    : DEFAULT_SHORT_BREAK_MS;
+type ConfigReader = Pick<
+  ReturnType<typeof createConfigModule>,
+  "readEffectiveConfig"
+>;
+
+function computeBreakDurationMs(
+  completedFocusBlocks: number,
+  config: ConfigReader,
+): number {
+  const effective = config.readEffectiveConfig();
+  return completedFocusBlocks % effective.longBreakEvery === 0
+    ? effective.longBreakMinutes * 60_000
+    : effective.shortBreakMinutes * 60_000;
 }
 
 export type DerivedKind = "idle" | "running" | "paused" | "expired";
@@ -84,10 +90,14 @@ export function deriveState({
   return { kind: "running", remainingMs };
 }
 
-export function createStateModule(stateDir: string) {
+export function createStateModule(
+  stateDir: string,
+  options: { config?: ConfigReader } = {},
+) {
   const stateFile = join(stateDir, "state.json");
   const completionsFile = join(stateDir, "completions.jsonl");
   const eventsFile = join(stateDir, "events.jsonl");
+  const config = options.config ?? createConfigModule();
 
   function appendEvent(event: EventRecord): void {
     mkdirSync(stateDir, { recursive: true });
@@ -179,7 +189,6 @@ export function createStateModule(stateDir: string) {
   }
 
   function advancePhaseIfExpired(now: number): void {
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const file = readState();
       if (!file) return;
@@ -205,7 +214,7 @@ export function createStateModule(stateDir: string) {
         // advancing the pending break.
         writeState({
           startedAt: completedAt,
-          durationMs: computeBreakDurationMs(newCompletedFocusBlocks),
+          durationMs: computeBreakDurationMs(newCompletedFocusBlocks, config),
           pausedAt: completedAt,
           accumulatedPauseMs: 0,
           project: file.project,

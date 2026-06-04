@@ -34,20 +34,30 @@ public struct PhaseNotifier: Sendable {
 
     private let presenter: NotificationPresenting
     private let soundPlayer: SoundPlaying?
+    private let config: PmdrConfig
 
-    public init(presenter: NotificationPresenting, soundPlayer: SoundPlaying? = nil) {
+    public init(
+        presenter: NotificationPresenting,
+        soundPlayer: SoundPlaying? = nil,
+        config: PmdrConfig = .defaults
+    ) {
         self.presenter = presenter
         self.soundPlayer = soundPlayer
+        self.config = config
+    }
+
+    public func withConfig(_ config: PmdrConfig) -> PhaseNotifier {
+        PhaseNotifier(presenter: presenter, soundPlayer: soundPlayer, config: config)
     }
 
     public func handle(_ events: [StatusPoller.Event]) async {
         for event in events {
             switch event {
             case .phaseTransition(from: .focus, to: .break):
-                soundPlayer?.play(named: SoundName.glass)
+                soundPlayer?.play(named: config.focusEndSound)
                 await presenter.present(title: "Focus done", body: "Break ready")
             case .sessionEnded(lastPhase: .break):
-                soundPlayer?.play(named: SoundName.submarine)
+                soundPlayer?.play(named: config.breakEndSound)
                 await presenter.present(title: "Break done", body: "")
             case .statusChanged, .phaseTransition, .sessionEnded:
                 continue

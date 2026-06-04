@@ -56,6 +56,32 @@ final class PmdrClientDecodingTests: XCTestCase {
         ])
     }
 
+    func test_decodes_full_effective_config() throws {
+        let json = Data(#"""
+        {"focusMinutes":50,"shortBreakMinutes":10,"longBreakMinutes":30,"longBreakEvery":2,"focusEndSound":"Ping","breakEndSound":"Pop"}
+        """#.utf8)
+        XCTAssertEqual(try PmdrClient.decodeConfig(from: json), .init(
+            focusMinutes: 50,
+            shortBreakMinutes: 10,
+            longBreakMinutes: 30,
+            longBreakEvery: 2,
+            focusEndSound: "Ping",
+            breakEndSound: "Pop"
+        ))
+    }
+
+    func test_decodes_partial_config_with_defaults() throws {
+        let json = Data(#"{"focusMinutes":45,"breakEndSound":"Hero"}"#.utf8)
+        XCTAssertEqual(try PmdrClient.decodeConfig(from: json), .init(
+            focusMinutes: 45,
+            shortBreakMinutes: 5,
+            longBreakMinutes: 15,
+            longBreakEvery: 4,
+            focusEndSound: "Glass",
+            breakEndSound: "Hero"
+        ))
+    }
+
     func test_throws_decoding_failed_on_unknown_state() {
         let json = Data(#"{"state":"wat"}"#.utf8)
         XCTAssertThrowsError(try PmdrClient.decodeStatus(from: json)) { error in
@@ -110,6 +136,19 @@ final class PmdrClientArgvTests: XCTestCase {
         let (client, argvLog) = try makeArgvCapturingClient(stdout: "")
         try await client.unarchiveProject("alpha")
         XCTAssertEqual(readArgv(argvLog), ["project", "unarchive", "alpha"])
+    }
+
+    func test_config_invokes_config_json() async throws {
+        let (client, argvLog) = try makeArgvCapturingClient(stdout: #"{"focusMinutes":50}"#)
+        let config = try await client.config()
+        XCTAssertEqual(config.focusMinutes, 50)
+        XCTAssertEqual(readArgv(argvLog), ["config", "--json"])
+    }
+
+    func test_setConfigValue_invokes_config_set() async throws {
+        let (client, argvLog) = try makeArgvCapturingClient(stdout: "")
+        try await client.setConfigValue(key: "focusMinutes", value: "50")
+        XCTAssertEqual(readArgv(argvLog), ["config", "set", "focusMinutes", "50"])
     }
 
     private func makeArgvCapturingClient(stdout: String) throws -> (PmdrClient, URL) {

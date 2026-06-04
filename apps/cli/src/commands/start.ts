@@ -9,11 +9,24 @@ import {
   type StateRecord,
 } from "../state.js";
 import { createProjectsModule } from "../projects.js";
+import { createConfigModule } from "../config.js";
 import { select, text, cancel, isCancel } from "@clack/prompts";
 
-const DEFAULT_DURATION_MS = 25 * 60 * 1_000;
 const STATE_DIR = join(homedir(), ".local", "state", "pmdr");
 const UNASSIGNED_PROJECT = "(unassigned)";
+type ConfigReader = Pick<
+  ReturnType<typeof createConfigModule>,
+  "readEffectiveConfig"
+>;
+
+export function resolveStartDurationMs(
+  durationArg: string | undefined,
+  config: ConfigReader = createConfigModule(),
+): number {
+  return durationArg
+    ? parseDuration(durationArg)
+    : config.readEffectiveConfig().focusMinutes * 60_000;
+}
 
 export function initTimer(options: {
   store: ReturnType<typeof createStateModule>;
@@ -231,9 +244,7 @@ export default defineCommand({
   async run({ args }) {
     let durationMs: number;
     try {
-      durationMs = args.duration
-        ? parseDuration(args.duration)
-        : DEFAULT_DURATION_MS;
+      durationMs = resolveStartDurationMs(args.duration as string | undefined);
     } catch (e) {
       console.error((e as Error).message);
       process.exit(1);

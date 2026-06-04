@@ -1,8 +1,12 @@
 import React from "react";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { render, cleanup } from "ink-testing-library";
 import ProjectPickerOverlay from "../tui/ProjectPickerOverlay.js";
 import App from "../tui/App.js";
+import { createStateModule } from "../state.js";
 import type { ProjectRecord } from "../projects.js";
 
 const flush = () => Promise.resolve();
@@ -416,6 +420,37 @@ describe("App — project picker integration", () => {
 
     expect(lastFrame()).toContain("alpha");
     expect(lastFrame()).not.toContain("Applies from next block"); // overlay closed
+  });
+
+  it("starting from the picker uses the configured focus duration", async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "pmdr-tui-config-"));
+    const store = createStateModule(tmpDir);
+
+    try {
+      const { stdin } = render(
+        <App
+          getProjects={() => [alpha]}
+          store={store}
+          readEffectiveConfigFn={() => ({
+            focusMinutes: 50,
+            shortBreakMinutes: 5,
+            longBreakMinutes: 15,
+            longBreakEvery: 4,
+            focusEndSound: "Glass",
+            breakEndSound: "Submarine",
+          })}
+        />,
+      );
+
+      stdin.write("\x1B[B"); // past None to alpha
+      await flush();
+      stdin.write("\r"); // select alpha and start
+      await flush();
+
+      expect(store.readState()?.durationMs).toBe(50 * 60 * 1000);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it("pressing 'A' toggles show-archived: archived rows appear, getProjects called with includeArchived: true", async () => {

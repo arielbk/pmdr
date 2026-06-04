@@ -7,6 +7,7 @@ import statusCmd from "./commands/status.js";
 import todayCmd from "./commands/today.js";
 import projectCmd from "./commands/project.js";
 import serveCmd from "./commands/serve.js";
+import configCmd from "./commands/config.js";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
@@ -21,6 +22,7 @@ const subCommands = {
   today: todayCmd,
   project: projectCmd,
   serve: serveCmd,
+  config: configCmd,
 };
 
 function isSubCommandInvocation(rawArgs: string[]): boolean {

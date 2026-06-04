@@ -6,6 +6,7 @@ import { parseDuration } from "../parse-duration.js";
 import {
   countdownCompleteMessage,
   initTimer,
+  resolveStartDurationMs,
   resolveStartProject,
 } from "../commands/start.js";
 import { createStateModule } from "../state.js";
@@ -188,6 +189,27 @@ describe("initTimer", () => {
       force: true,
     });
     expect(store.readState()).toMatchObject({ startedAt: NOW, id: "forced-2" });
+  });
+});
+
+describe("resolveStartDurationMs", () => {
+  const config = {
+    readEffectiveConfig: () => ({
+      focusMinutes: 50,
+      shortBreakMinutes: 5,
+      longBreakMinutes: 15,
+      longBreakEvery: 4,
+      focusEndSound: "Glass",
+      breakEndSound: "Submarine",
+    }),
+  };
+
+  it("uses configured focus duration when no duration is given", () => {
+    expect(resolveStartDurationMs(undefined, config)).toBe(50 * 60 * 1000);
+  });
+
+  it("uses the explicit duration when one is given", () => {
+    expect(resolveStartDurationMs("10s", config)).toBe(10_000);
   });
 });
 
