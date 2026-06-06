@@ -12,7 +12,6 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         var completedFocusBlocks: Int
     }
 
-    private static let focusGoal = 8
     private static let visualSize = NSSize(width: 240, height: 136)
     private static let shadowMargin: CGFloat = 20
     private static let panelSize = NSSize(
@@ -44,6 +43,9 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         isMuted: true,
         completedFocusBlocks: 0
     )
+
+    private var dailyGoal: Int = 8
+    private var longBreakEvery: Int = 4
 
     private let positionStore: FloatingTimerPosition
     private let screenProvider: () -> NSScreen?
@@ -83,6 +85,10 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
 
     var visualEffectViewForTesting: NSVisualEffectView? {
         effectView
+    }
+
+    var dotStringForTesting: String {
+        Self.buildDotString(completed: snapshot.completedFocusBlocks, goal: dailyGoal, longBreakEvery: longBreakEvery)
     }
 
     var dotsAlphaForTesting: CGFloat {
@@ -224,6 +230,12 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         actions?.listProjects() ?? []
     }
 
+    func configureGoal(dailyGoal: Int, longBreakEvery: Int) {
+        self.dailyGoal = max(1, dailyGoal)
+        self.longBreakEvery = max(1, longBreakEvery)
+        render()
+    }
+
     func update(status: Status, lastProject: String?, elapsedSincePoll: TimeInterval) {
         currentStatus = status
         let viewModel = FloatingTimerViewModel(
@@ -282,7 +294,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         projectField?.textColor = .secondaryLabelColor
         timeField?.stringValue = snapshot.time
         timeField?.textColor = snapshot.phaseColor
-        dotsField?.attributedStringValue = Self.dotsAttributedString(
+        dotsField?.attributedStringValue = dotsAttributedString(
             completed: snapshot.completedFocusBlocks,
             isMuted: snapshot.isMuted
         )
@@ -363,23 +375,42 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         }
     }
 
-    private static func dotsAttributedString(completed: Int, isMuted: Bool) -> NSAttributedString {
-        let filled = min(max(completed, 0), focusGoal)
-        let empty = max(0, focusGoal - filled)
-        let parts = Array(repeating: "●", count: filled) + Array(repeating: "○", count: empty)
-        let joined = parts.joined(separator: " ")
-        let attr = NSMutableAttributedString(string: joined)
+    /// Builds a dot string for the given completion count, goal, and long-break cadence.
+    /// Dots within a group are separated by a thin space (U+2009); groups are separated by two regular spaces.
+    static func buildDotString(completed: Int, goal: Int, longBreakEvery: Int) -> String {
+        let filled = min(max(completed, 0), goal)
+        let thinSpace = "\u{2009}"
+        var result = ""
+        for i in 0 ..< goal {
+            let isGroupBoundary = longBreakEvery > 0 && i > 0 && i % longBreakEvery == 0
+            if isGroupBoundary {
+                result += "  "
+            } else if i > 0 {
+                result += thinSpace
+            }
+            result += i < filled ? "●" : "○"
+        }
+        return result
+    }
+
+    private func dotsAttributedString(completed: Int, isMuted: Bool) -> NSAttributedString {
+        let dotString = Self.buildDotString(completed: completed, goal: dailyGoal, longBreakEvery: longBreakEvery)
+        let attr = NSMutableAttributedString(string: dotString)
         let font = NSFont.systemFont(ofSize: 11, weight: .regular)
         attr.addAttribute(.font, value: font, range: NSRange(location: 0, length: attr.length))
         let filledColor: NSColor = isMuted ? NSColor.systemGreen.withAlphaComponent(0.4) : .systemGreen
         let emptyColor: NSColor = .tertiaryLabelColor
         var cursor = 0
-        for (index, char) in parts.enumerated() {
-            let length = (char as NSString).length
-            let color = char == "●" ? filledColor : emptyColor
-            attr.addAttribute(.foregroundColor, value: color, range: NSRange(location: cursor, length: length))
-            cursor += length
-            if index < parts.count - 1 {
+        for char in dotString.unicodeScalars {
+            let scalar = char
+            if scalar == "●" {
+                attr.addAttribute(.foregroundColor, value: filledColor, range: NSRange(location: cursor, length: 1))
+                cursor += 1
+            } else if scalar == "○" {
+                attr.addAttribute(.foregroundColor, value: emptyColor, range: NSRange(location: cursor, length: 1))
+                cursor += 1
+            } else {
+                // space character(s)
                 cursor += 1
             }
         }
@@ -474,7 +505,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
 
         let dots = FloatingTimerLabel(labelWithString: "")
         dots.alignment = .center
-        dots.attributedStringValue = Self.dotsAttributedString(
+        dots.attributedStringValue = dotsAttributedString(
             completed: snapshot.completedFocusBlocks,
             isMuted: snapshot.isMuted
         )

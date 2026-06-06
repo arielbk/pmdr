@@ -2,10 +2,9 @@ import { defineCommand } from "citty";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createStateModule, deriveState } from "../state.js";
+import { createConfigModule } from "../config.js";
 
 const STATE_DIR = join(homedir(), ".local", "state", "pmdr");
-
-const LONG_BREAK_AFTER = 4;
 
 export type StatusResult =
   | { state: "idle" }
@@ -17,30 +16,17 @@ export type StatusResult =
       phase: "focus" | "break";
       completedFocusBlocks: number;
       todayFocusBlocks: number;
+      longBreakEvery: number;
       project?: string;
     };
-
-function countTodayFocusBlocks(
-  store: ReturnType<typeof createStateModule>,
-  now: number,
-): number {
-  const completions = store.readCompletions();
-  const today = new Date(now);
-  return completions.filter((c) => {
-    const d = new Date(c.completedAt);
-    return (
-      d.getFullYear() === today.getFullYear() &&
-      d.getMonth() === today.getMonth() &&
-      d.getDate() === today.getDate()
-    );
-  }).length;
-}
 
 export function getStatus(opts: {
   store: ReturnType<typeof createStateModule>;
   now: number;
+  config?: Pick<ReturnType<typeof createConfigModule>, "readEffectiveConfig">;
 }): StatusResult {
   const { store, now } = opts;
+  const config = opts.config ?? createConfigModule();
 
   store.advancePhaseIfExpired(now);
 
@@ -51,7 +37,8 @@ export function getStatus(opts: {
     return { state: "idle" };
   }
 
-  const todayFocusBlocks = countTodayFocusBlocks(store, now);
+  const todayFocusBlocks = store.countTodayFocusBlocks(now);
+  const { longBreakEvery } = config.readEffectiveConfig();
 
   const base = {
     state: derived.kind,
@@ -61,6 +48,7 @@ export function getStatus(opts: {
     phase: file!.phase ?? "focus",
     completedFocusBlocks: file!.completedFocusBlocks ?? 0,
     todayFocusBlocks,
+    longBreakEvery,
   } as const;
 
   return file!.project ? { ...base, project: file!.project } : base;
@@ -78,10 +66,11 @@ export function formatStatus(result: StatusResult): string {
   const remaining = formatRemaining(result.remainingMs);
   const prefix =
     result.state === "paused" ? `${result.phase} paused` : result.phase;
+  const { longBreakEvery, todayFocusBlocks } = result;
   const suffix =
     result.phase === "focus"
-      ? `(block ${result.completedFocusBlocks + 1}/${LONG_BREAK_AFTER})`
-      : `(${result.completedFocusBlocks}/${LONG_BREAK_AFTER} done)`;
+      ? `(block ${(todayFocusBlocks % longBreakEvery) + 1}/${longBreakEvery})`
+      : `(${todayFocusBlocks}/${longBreakEvery} done)`;
   return `${prefix} — ${remaining} left ${suffix}`;
 }
 

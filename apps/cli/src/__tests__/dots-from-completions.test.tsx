@@ -1,12 +1,14 @@
 import React from "react";
-import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { render, cleanup } from "ink-testing-library";
 import CountdownView from "../tui/CountdownView.js";
+import App from "../tui/App.js";
 import { derivePhaseState } from "../tui/phase-state-machine.js";
 import { createStateModule } from "../state.js";
+import { DEFAULT_CONFIG } from "../config.js";
 
 afterEach(() => {
   cleanup();
@@ -49,6 +51,88 @@ describe("CountdownView — dot row", () => {
     );
     const filled = (lastFrame() ?? "").match(/●/g) ?? [];
     expect(filled.length).toBe(8);
+  });
+
+  it("renders dailyGoal=6 total dots (3 filled, 3 empty)", () => {
+    const { lastFrame } = render(
+      <CountdownView
+        phase="focus"
+        remainingMs={25 * 60 * 1000}
+        completedFocusBlocks={3}
+        paused={false}
+        dailyGoal={6}
+        longBreakEvery={3}
+      />,
+    );
+    const filled = (lastFrame() ?? "").match(/●/g) ?? [];
+    const empty = (lastFrame() ?? "").match(/○/g) ?? [];
+    expect(filled.length).toBe(3);
+    expect(empty.length).toBe(3);
+  });
+
+  it("inserts an extra gap every longBreakEvery dots (goal=8, longBreakEvery=4)", () => {
+    const { lastFrame } = render(
+      <CountdownView
+        phase="focus"
+        remainingMs={25 * 60 * 1000}
+        completedFocusBlocks={0}
+        paused={false}
+        dailyGoal={8}
+        longBreakEvery={4}
+      />,
+    );
+    // The gap between the two groups of 4 is two spaces, but within each group only one space.
+    // Match the pattern: 4 dots separated by single spaces, then double-space, then 4 dots.
+    const frame = lastFrame() ?? "";
+    expect(frame).toMatch(/○ ○ ○ ○  ○ ○ ○ ○/);
+  });
+
+  it("caps filled dots at dailyGoal even when completedFocusBlocks exceeds it", () => {
+    const { lastFrame } = render(
+      <CountdownView
+        phase="focus"
+        remainingMs={25 * 60 * 1000}
+        completedFocusBlocks={12}
+        paused={false}
+        dailyGoal={8}
+        longBreakEvery={4}
+      />,
+    );
+    const filled = (lastFrame() ?? "").match(/●/g) ?? [];
+    const empty = (lastFrame() ?? "").match(/○/g) ?? [];
+    expect(filled.length).toBe(8);
+    expect(empty.length).toBe(0);
+  });
+});
+
+describe("App — config wires dailyGoal into dot row", () => {
+  let tmpDir: string;
+  let store: ReturnType<typeof createStateModule>;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-app-dots-test-"));
+    store = createStateModule(tmpDir);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+    cleanup();
+  });
+
+  it("renders only dailyGoal dots when config sets dailyGoal=6", () => {
+    const config = { ...DEFAULT_CONFIG, dailyGoal: 6, longBreakEvery: 3 };
+    const { lastFrame } = render(
+      <App
+        store={store}
+        readEffectiveConfigFn={() => config}
+        exitFn={vi.fn()}
+      />,
+    );
+    // The initial project picker is shown; skip to the dot row check
+    // Dots should be 6 total (goal=6) — 6 empty circles, no filled
+    const frame = lastFrame() ?? "";
+    const totalDots = (frame.match(/[●○]/g) ?? []).length;
+    expect(totalDots).toBe(6);
   });
 });
 

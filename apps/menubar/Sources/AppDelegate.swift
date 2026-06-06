@@ -427,6 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
             self.lastPollAt = now
             self.projects = projects
             self.currentConfig = config
+            self.floatingTimerPanelController?.configureGoal(dailyGoal: config.dailyGoal, longBreakEvery: config.longBreakEvery)
             self.notifier = self.notifier?.withConfig(config)
             self.updateIcon(for: status)
             self.rebuildMenu()
@@ -587,7 +588,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
 }
 
 @MainActor
-private final class SettingsWindowController: NSObject {
+private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
     private static let soundNames = [
         "Basso",
         "Blow",
@@ -609,9 +610,15 @@ private final class SettingsWindowController: NSObject {
     private let onSaved: () -> Void
     private let window: NSWindow
     private let focusField = NSTextField()
+    private let focusStepper = NSStepper()
     private let shortBreakField = NSTextField()
+    private let shortBreakStepper = NSStepper()
     private let longBreakField = NSTextField()
+    private let longBreakStepper = NSStepper()
     private let longBreakEveryField = NSTextField()
+    private let longBreakEveryStepper = NSStepper()
+    private let dailyGoalField = NSTextField()
+    private let dailyGoalStepper = NSStepper()
     private let focusSoundPopup = NSPopUpButton()
     private let breakSoundPopup = NSPopUpButton()
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
@@ -622,7 +629,7 @@ private final class SettingsWindowController: NSObject {
         self.client = client
         self.onSaved = onSaved
         self.window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 316),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 350),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -649,47 +656,107 @@ private final class SettingsWindowController: NSObject {
         content.spacing = 12
         content.translatesAutoresizingMaskIntoConstraints = false
 
-        for field in [
-            focusField,
-            shortBreakField,
-            longBreakField,
-            longBreakEveryField,
-        ] {
-            field.alignment = .right
-            field.formatter = positiveIntegerFormatter()
-            field.translatesAutoresizingMaskIntoConstraints = false
-            field.widthAnchor.constraint(equalToConstant: 72).isActive = true
+        let numericPairs: [(NSTextField, NSStepper, Int, Int)] = [
+            (focusField, focusStepper, 1, 240),
+            (shortBreakField, shortBreakStepper, 1, 60),
+            (longBreakField, longBreakStepper, 1, 120),
+            (longBreakEveryField, longBreakEveryStepper, 1, 20),
+            (dailyGoalField, dailyGoalStepper, 1, 99),
+        ]
+        for (field, stepper, minVal, maxVal) in numericPairs {
+            configureNumericField(field, stepper: stepper, min: minVal, max: maxVal)
         }
 
         configureSoundPopup(focusSoundPopup)
         configureSoundPopup(breakSoundPopup)
 
-        content.addArrangedSubview(row(label: "Focus minutes", control: focusField))
-        content.addArrangedSubview(row(label: "Short break minutes", control: shortBreakField))
-        content.addArrangedSubview(row(label: "Long break minutes", control: longBreakField))
-        content.addArrangedSubview(row(label: "Long break cadence", control: longBreakEveryField))
+        content.addArrangedSubview(row(label: "Focus minutes", control: numericControl(focusField, focusStepper)))
+        content.addArrangedSubview(row(label: "Short break minutes", control: numericControl(shortBreakField, shortBreakStepper)))
+        content.addArrangedSubview(row(label: "Long break minutes", control: numericControl(longBreakField, longBreakStepper)))
+        content.addArrangedSubview(row(label: "Long break cadence", control: numericControl(longBreakEveryField, longBreakEveryStepper)))
+        content.addArrangedSubview(row(label: "Daily goal", control: numericControl(dailyGoalField, dailyGoalStepper)))
         content.addArrangedSubview(row(label: "Focus end sound", control: focusSoundPopup))
         content.addArrangedSubview(row(label: "Break end sound", control: breakSoundPopup))
         content.addArrangedSubview(buttonRow())
 
-        let root = NSView()
+        // Use the stack's natural (fitting) size to drive the window height so
+        // there is no dead space below the button row.
+        let inset: CGFloat = 24
+        let stackFit = content.fittingSize
+        let contentWidth = window.contentRect(forFrameRect: window.frame).width
+        let contentHeight = stackFit.height + inset * 2
+        window.setContentSize(NSSize(width: contentWidth, height: contentHeight))
+
+        let root = window.contentView!
         root.addSubview(content)
-        window.contentView = root
         NSLayoutConstraint.activate([
-            content.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 24),
-            content.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -24),
-            content.topAnchor.constraint(equalTo: root.topAnchor, constant: 24),
-            content.bottomAnchor.constraint(lessThanOrEqualTo: root.bottomAnchor, constant: -20),
+            content.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: inset),
+            content.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -inset),
+            content.topAnchor.constraint(equalTo: root.topAnchor, constant: inset),
+            content.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -inset),
         ])
     }
 
-    private func positiveIntegerFormatter() -> NumberFormatter {
+    /// Returns a fixed-width container holding a right-aligned text field and an NSStepper.
+    /// Total width matches the sound popup buttons (180 pt) so all rows align uniformly.
+    private func numericControl(_ field: NSTextField, _ stepper: NSStepper) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        field.translatesAutoresizingMaskIntoConstraints = false
+        stepper.translatesAutoresizingMaskIntoConstraints = false
+
+        container.addSubview(field)
+        container.addSubview(stepper)
+
+        // Stepper sits on the right; text field fills the remaining space.
+        let stepperWidth: CGFloat = 19
+        let gap: CGFloat = 4
+        let totalWidth: CGFloat = 180
+
+        NSLayoutConstraint.activate([
+            container.widthAnchor.constraint(equalToConstant: totalWidth),
+            container.heightAnchor.constraint(equalToConstant: 22),
+
+            stepper.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            stepper.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            stepper.widthAnchor.constraint(equalToConstant: stepperWidth),
+
+            field.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            field.trailingAnchor.constraint(equalTo: stepper.leadingAnchor, constant: -gap),
+            field.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+        ])
+        return container
+    }
+
+    private func configureNumericField(_ field: NSTextField, stepper: NSStepper, min: Int, max: Int) {
         let formatter = NumberFormatter()
         formatter.allowsFloats = false
-        formatter.minimum = 1
-        formatter.maximum = 999
+        formatter.minimum = NSNumber(value: min)
+        formatter.maximum = NSNumber(value: max)
         formatter.numberStyle = .none
-        return formatter
+        field.alignment = .right
+        field.formatter = formatter
+        field.delegate = self
+
+        stepper.minValue = Double(min)
+        stepper.maxValue = Double(max)
+        stepper.increment = 1
+        stepper.valueWraps = false
+        stepper.target = self
+        stepper.action = #selector(stepperChanged(_:))
+        // Tag both views with the same tag so the stepper handler can find the paired field.
+        field.tag = ObjectIdentifier(field).hashValue & 0xFFFF
+        stepper.tag = field.tag
+    }
+
+    @objc private func stepperChanged(_ sender: NSStepper) {
+        // Find the text field that shares this stepper's tag and update it.
+        for field in [focusField, shortBreakField, longBreakField, longBreakEveryField, dailyGoalField] {
+            if field.tag == sender.tag {
+                field.integerValue = sender.integerValue
+                break
+            }
+        }
     }
 
     private func configureSoundPopup(_ popup: NSPopUpButton) {
@@ -710,7 +777,7 @@ private final class SettingsWindowController: NSObject {
         let stack = NSStackView(views: [labelView, control])
         stack.orientation = .horizontal
         stack.alignment = .centerY
-        stack.spacing = 12
+        stack.spacing = 20
         return stack
     }
 
@@ -724,21 +791,73 @@ private final class SettingsWindowController: NSObject {
 
         let spacer = NSView()
         spacer.translatesAutoresizingMaskIntoConstraints = false
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         let stack = NSStackView(views: [spacer, cancelButton, saveButton])
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.spacing = 8
+        // Width matches the full content area (window 420pt − 24pt × 2 padding).
         stack.widthAnchor.constraint(equalToConstant: 372).isActive = true
         return stack
     }
 
     private func apply(_ config: PmdrConfig) {
         focusField.integerValue = config.focusMinutes
+        focusStepper.integerValue = config.focusMinutes
         shortBreakField.integerValue = config.shortBreakMinutes
+        shortBreakStepper.integerValue = config.shortBreakMinutes
         longBreakField.integerValue = config.longBreakMinutes
+        longBreakStepper.integerValue = config.longBreakMinutes
         longBreakEveryField.integerValue = config.longBreakEvery
+        longBreakEveryStepper.integerValue = config.longBreakEvery
+        dailyGoalField.integerValue = config.dailyGoal
+        dailyGoalStepper.integerValue = config.dailyGoal
         selectSound(config.focusEndSound, in: focusSoundPopup)
         selectSound(config.breakEndSound, in: breakSoundPopup)
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        guard let field = obj.object as? NSTextField else { return }
+        // Keep the stepper in sync when the user edits the text field directly.
+        let pairs: [(NSTextField, NSStepper)] = [
+            (focusField, focusStepper),
+            (shortBreakField, shortBreakStepper),
+            (longBreakField, longBreakStepper),
+            (longBreakEveryField, longBreakEveryStepper),
+            (dailyGoalField, dailyGoalStepper),
+        ]
+        for (f, s) in pairs where f === field {
+            s.integerValue = field.integerValue
+            break
+        }
+    }
+
+    func control(
+        _ control: NSControl,
+        textView: NSTextView,
+        doCommandBy commandSelector: Selector
+    ) -> Bool {
+        guard let field = control as? NSTextField else { return false }
+        let pairs: [(NSTextField, NSStepper)] = [
+            (focusField, focusStepper),
+            (shortBreakField, shortBreakStepper),
+            (longBreakField, longBreakStepper),
+            (longBreakEveryField, longBreakEveryStepper),
+            (dailyGoalField, dailyGoalStepper),
+        ]
+        guard let (_, stepper) = pairs.first(where: { $0.0 === field }) else { return false }
+        let delta: Int
+        if commandSelector == #selector(NSResponder.moveUp(_:)) {
+            delta = 1
+        } else if commandSelector == #selector(NSResponder.moveDown(_:)) {
+            delta = -1
+        } else {
+            return false
+        }
+        let newValue = min(Int(stepper.maxValue), max(Int(stepper.minValue), field.integerValue + delta))
+        field.integerValue = newValue
+        stepper.integerValue = newValue
+        return true
     }
 
     private func selectSound(_ sound: String, in popup: NSPopUpButton) {
@@ -764,6 +883,7 @@ private final class SettingsWindowController: NSObject {
             shortBreakField.integerValue > 0,
             longBreakField.integerValue > 0,
             longBreakEveryField.integerValue > 0,
+            dailyGoalField.integerValue > 0,
             let focusSound = focusSoundPopup.titleOfSelectedItem,
             let breakSound = breakSoundPopup.titleOfSelectedItem
         else {
@@ -777,6 +897,7 @@ private final class SettingsWindowController: NSObject {
             ("shortBreakMinutes", "\(shortBreakField.integerValue)"),
             ("longBreakMinutes", "\(longBreakField.integerValue)"),
             ("longBreakEvery", "\(longBreakEveryField.integerValue)"),
+            ("dailyGoal", "\(dailyGoalField.integerValue)"),
             ("focusEndSound", focusSound),
             ("breakEndSound", breakSound),
         ]

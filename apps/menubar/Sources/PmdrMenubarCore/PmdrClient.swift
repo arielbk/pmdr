@@ -60,6 +60,7 @@ public struct PmdrConfig: Equatable, Sendable {
     public let shortBreakMinutes: Int
     public let longBreakMinutes: Int
     public let longBreakEvery: Int
+    public let dailyGoal: Int
     public let focusEndSound: String
     public let breakEndSound: String
 
@@ -68,6 +69,7 @@ public struct PmdrConfig: Equatable, Sendable {
         shortBreakMinutes: Int = 5,
         longBreakMinutes: Int = 15,
         longBreakEvery: Int = 4,
+        dailyGoal: Int = 8,
         focusEndSound: String = "Glass",
         breakEndSound: String = "Submarine"
     ) {
@@ -75,6 +77,7 @@ public struct PmdrConfig: Equatable, Sendable {
         self.shortBreakMinutes = shortBreakMinutes
         self.longBreakMinutes = longBreakMinutes
         self.longBreakEvery = longBreakEvery
+        self.dailyGoal = dailyGoal
         self.focusEndSound = focusEndSound
         self.breakEndSound = breakEndSound
     }
@@ -201,6 +204,7 @@ public struct PmdrClient: Sendable {
         let shortBreakMinutes: Int?
         let longBreakMinutes: Int?
         let longBreakEvery: Int?
+        let dailyGoal: Int?
         let focusEndSound: String?
         let breakEndSound: String?
     }
@@ -262,6 +266,7 @@ public struct PmdrClient: Sendable {
                 shortBreakMinutes: raw.shortBreakMinutes ?? defaults.shortBreakMinutes,
                 longBreakMinutes: raw.longBreakMinutes ?? defaults.longBreakMinutes,
                 longBreakEvery: raw.longBreakEvery ?? defaults.longBreakEvery,
+                dailyGoal: raw.dailyGoal ?? defaults.dailyGoal,
                 focusEndSound: raw.focusEndSound ?? defaults.focusEndSound,
                 breakEndSound: raw.breakEndSound ?? defaults.breakEndSound
             )

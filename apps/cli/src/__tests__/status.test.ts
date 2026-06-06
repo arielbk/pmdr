@@ -53,6 +53,7 @@ describe("getStatus", () => {
       phase: "focus",
       completedFocusBlocks: 0,
       todayFocusBlocks: 0,
+      longBreakEvery: 4,
     });
   });
 
@@ -75,6 +76,7 @@ describe("getStatus", () => {
       phase: "focus",
       completedFocusBlocks: 2,
       todayFocusBlocks: 0,
+      longBreakEvery: 4,
     });
   });
 
@@ -219,6 +221,7 @@ describe("formatStatus", () => {
       phase: "focus",
       completedFocusBlocks: 0,
       todayFocusBlocks: 0,
+      longBreakEvery: 4,
     };
     // 1122000ms = 18m42s
     expect(formatStatus(r)).toBe("focus — 18:42 left (block 1/4)");
@@ -232,7 +235,8 @@ describe("formatStatus", () => {
       startedAt: 0,
       phase: "focus",
       completedFocusBlocks: 2,
-      todayFocusBlocks: 0,
+      todayFocusBlocks: 2,
+      longBreakEvery: 4,
     };
     expect(formatStatus(r)).toBe("focus paused — 18:42 left (block 3/4)");
   });
@@ -246,6 +250,7 @@ describe("formatStatus", () => {
       phase: "break",
       completedFocusBlocks: 1,
       todayFocusBlocks: 1,
+      longBreakEvery: 4,
     };
     expect(formatStatus(r)).toBe("break — 4:30 left (1/4 done)");
   });
@@ -259,6 +264,7 @@ describe("formatStatus", () => {
       phase: "focus",
       completedFocusBlocks: 0,
       todayFocusBlocks: 0,
+      longBreakEvery: 4,
     };
     expect(formatStatus(r)).toBe("focus — 0:00 left (block 1/4)");
   });
@@ -272,8 +278,54 @@ describe("formatStatus", () => {
       phase: "focus",
       completedFocusBlocks: 0,
       todayFocusBlocks: 0,
+      longBreakEvery: 4,
     };
     expect(formatStatus(r)).toBe("focus — 1:05 left (block 1/4)");
+  });
+
+  it("uses configured longBreakEvery in cadence text", () => {
+    const r: StatusResult = {
+      state: "running",
+      remainingMs: 1_122_000,
+      duration: 1_500_000,
+      startedAt: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+      todayFocusBlocks: 0,
+      longBreakEvery: 6,
+    };
+    expect(formatStatus(r)).toBe("focus — 18:42 left (block 1/6)");
+  });
+
+  it("shows today's block position in cadence for focus phase", () => {
+    // Today I've completed 5 blocks, now running the 6th. With longBreakEvery=4,
+    // within the current cycle that's block 2 of 4.
+    const r: StatusResult = {
+      state: "running",
+      remainingMs: 60_000,
+      duration: 1_500_000,
+      startedAt: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+      todayFocusBlocks: 5,
+      longBreakEvery: 4,
+    };
+    // today position: 5 % 4 + 1 = 2nd block in cycle
+    expect(formatStatus(r)).toBe("focus — 1:00 left (block 2/4)");
+  });
+
+  it("shows today's count in break phase", () => {
+    const r: StatusResult = {
+      state: "running",
+      remainingMs: 270_000, // 4m30s
+      duration: 300_000,
+      startedAt: 0,
+      phase: "break",
+      completedFocusBlocks: 1,
+      todayFocusBlocks: 3,
+      longBreakEvery: 4,
+    };
+    expect(formatStatus(r)).toBe("break — 4:30 left (3/4 done)");
   });
 });
 

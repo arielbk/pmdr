@@ -6,6 +6,8 @@ import { DEFAULT_FOCUS_GOAL } from "../state.js";
 
 interface CountdownViewProps extends DerivedPhaseState {
   project?: string;
+  dailyGoal?: number;
+  longBreakEvery?: number;
 }
 
 function formatTime(ms: number): string {
@@ -23,12 +25,49 @@ const HINTS: Array<[string, string]> = [
   ["?", "help"],
 ];
 
+function buildDotRow(
+  completedFocusBlocks: number,
+  goal: number,
+  longBreakEvery: number,
+  paused: boolean,
+): React.ReactNode {
+  const filled = Math.min(completedFocusBlocks, goal);
+  const segments: React.ReactNode[] = [];
+
+  for (let i = 0; i < goal; i++) {
+    const isFilled = i < filled;
+    const dot = isFilled ? "●" : "○";
+    const isGroupBoundary = longBreakEvery > 0 && i > 0 && i % longBreakEvery === 0;
+    const sep = isGroupBoundary ? "  " : i > 0 ? " " : "";
+    if (sep) {
+      segments.push(<React.Fragment key={`sep-${i}`}>{sep}</React.Fragment>);
+    }
+    if (isFilled) {
+      segments.push(
+        <Text key={i} color="green" dimColor={paused}>
+          {dot}
+        </Text>,
+      );
+    } else {
+      segments.push(
+        <Text key={i} dimColor>
+          {dot}
+        </Text>,
+      );
+    }
+  }
+
+  return <>{segments}</>;
+}
+
 export default function CountdownView({
   phase,
   remainingMs,
   completedFocusBlocks,
   paused,
   project,
+  dailyGoal = DEFAULT_FOCUS_GOAL,
+  longBreakEvery = 4,
 }: CountdownViewProps) {
   const timeStr = formatTime(remainingMs);
   const colors: string[] = paused ? ["gray"] : phase === "focus" ? ["red"] : ["green"];
@@ -49,13 +88,7 @@ export default function CountdownView({
 
       <Box justifyContent="center" marginTop={-1} marginBottom={1}>
         <Text>
-          <Text color="green" dimColor={paused}>
-            {Array.from({ length: Math.min(completedFocusBlocks, DEFAULT_FOCUS_GOAL) }, () => "●").join(" ")}
-          </Text>
-          {completedFocusBlocks > 0 && completedFocusBlocks < DEFAULT_FOCUS_GOAL ? " " : ""}
-          <Text dimColor>
-            {Array.from({ length: Math.max(0, DEFAULT_FOCUS_GOAL - completedFocusBlocks) }, () => "○").join(" ")}
-          </Text>
+          {buildDotRow(completedFocusBlocks, dailyGoal, longBreakEvery, paused)}
         </Text>
       </Box>
 

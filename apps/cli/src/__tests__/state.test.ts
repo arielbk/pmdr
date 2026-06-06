@@ -409,21 +409,32 @@ describe("advancePhaseIfExpired", () => {
     expect(file?.durationMs).toBe(5 * 60 * 1000); // short break
   });
 
-  it("uses long break after 4 completed focus blocks", () => {
+  it("uses long break after 4 completed focus blocks today", () => {
+    // Seed 3 prior completions in today's JSONL so this is the 4th focus block.
+    // Use a real "today" base so timestamps agree on which calendar day they fall.
+    const todayBase = new Date("2026-06-06T10:00:00.000Z").getTime();
+    for (let i = 0; i < 3; i++) {
+      store.appendCompletion({
+        completedAt: todayBase + i * 2000,
+        durationMs: 1000,
+        project: "(unassigned)",
+      });
+    }
+    const focusStart = todayBase + 10_000;
     store.writeState({
-      startedAt: 0,
+      startedAt: focusStart,
       durationMs: 1000,
       pausedAt: null,
       accumulatedPauseMs: 0,
       phase: "focus",
-      completedFocusBlocks: 3, // this is the 4th focus block
+      completedFocusBlocks: 0,
     });
-    store.advancePhaseIfExpired(2000);
+    store.advancePhaseIfExpired(focusStart + 2000);
 
     const file = store.readState();
-    expect(file?.durationMs).toBe(15 * 60 * 1000); // long break
-    expect(file?.completedFocusBlocks).toBe(4);
-    expect(file?.pausedAt).toBe(1000); // long break is also born paused
+    expect(file?.durationMs).toBe(15 * 60 * 1000); // long break (4th today)
+    expect(file?.completedFocusBlocks).toBe(1);
+    expect(file?.pausedAt).toBe(focusStart + 1000); // long break is also born paused
   });
 
   it("uses configured short break, long break, and long-break cadence", () => {
@@ -440,31 +451,222 @@ describe("advancePhaseIfExpired", () => {
       },
     });
 
+    // 1st block today → 1 completion → 1 % 2 !== 0 → short break
+    const today = Date.now();
     configuredStore.writeState({
-      startedAt: 0,
+      startedAt: today,
       durationMs: 1000,
       pausedAt: null,
       accumulatedPauseMs: 0,
       phase: "focus",
       completedFocusBlocks: 0,
     });
-    configuredStore.advancePhaseIfExpired(2000);
+    configuredStore.advancePhaseIfExpired(today + 2000);
     expect(configuredStore.readState()?.durationMs).toBe(7 * 60 * 1000);
 
+    // 2nd block today → 2 completions → 2 % 2 === 0 → long break
     configuredStore.writeState({
-      startedAt: 3000,
+      startedAt: today + 3000,
       durationMs: 1000,
       pausedAt: null,
       accumulatedPauseMs: 0,
       phase: "focus",
-      completedFocusBlocks: 1,
+      completedFocusBlocks: 0,
     });
-    configuredStore.advancePhaseIfExpired(5000);
+    configuredStore.advancePhaseIfExpired(today + 5000);
     const file = configuredStore.readState();
     expect(file?.durationMs).toBe(20 * 60 * 1000);
-    expect(file?.completedFocusBlocks).toBe(2);
+    expect(file?.completedFocusBlocks).toBe(1);
   });
 });
+
+// ─── daily cadence: long break fires on today's count ────────────────────────
+
+describe("daily cadence", () => {
+  let tmpDir: string;
+  let store: ReturnType<typeof createStateModule>;
+
+  // A fixed "today" moment — all completions will be stamped within this day.
+  const TODAY = new Date("2026-06-06T10:00:00.000Z").getTime();
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-test-daily-"));
+    store = createStateModule(tmpDir);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // Helper: expire one focus block and return the break state record.
+  // focusStart and focusEnd are offsets from TODAY.
+  function expireFocus(focusStartOffset: number, focusDuration: number): void {
+    const startedAt = TODAY + focusStartOffset;
+    store.writeState({
+      startedAt,
+      durationMs: focusDuration,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: store.readState()?.completedFocusBlocks ?? 0,
+    });
+    store.advancePhaseIfExpired(startedAt + focusDuration + 1);
+  }
+
+  it("countTodayFocusBlocks reflects completions written today", () => {
+    // No completions yet
+    expect(store.countTodayFocusBlocks(TODAY)).toBe(0);
+
+    // Append one completion today
+    store.appendCompletion({ completedAt: TODAY, durationMs: 1000, project: "test" });
+    expect(store.countTodayFocusBlocks(TODAY)).toBe(1);
+
+    // Append a completion for a different day — should not count
+    const yesterday = TODAY - 24 * 60 * 60 * 1000;
+    store.appendCompletion({ completedAt: yesterday, durationMs: 1000, project: "test" });
+    expect(store.countTodayFocusBlocks(TODAY)).toBe(1);
+  });
+
+  it("4th block today gets a long break, regardless of completedFocusBlocks in state", () => {
+    // Simulate 3 completions already in the JSONL for today
+    for (let i = 0; i < 3; i++) {
+      store.appendCompletion({
+        completedAt: TODAY + i * 2000,
+        durationMs: 1000,
+        project: "(unassigned)",
+      });
+    }
+
+    // Now start the 4th focus block — completedFocusBlocks in state is 0 (fresh start)
+    store.writeState({
+      startedAt: TODAY + 10_000,
+      durationMs: 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0, // simulates what start.ts writes (resets to 0)
+    });
+
+    store.advancePhaseIfExpired(TODAY + 11_001);
+
+    const file = store.readState();
+    // The break should be long because today's count is now 4 (divisible by longBreakEvery=4)
+    expect(file?.durationMs).toBe(15 * 60 * 1000);
+  });
+
+  it("1st block today gets a short break", () => {
+    // No prior completions today
+    store.writeState({
+      startedAt: TODAY,
+      durationMs: 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+
+    store.advancePhaseIfExpired(TODAY + 1001);
+
+    const file = store.readState();
+    // 1 completion so far — not divisible by 4 → short break
+    expect(file?.durationMs).toBe(5 * 60 * 1000);
+  });
+
+  it("simulated full day: blocks 1-3 short, block 4 long", () => {
+    const focusDuration = 1000;
+    const baseTime = TODAY;
+
+    // Block 1
+    store.writeState({
+      startedAt: baseTime,
+      durationMs: focusDuration,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+    store.advancePhaseIfExpired(baseTime + focusDuration + 1);
+    expect(store.readState()?.durationMs).toBe(5 * 60 * 1000); // short
+
+    // Block 2
+    store.writeState({
+      startedAt: baseTime + 10_000,
+      durationMs: focusDuration,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+    store.advancePhaseIfExpired(baseTime + 10_000 + focusDuration + 1);
+    expect(store.readState()?.durationMs).toBe(5 * 60 * 1000); // short
+
+    // Block 3
+    store.writeState({
+      startedAt: baseTime + 20_000,
+      durationMs: focusDuration,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+    store.advancePhaseIfExpired(baseTime + 20_000 + focusDuration + 1);
+    expect(store.readState()?.durationMs).toBe(5 * 60 * 1000); // short
+
+    // Block 4 — should trigger long break
+    store.writeState({
+      startedAt: baseTime + 30_000,
+      durationMs: focusDuration,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+    store.advancePhaseIfExpired(baseTime + 30_000 + focusDuration + 1);
+    expect(store.readState()?.durationMs).toBe(15 * 60 * 1000); // long!
+  });
+
+  it("daily cadence respects configured longBreakEvery", () => {
+    const configuredStore = createStateModule(tmpDir, {
+      config: {
+        readEffectiveConfig: () => ({
+          focusMinutes: 25,
+          shortBreakMinutes: 7,
+          longBreakMinutes: 20,
+          longBreakEvery: 2,
+          focusEndSound: "Glass",
+          breakEndSound: "Submarine",
+        }),
+      },
+    });
+
+    // 1st block
+    configuredStore.writeState({
+      startedAt: TODAY,
+      durationMs: 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+    configuredStore.advancePhaseIfExpired(TODAY + 1001);
+    // After 1st: count=1, 1 % 2 != 0 → short break (7min)
+    expect(configuredStore.readState()?.durationMs).toBe(7 * 60 * 1000);
+
+    // 2nd block — triggers long break (count=2, 2%2===0)
+    configuredStore.writeState({
+      startedAt: TODAY + 10_000,
+      durationMs: 1000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+    configuredStore.advancePhaseIfExpired(TODAY + 11_001);
+    expect(configuredStore.readState()?.durationMs).toBe(20 * 60 * 1000);
+  });
+});
+
+// ─── formatStatus uses configured longBreakEvery ──────────────────────────────
 
 // Local type for JSON parsing in tests
 interface CompletionEntry {

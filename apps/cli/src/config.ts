@@ -13,6 +13,7 @@ export interface PmdrConfig {
   shortBreakMinutes: number;
   longBreakMinutes: number;
   longBreakEvery: number;
+  dailyGoal: number;
   focusEndSound: string;
   breakEndSound: string;
 }
@@ -22,6 +23,7 @@ export const DEFAULT_CONFIG: PmdrConfig = {
   shortBreakMinutes: 5,
   longBreakMinutes: 15,
   longBreakEvery: 4,
+  dailyGoal: 8,
   focusEndSound: "Glass",
   breakEndSound: "Submarine",
 };
@@ -31,6 +33,7 @@ const NUMBER_KEYS = [
   "shortBreakMinutes",
   "longBreakMinutes",
   "longBreakEvery",
+  "dailyGoal",
 ] as const;
 const SOUND_KEYS = ["focusEndSound", "breakEndSound"] as const;
 type NumberKey = (typeof NUMBER_KEYS)[number];
