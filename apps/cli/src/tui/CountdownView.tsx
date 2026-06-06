@@ -17,7 +17,7 @@ function formatTime(ms: number): string {
   return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
-const HINTS: Array<[string, string]> = [
+const FOCUS_HINTS: Array<[string, string]> = [
   ["space", "pause"],
   ["p", "project"],
   ["x", "stop"],
@@ -60,6 +60,14 @@ function buildDotRow(
   return <>{segments}</>;
 }
 
+const BREAK_HINTS: Array<[string, string]> = [
+  ["space", "skip"],
+  ["p", "project"],
+  ["x", "stop"],
+  ["q", "detach"],
+  ["?", "help"],
+];
+
 export default function CountdownView({
   phase,
   remainingMs,
@@ -71,6 +79,7 @@ export default function CountdownView({
 }: CountdownViewProps) {
   const timeStr = formatTime(remainingMs);
   const colors: string[] = paused ? ["gray"] : phase === "focus" ? ["red"] : ["green"];
+  const hints = phase === "break" ? BREAK_HINTS : FOCUS_HINTS;
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -94,7 +103,7 @@ export default function CountdownView({
 
       <Box justifyContent="center">
         <Text>
-          {HINTS.map(([key, desc], i) => (
+          {hints.map(([key, desc], i) => (
             <React.Fragment key={key}>
               {i > 0 ? <Text dimColor>{"  ·  "}</Text> : null}
               <Text color="cyan" bold>{key}</Text>

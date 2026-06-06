@@ -13,6 +13,7 @@ public struct FloatingTimerViewModel: Equatable, Sendable {
     public let isMuted: Bool
     public let phaseColor: PhaseColor
     public let completedFocusBlocks: Int
+    public let pauseActionLabel: String
 
     public init(status: Status, lastProject: String?, elapsedSincePoll: TimeInterval = 0) {
         switch status {
@@ -23,6 +24,7 @@ public struct FloatingTimerViewModel: Equatable, Sendable {
             isMuted = true
             phaseColor = .muted
             completedFocusBlocks = 0
+            pauseActionLabel = "Pause"
         case .running(let active):
             time = Self.format(remainingMs: active.remainingMs - Int(elapsedSincePoll * 1000))
             phaseLabel = active.phase.rawValue
@@ -30,6 +32,7 @@ public struct FloatingTimerViewModel: Equatable, Sendable {
             isMuted = false
             phaseColor = active.phase == .focus ? .focus : .break
             completedFocusBlocks = active.todayFocusBlocks
+            pauseActionLabel = active.phase == .break ? "Skip" : "Pause"
         case .paused(let active):
             time = Self.format(remainingMs: active.remainingMs)
             phaseLabel = active.phase.rawValue
@@ -37,6 +40,7 @@ public struct FloatingTimerViewModel: Equatable, Sendable {
             isMuted = false
             phaseColor = .muted
             completedFocusBlocks = active.todayFocusBlocks
+            pauseActionLabel = "Pause"
         }
     }
 

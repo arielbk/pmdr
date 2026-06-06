@@ -110,6 +110,22 @@ final class FloatingTimerViewModelTests: XCTestCase {
         XCTAssertEqual(vm.completedFocusBlocks, 3)
     }
 
+    func test_pauseActionLabel_isSkipForRunningBreak() {
+        let vm = FloatingTimerViewModel(
+            status: .running(active(remainingMs: 60_000, phase: .break, project: nil)),
+            lastProject: nil
+        )
+        XCTAssertEqual(vm.pauseActionLabel, "Skip")
+    }
+
+    func test_pauseActionLabel_isPauseForRunningFocus() {
+        let vm = FloatingTimerViewModel(
+            status: .running(active(remainingMs: 60_000, phase: .focus, project: nil)),
+            lastProject: nil
+        )
+        XCTAssertEqual(vm.pauseActionLabel, "Pause")
+    }
+
     private func active(
         remainingMs: Int,
         phase: Phase,
