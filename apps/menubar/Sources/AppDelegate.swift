@@ -832,6 +832,34 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         }
     }
 
+    func control(
+        _ control: NSControl,
+        textView: NSTextView,
+        doCommandBy commandSelector: Selector
+    ) -> Bool {
+        guard let field = control as? NSTextField else { return false }
+        let pairs: [(NSTextField, NSStepper)] = [
+            (focusField, focusStepper),
+            (shortBreakField, shortBreakStepper),
+            (longBreakField, longBreakStepper),
+            (longBreakEveryField, longBreakEveryStepper),
+            (dailyGoalField, dailyGoalStepper),
+        ]
+        guard let (_, stepper) = pairs.first(where: { $0.0 === field }) else { return false }
+        let delta: Int
+        if commandSelector == #selector(NSResponder.moveUp(_:)) {
+            delta = 1
+        } else if commandSelector == #selector(NSResponder.moveDown(_:)) {
+            delta = -1
+        } else {
+            return false
+        }
+        let newValue = min(Int(stepper.maxValue), max(Int(stepper.minValue), field.integerValue + delta))
+        field.integerValue = newValue
+        stepper.integerValue = newValue
+        return true
+    }
+
     private func selectSound(_ sound: String, in popup: NSPopUpButton) {
         if !Self.soundNames.contains(sound) {
             popup.addItem(withTitle: sound)

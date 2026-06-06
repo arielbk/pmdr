@@ -376,14 +376,17 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
     }
 
     /// Builds a dot string for the given completion count, goal, and long-break cadence.
-    /// Dots within a group are adjacent (no separator); a double space precedes each group boundary.
+    /// Dots within a group are separated by a thin space (U+2009); groups are separated by two regular spaces.
     static func buildDotString(completed: Int, goal: Int, longBreakEvery: Int) -> String {
         let filled = min(max(completed, 0), goal)
+        let thinSpace = "\u{2009}"
         var result = ""
         for i in 0 ..< goal {
             let isGroupBoundary = longBreakEvery > 0 && i > 0 && i % longBreakEvery == 0
             if isGroupBoundary {
                 result += "  "
+            } else if i > 0 {
+                result += thinSpace
             }
             result += i < filled ? "●" : "○"
         }
