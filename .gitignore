@@ -46,3 +46,5 @@ report.json
 
 # Local design/implementation docs (specs, tasks, logs, QA) — not tracked
 docs/
+
+.worktrees/
