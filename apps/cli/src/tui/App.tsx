@@ -92,6 +92,7 @@ export default function App({
   const [viewState, setViewState] = useState<DerivedPhaseState>(() =>
     derivePhaseState(initial.record, Date.now(), store),
   );
+  const [config, setConfig] = useState(() => readEffectiveConfigFn());
   const [showProjectPicker, setShowProjectPicker] = useState(
     !initial.isAttached,
   );
@@ -115,6 +116,7 @@ export default function App({
       const record = store.readState();
       setViewState(derivePhaseState(record, now, store));
       setCurrentProject(record?.project);
+      setConfig(readEffectiveConfigFn());
     }, 500);
     return () => clearInterval(interval);
   }, [store]);
@@ -221,7 +223,12 @@ export default function App({
 
   return (
     <>
-      <CountdownView {...viewState} project={currentProject} />
+      <CountdownView
+        {...viewState}
+        project={currentProject}
+        dailyGoal={config.dailyGoal}
+        longBreakEvery={config.longBreakEvery}
+      />
       {showProjectPicker && (
         <ProjectPickerOverlay
           projects={pickerProjects}

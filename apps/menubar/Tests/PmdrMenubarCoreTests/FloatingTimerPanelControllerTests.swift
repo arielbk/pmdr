@@ -586,6 +586,57 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         )
     }
 
+    // MARK: - buildDotString
+
+    func testBuildDotString_goal8_cadence4_allEmpty() {
+        let result = FloatingTimerPanelController.buildDotString(completed: 0, goal: 8, longBreakEvery: 4)
+        XCTAssertEqual(result, "○ ○ ○ ○  ○ ○ ○ ○")
+    }
+
+    func testBuildDotString_goal8_cadence4_partialFilled() {
+        // completed=3: positions 0,1,2 filled; position 3 and 4+ empty; gap before position 4
+        let result = FloatingTimerPanelController.buildDotString(completed: 3, goal: 8, longBreakEvery: 4)
+        XCTAssertEqual(result, "● ● ● ○  ○ ○ ○ ○")
+    }
+
+    func testBuildDotString_goal8_cadence4_groupBoundaryFilled() {
+        // completed=4: first group all filled; second group all empty
+        let result = FloatingTimerPanelController.buildDotString(completed: 4, goal: 8, longBreakEvery: 4)
+        XCTAssertEqual(result, "● ● ● ●  ○ ○ ○ ○")
+    }
+
+    func testBuildDotString_goal6_cadence2() {
+        // completed=2: first group (0,1) filled; gap; second group empty; gap; third group empty
+        let result = FloatingTimerPanelController.buildDotString(completed: 2, goal: 6, longBreakEvery: 2)
+        XCTAssertEqual(result, "● ●  ○ ○  ○ ○")
+    }
+
+    func testBuildDotString_goal10_cadence4_nonDivisible() {
+        // completed=5: positions 0-3 filled, position 4 filled (boundary), 5-7 empty, position 8 empty (boundary), 9 empty
+        let result = FloatingTimerPanelController.buildDotString(completed: 5, goal: 10, longBreakEvery: 4)
+        XCTAssertEqual(result, "● ● ● ●  ● ○ ○ ○  ○ ○")
+    }
+
+    func testBuildDotString_completedCappedAtGoal() {
+        // completed=12 capped to goal=8: all filled
+        let result = FloatingTimerPanelController.buildDotString(completed: 12, goal: 8, longBreakEvery: 4)
+        XCTAssertEqual(result, "● ● ● ●  ● ● ● ●")
+    }
+
+    func testPanelUsesConfigDailyGoalForDots() {
+        let controller = FloatingTimerPanelController()
+        controller.show()
+        controller.configureGoal(dailyGoal: 6, longBreakEvery: 2)
+
+        controller.update(
+            status: .running(active(remainingMs: 60_000, phase: .focus, project: "Work", todayFocusBlocks: 2)),
+            lastProject: nil,
+            elapsedSincePoll: 0
+        )
+
+        XCTAssertEqual(controller.dotStringForTesting, "● ●  ○ ○  ○ ○")
+    }
+
     private func makeDefaults() -> UserDefaults {
         let suiteName = "FloatingTimerPanelControllerTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

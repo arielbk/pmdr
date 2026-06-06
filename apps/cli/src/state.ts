@@ -30,13 +30,23 @@ type ConfigReader = Pick<
 >;
 
 function computeBreakDurationMs(
-  completedFocusBlocks: number,
+  todayFocusCount: number,
   config: ConfigReader,
 ): number {
   const effective = config.readEffectiveConfig();
-  return completedFocusBlocks % effective.longBreakEvery === 0
+  return todayFocusCount % effective.longBreakEvery === 0
     ? effective.longBreakMinutes * 60_000
     : effective.shortBreakMinutes * 60_000;
+}
+
+function isSameDay(tsA: number, tsB: number): boolean {
+  const a = new Date(tsA);
+  const b = new Date(tsB);
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
 
 export type DerivedKind = "idle" | "running" | "paused" | "expired";
@@ -170,6 +180,11 @@ export function createStateModule(
     appendFileSync(completionsFile, line, "utf8");
   }
 
+  function countTodayFocusBlocks(now: number): number {
+    const completions = readCompletions();
+    return completions.filter((c) => isSameDay(c.completedAt, now)).length;
+  }
+
   function finalizeIfExpired(now: number): void {
     const file = readState();
     if (!file) return;
@@ -207,6 +222,9 @@ export function createStateModule(
           project: file.project ?? "(unassigned)",
           ...(file.id ? { id: file.id } : {}),
         });
+        // Key off today's total completion count (now includes this new entry)
+        // rather than the state-file counter which resets on every fresh start.
+        const todayCount = countTodayFocusBlocks(completedAt);
         const newCompletedFocusBlocks = completedFocusBlocks + 1;
         // Break is born paused at the focus completion moment: it waits at full
         // duration until the user explicitly starts (resumes) it. A paused phase
@@ -214,7 +232,7 @@ export function createStateModule(
         // advancing the pending break.
         writeState({
           startedAt: completedAt,
-          durationMs: computeBreakDurationMs(newCompletedFocusBlocks, config),
+          durationMs: computeBreakDurationMs(todayCount, config),
           pausedAt: completedAt,
           accumulatedPauseMs: 0,
           project: file.project,
@@ -280,6 +298,7 @@ export function createStateModule(
     appendCompletion,
     finalizeIfExpired,
     advancePhaseIfExpired,
+    countTodayFocusBlocks,
     readToday,
     rewriteCompletionProject,
     appendEvent,
@@ -303,5 +322,7 @@ export const advancePhaseIfExpired = (now: number): void =>
   _prod.advancePhaseIfExpired(now);
 export const rewriteCompletionProject = (oldName: string, newName: string): void =>
   _prod.rewriteCompletionProject(oldName, newName);
+export const countTodayFocusBlocks = (now: number): number =>
+  _prod.countTodayFocusBlocks(now);
 export const appendEvent = (e: EventRecord): void => _prod.appendEvent(e);
 export const readEvents = (): EventRecord[] => _prod.readEvents();

@@ -68,6 +68,7 @@ describe("pmdr serve /api/status", () => {
       phase: "focus",
       completedFocusBlocks: 0,
       todayFocusBlocks: 0,
+      longBreakEvery: 4,
       project: "deepwork",
     });
   });

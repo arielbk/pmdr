@@ -82,6 +82,20 @@ final class PmdrClientDecodingTests: XCTestCase {
         ))
     }
 
+    func test_decodes_dailyGoal_when_present() throws {
+        let json = Data(#"""
+        {"focusMinutes":25,"shortBreakMinutes":5,"longBreakMinutes":15,"longBreakEvery":4,"focusEndSound":"Glass","breakEndSound":"Submarine","dailyGoal":6}
+        """#.utf8)
+        let config = try PmdrClient.decodeConfig(from: json)
+        XCTAssertEqual(config.dailyGoal, 6)
+    }
+
+    func test_decodes_dailyGoal_defaults_to_8_when_absent() throws {
+        let json = Data(#"{"focusMinutes":25}"#.utf8)
+        let config = try PmdrClient.decodeConfig(from: json)
+        XCTAssertEqual(config.dailyGoal, 8)
+    }
+
     func test_throws_decoding_failed_on_unknown_state() {
         let json = Data(#"{"state":"wat"}"#.utf8)
         XCTAssertThrowsError(try PmdrClient.decodeStatus(from: json)) { error in

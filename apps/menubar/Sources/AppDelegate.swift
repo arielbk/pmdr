@@ -427,6 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
             self.lastPollAt = now
             self.projects = projects
             self.currentConfig = config
+            self.floatingTimerPanelController?.configureGoal(dailyGoal: config.dailyGoal, longBreakEvery: config.longBreakEvery)
             self.notifier = self.notifier?.withConfig(config)
             self.updateIcon(for: status)
             self.rebuildMenu()
@@ -612,6 +613,7 @@ private final class SettingsWindowController: NSObject {
     private let shortBreakField = NSTextField()
     private let longBreakField = NSTextField()
     private let longBreakEveryField = NSTextField()
+    private let dailyGoalField = NSTextField()
     private let focusSoundPopup = NSPopUpButton()
     private let breakSoundPopup = NSPopUpButton()
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
@@ -622,7 +624,7 @@ private final class SettingsWindowController: NSObject {
         self.client = client
         self.onSaved = onSaved
         self.window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 316),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 350),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -654,6 +656,7 @@ private final class SettingsWindowController: NSObject {
             shortBreakField,
             longBreakField,
             longBreakEveryField,
+            dailyGoalField,
         ] {
             field.alignment = .right
             field.formatter = positiveIntegerFormatter()
@@ -668,6 +671,7 @@ private final class SettingsWindowController: NSObject {
         content.addArrangedSubview(row(label: "Short break minutes", control: shortBreakField))
         content.addArrangedSubview(row(label: "Long break minutes", control: longBreakField))
         content.addArrangedSubview(row(label: "Long break cadence", control: longBreakEveryField))
+        content.addArrangedSubview(row(label: "Daily goal", control: dailyGoalField))
         content.addArrangedSubview(row(label: "Focus end sound", control: focusSoundPopup))
         content.addArrangedSubview(row(label: "Break end sound", control: breakSoundPopup))
         content.addArrangedSubview(buttonRow())
@@ -737,6 +741,7 @@ private final class SettingsWindowController: NSObject {
         shortBreakField.integerValue = config.shortBreakMinutes
         longBreakField.integerValue = config.longBreakMinutes
         longBreakEveryField.integerValue = config.longBreakEvery
+        dailyGoalField.integerValue = config.dailyGoal
         selectSound(config.focusEndSound, in: focusSoundPopup)
         selectSound(config.breakEndSound, in: breakSoundPopup)
     }
@@ -764,6 +769,7 @@ private final class SettingsWindowController: NSObject {
             shortBreakField.integerValue > 0,
             longBreakField.integerValue > 0,
             longBreakEveryField.integerValue > 0,
+            dailyGoalField.integerValue > 0,
             let focusSound = focusSoundPopup.titleOfSelectedItem,
             let breakSound = breakSoundPopup.titleOfSelectedItem
         else {
@@ -777,6 +783,7 @@ private final class SettingsWindowController: NSObject {
             ("shortBreakMinutes", "\(shortBreakField.integerValue)"),
             ("longBreakMinutes", "\(longBreakField.integerValue)"),
             ("longBreakEvery", "\(longBreakEveryField.integerValue)"),
+            ("dailyGoal", "\(dailyGoalField.integerValue)"),
             ("focusEndSound", focusSound),
             ("breakEndSound", breakSound),
         ]

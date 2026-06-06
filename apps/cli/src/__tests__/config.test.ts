@@ -34,6 +34,7 @@ describe("config read", () => {
       shortBreakMinutes: 5,
       longBreakMinutes: 15,
       longBreakEvery: 4,
+      dailyGoal: 8,
       focusEndSound: "Glass",
       breakEndSound: "Submarine",
     });
@@ -53,6 +54,7 @@ describe("config read", () => {
       shortBreakMinutes: 5,
       longBreakMinutes: 15,
       longBreakEvery: 4,
+      dailyGoal: 8,
       focusEndSound: "Ping",
       breakEndSound: "Submarine",
     });
@@ -68,6 +70,7 @@ describe("config read", () => {
       shortBreakMinutes: 5,
       longBreakMinutes: 15,
       longBreakEvery: 4,
+      dailyGoal: 8,
       focusEndSound: "Glass",
       breakEndSound: "Submarine",
     });
@@ -97,6 +100,7 @@ describe("config read", () => {
       shortBreakMinutes: 5,
       longBreakMinutes: 15,
       longBreakEvery: 2,
+      dailyGoal: 8,
       focusEndSound: "Glass",
       breakEndSound: "Ping",
     });
@@ -127,6 +131,7 @@ describe("config command reads", () => {
           shortBreakMinutes: 5,
           longBreakMinutes: 15,
           longBreakEvery: 4,
+          dailyGoal: 8,
           focusEndSound: "Glass",
           breakEndSound: "Submarine",
         }),
@@ -139,6 +144,7 @@ describe("config command reads", () => {
       shortBreakMinutes: 5,
       longBreakMinutes: 15,
       longBreakEvery: 4,
+      dailyGoal: 8,
       focusEndSound: "Glass",
       breakEndSound: "Submarine",
     });
@@ -155,6 +161,7 @@ describe("config command reads", () => {
           shortBreakMinutes: 5,
           longBreakMinutes: 15,
           longBreakEvery: 4,
+          dailyGoal: 8,
           focusEndSound: "Glass",
           breakEndSound: "Submarine",
         }),
@@ -205,6 +212,51 @@ describe("config command writes", () => {
         config,
       }),
     ).toThrow("Invalid config value for focusMinutes");
+
+    expect(existsSync(join(tmpDir, "config.json"))).toBe(false);
+  });
+
+  it("dailyGoal: set/get round-trip persists the value", () => {
+    const config = createConfigModule(tmpDir);
+    const writes: string[] = [];
+
+    runConfigCommand({
+      args: { command: "set", key: "dailyGoal", value: "6" },
+      config,
+      stdout: (text) => writes.push(text),
+    });
+
+    runConfigCommand({
+      args: { command: "get", key: "dailyGoal" },
+      config,
+      stdout: (text) => writes.push(text),
+    });
+
+    expect(writes.join("")).toBe("dailyGoal=6\n6\n");
+  });
+
+  it("dailyGoal: rejects value of 0", () => {
+    const config = createConfigModule(tmpDir);
+
+    expect(() =>
+      runConfigCommand({
+        args: { command: "set", key: "dailyGoal", value: "0" },
+        config,
+      }),
+    ).toThrow("Invalid config value for dailyGoal");
+
+    expect(existsSync(join(tmpDir, "config.json"))).toBe(false);
+  });
+
+  it("dailyGoal: rejects negative value", () => {
+    const config = createConfigModule(tmpDir);
+
+    expect(() =>
+      runConfigCommand({
+        args: { command: "set", key: "dailyGoal", value: "-3" },
+        config,
+      }),
+    ).toThrow("Invalid config value for dailyGoal");
 
     expect(existsSync(join(tmpDir, "config.json"))).toBe(false);
   });
