@@ -333,7 +333,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertEqual(sink.calls, [.start(project: "Writing")])
     }
 
-    func testToggleButtonPausesWhenRunning() {
+    func testToggleButtonPausesWhenRunningFocus() {
         let sink = RecordingActionSink()
         let controller = FloatingTimerPanelController(actions: sink)
         controller.show()
@@ -345,6 +345,25 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         )
 
         XCTAssertEqual(controller.toggleButtonTitleForTesting, "Pause")
+        XCTAssertEqual(controller.toggleButtonSymbolNameForTesting, "pause.fill")
+
+        controller.clickToggleButtonForTesting()
+
+        XCTAssertEqual(sink.calls, [.pause])
+    }
+
+    func testToggleButtonShowsSkipAndCallsPauseWhenRunningBreak() {
+        let sink = RecordingActionSink()
+        let controller = FloatingTimerPanelController(actions: sink)
+        controller.show()
+        sink.calls.removeAll()
+        controller.update(
+            status: .running(active(remainingMs: 60_000, phase: .break, project: "Deep Work")),
+            lastProject: nil,
+            elapsedSincePoll: 0
+        )
+
+        XCTAssertEqual(controller.toggleButtonTitleForTesting, "Skip")
         XCTAssertEqual(controller.toggleButtonSymbolNameForTesting, "pause.fill")
 
         controller.clickToggleButtonForTesting()

@@ -90,4 +90,32 @@ describe("CountdownView — hint line", () => {
     expect(frame).toContain("q");
     expect(frame).toContain("detach");
   });
+
+  it("shows 'pause' hint for space during focus phase", () => {
+    const { lastFrame } = render(
+      <CountdownView
+        phase="focus"
+        remainingMs={25 * 60 * 1000}
+        completedFocusBlocks={0}
+        paused={false}
+      />,
+    );
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("space pause");
+    expect(frame).not.toContain("space skip");
+  });
+
+  it("shows 'skip' hint for space during break phase", () => {
+    const { lastFrame } = render(
+      <CountdownView
+        phase="break"
+        remainingMs={5 * 60 * 1000}
+        completedFocusBlocks={1}
+        paused={false}
+      />,
+    );
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("space skip");
+    expect(frame).not.toContain("space pause");
+  });
 });

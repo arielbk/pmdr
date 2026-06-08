@@ -23,6 +23,20 @@ export function pauseTimer(opts: {
     throw new Error("Timer is already paused.");
   }
 
+  // Pausing a running break stops it (clears to idle) instead of pausing it.
+  if (file!.phase === "break") {
+    store.clearState();
+    if (file!.id) {
+      store.appendEvent({
+        type: "stop",
+        at: now,
+        id: file!.id,
+        ...(file!.project !== undefined ? { project: file!.project } : {}),
+      });
+    }
+    return;
+  }
+
   store.writeState({ ...file!, pausedAt: now });
   if (file!.id) {
     store.appendEvent({

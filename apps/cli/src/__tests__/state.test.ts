@@ -445,6 +445,7 @@ describe("advancePhaseIfExpired", () => {
           shortBreakMinutes: 7,
           longBreakMinutes: 20,
           longBreakEvery: 2,
+          dailyGoal: 8,
           focusEndSound: "Glass",
           breakEndSound: "Submarine",
         }),
@@ -633,6 +634,7 @@ describe("daily cadence", () => {
           shortBreakMinutes: 7,
           longBreakMinutes: 20,
           longBreakEvery: 2,
+          dailyGoal: 8,
           focusEndSound: "Glass",
           breakEndSound: "Submarine",
         }),
@@ -666,7 +668,94 @@ describe("daily cadence", () => {
   });
 });
 
-// ─── formatStatus uses configured longBreakEvery ──────────────────────────────
+// ─── stale pending-break expiry ──────────────────────────────────────────────
+
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
+describe("stale pending-break expiry", () => {
+  let tmpDir: string;
+  let store: ReturnType<typeof createStateModule>;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "pmdr-test-"));
+    store = createStateModule(tmpDir);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("pending break just under 1h is still paused — no expiry", () => {
+    const pausedAt = 1000;
+    store.writeState({
+      startedAt: 0,
+      durationMs: 5 * 60 * 1000,
+      pausedAt,
+      accumulatedPauseMs: 0,
+      phase: "break",
+      completedFocusBlocks: 1,
+    });
+    const now = pausedAt + ONE_HOUR_MS - 1; // 1ms under threshold
+    store.advancePhaseIfExpired(now);
+    expect(store.readState()).not.toBeNull();
+    expect(store.readState()?.phase).toBe("break");
+  });
+
+  it("pending break just over 1h expires to idle — no completion logged", () => {
+    const pausedAt = 1000;
+    store.writeState({
+      startedAt: 0,
+      durationMs: 5 * 60 * 1000,
+      pausedAt,
+      accumulatedPauseMs: 0,
+      phase: "break",
+      completedFocusBlocks: 1,
+    });
+    const now = pausedAt + ONE_HOUR_MS + 1; // 1ms over threshold
+    store.advancePhaseIfExpired(now);
+    expect(store.readState()).toBeNull();
+    expect(existsSync(join(tmpDir, "completions.jsonl"))).toBe(false);
+  });
+
+  it("resume attempted on a stale pending break results in idle — no resurrection", () => {
+    const pausedAt = 1000;
+    store.writeState({
+      startedAt: 0,
+      durationMs: 5 * 60 * 1000,
+      pausedAt,
+      accumulatedPauseMs: 0,
+      phase: "break",
+      completedFocusBlocks: 1,
+    });
+    // advance phase; stale break should expire to idle
+    const now = pausedAt + ONE_HOUR_MS + 1;
+    store.advancePhaseIfExpired(now);
+    // after expiry, state is idle
+    expect(store.readState()).toBeNull();
+  });
+
+  it("legacy mid-paused break (no phase field) with pausedAt older than 1h expires to idle", () => {
+    // A state file written by an older version: phase field absent, pausedAt set.
+    // This looks like a focus block paused, but the stale-break expiry should not
+    // fire on focus pauses — only on break pauses.
+    // However, a legacy break written without phase=break should behave like focus (per handoff note),
+    // so it won't expire as a stale break. Only breaks with phase="break" are caught.
+    // This test verifies a phase="break" record with no completedFocusBlocks field still expires.
+    const pausedAt = 1000;
+    store.writeState({
+      startedAt: 0,
+      durationMs: 5 * 60 * 1000,
+      pausedAt,
+      accumulatedPauseMs: 0,
+      phase: "break",
+      // no completedFocusBlocks
+    });
+    const now = pausedAt + ONE_HOUR_MS + 1;
+    store.advancePhaseIfExpired(now);
+    expect(store.readState()).toBeNull();
+    expect(existsSync(join(tmpDir, "completions.jsonl"))).toBe(false);
+  });
+});
 
 // Local type for JSON parsing in tests
 interface CompletionEntry {

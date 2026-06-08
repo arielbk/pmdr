@@ -10,6 +10,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         var phaseColor: NSColor
         var isMuted: Bool
         var completedFocusBlocks: Int
+        var pauseActionLabel: String
     }
 
     private static let visualSize = NSSize(width: 240, height: 136)
@@ -41,7 +42,8 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         time: "--:--",
         phaseColor: .secondaryLabelColor,
         isMuted: true,
-        completedFocusBlocks: 0
+        completedFocusBlocks: 0,
+        pauseActionLabel: "Pause"
     )
 
     private var dailyGoal: Int = 8
@@ -249,7 +251,8 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
             time: viewModel.time,
             phaseColor: Self.color(for: viewModel.phaseColor),
             isMuted: viewModel.isMuted,
-            completedFocusBlocks: viewModel.completedFocusBlocks
+            completedFocusBlocks: viewModel.completedFocusBlocks,
+            pauseActionLabel: viewModel.pauseActionLabel
         )
         render()
     }
@@ -321,7 +324,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
             toggleSymbolName = "play.fill"
             stopButton?.isEnabled = false
         case .running:
-            toggleButton?.title = "Pause"
+            toggleButton?.title = snapshot.pauseActionLabel
             toggleSymbolName = "pause.fill"
             stopButton?.isEnabled = true
         case .paused:

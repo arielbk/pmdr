@@ -240,7 +240,7 @@ export default function App({
           initialSelection={resolveLastActiveProjectFn()}
         />
       )}
-      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
+      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} phase={viewState.phase} />}
     </>
   );
 }

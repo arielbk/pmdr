@@ -436,6 +436,7 @@ describe("App — project picker integration", () => {
             shortBreakMinutes: 5,
             longBreakMinutes: 15,
             longBreakEvery: 4,
+            dailyGoal: 8,
             focusEndSound: "Glass",
             breakEndSound: "Submarine",
           })}

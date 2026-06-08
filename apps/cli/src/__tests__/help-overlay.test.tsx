@@ -37,7 +37,7 @@ describe("HelpOverlay — rendering", () => {
   });
 
   it("describes detach keys as keeping the timer running and x as stop session", () => {
-    const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} />);
+    const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} phase="focus" />);
     const frame = lastFrame() ?? "";
     expect(frame).toContain("pause");
     expect(frame).toContain("quit / detach (timer keeps running)");
@@ -46,10 +46,24 @@ describe("HelpOverlay — rendering", () => {
     expect(frame).toContain("help");
   });
 
-  it("does not list skip", () => {
-    const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} />);
+  it("does not list skip during focus phase", () => {
+    const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} phase="focus" />);
     const frame = lastFrame() ?? "";
     expect(frame).not.toContain("skip");
+  });
+
+  it("shows stop/skip break copy for space during break phase", () => {
+    const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} phase="break" />);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("stop / skip break");
+    expect(frame).not.toContain("pause / resume");
+  });
+
+  it("shows pause/resume copy for space during focus phase", () => {
+    const { lastFrame } = render(<HelpOverlay onClose={vi.fn()} phase="focus" />);
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("pause / resume");
+    expect(frame).not.toContain("stop / skip break");
   });
 
   it("shows a dismiss hint", () => {

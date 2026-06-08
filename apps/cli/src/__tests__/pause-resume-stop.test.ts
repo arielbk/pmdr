@@ -83,6 +83,75 @@ describe("pauseTimer", () => {
     const completionsFile = join(tmpDir, "completions.jsonl");
     expect(existsSync(completionsFile)).toBe(true);
   });
+
+  it("pausing a running break stops it — state cleared to idle", () => {
+    store.writeState({
+      startedAt: NOW - 30_000,
+      durationMs: 300_000, // 5 min break, still running
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "break",
+    });
+    pauseTimer({ store, now: NOW });
+    expect(store.readState()).toBeNull();
+    const derived = deriveState({ file: store.readState(), now: NOW });
+    expect(derived.kind).toBe("idle");
+  });
+
+  it("pausing a running break logs a stop event, not a pause event", () => {
+    store.writeState({
+      startedAt: NOW - 30_000,
+      durationMs: 300_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "break",
+      id: "test-break-id",
+    });
+    pauseTimer({ store, now: NOW });
+    const events = store.readEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]!.type).toBe("stop");
+    expect(events[0]!.id).toBe("test-break-id");
+  });
+
+  it("pausing a running break does NOT log a pause event", () => {
+    store.writeState({
+      startedAt: NOW - 30_000,
+      durationMs: 300_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "break",
+      id: "test-break-id",
+    });
+    pauseTimer({ store, now: NOW });
+    const events = store.readEvents();
+    expect(events.every((e) => e.type !== "pause")).toBe(true);
+  });
+
+  it("pausing a running break does NOT append a completion", () => {
+    store.writeState({
+      startedAt: NOW - 30_000,
+      durationMs: 300_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "break",
+    });
+    pauseTimer({ store, now: NOW });
+    const completionsFile = join(tmpDir, "completions.jsonl");
+    expect(existsSync(completionsFile)).toBe(false);
+  });
+
+  it("pausing a running focus block still sets pausedAt (regression)", () => {
+    store.writeState({
+      startedAt: NOW - 5_000,
+      durationMs: 60_000,
+      pausedAt: null,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+    });
+    pauseTimer({ store, now: NOW });
+    expect(store.readState()).toMatchObject({ pausedAt: NOW });
+  });
 });
 
 describe("resumeTimer", () => {

@@ -24,6 +24,9 @@ export interface StateRecord {
 
 export const DEFAULT_FOCUS_GOAL = 8;
 
+/** A pending (born-paused) break left untouched longer than this is treated as abandoned. */
+export const STALE_BREAK_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
+
 type ConfigReader = Pick<
   ReturnType<typeof createConfigModule>,
   "readEffectiveConfig"
@@ -207,6 +210,17 @@ export function createStateModule(
     while (true) {
       const file = readState();
       if (!file) return;
+
+      // Stale-break expiry: a pending (born-paused) break whose pausedAt is more
+      // than one hour old is treated as abandoned → expire to idle silently.
+      if (
+        file.phase === "break" &&
+        file.pausedAt !== null &&
+        now - file.pausedAt > STALE_BREAK_THRESHOLD_MS
+      ) {
+        clearState();
+        return;
+      }
 
       const derived = deriveState({ file, now });
       if (derived.kind !== "expired") return;

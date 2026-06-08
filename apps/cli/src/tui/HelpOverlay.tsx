@@ -3,28 +3,39 @@ import { Box, Text, useInput } from "ink";
 
 interface HelpOverlayProps {
   onClose: () => void;
+  phase?: "focus" | "break";
 }
 
-const BINDINGS: Array<[string, string]> = [
+const FOCUS_BINDINGS: Array<[string, string]> = [
   ["space", "pause / resume"],
   ["p", "switch project"],
   ["x", "stop session"],
-  ["q / esc / ctrl+c", "quit / detach"],
+  ["q / esc / ctrl+c", "quit / detach (timer keeps running)"],
   ["?", "toggle this help"],
 ];
 
-export default function HelpOverlay({ onClose }: HelpOverlayProps) {
+const BREAK_BINDINGS: Array<[string, string]> = [
+  ["space", "stop / skip break"],
+  ["p", "switch project"],
+  ["x", "stop session"],
+  ["q / esc / ctrl+c", "quit / detach (timer keeps running)"],
+  ["?", "toggle this help"],
+];
+
+export default function HelpOverlay({ onClose, phase = "focus" }: HelpOverlayProps) {
   useInput((input, key) => {
     if (key.escape || input === "\x1B" || input === "?") {
       onClose();
     }
   });
 
+  const bindings = phase === "break" ? BREAK_BINDINGS : FOCUS_BINDINGS;
+
   return (
     <Box flexDirection="column" borderStyle="round" paddingX={2} paddingY={1}>
       <Text bold>Keybindings</Text>
       <Box flexDirection="column" marginTop={1}>
-        {BINDINGS.map(([key, desc]) => (
+        {bindings.map(([key, desc]) => (
           <Box key={key}>
             <Text>{"  "}</Text>
             <Box width={20}>
