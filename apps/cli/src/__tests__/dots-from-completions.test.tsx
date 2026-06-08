@@ -139,7 +139,10 @@ describe("App — config wires dailyGoal into dot row", () => {
 describe("derivePhaseState — count from completions", () => {
   let tmpDir: string;
   let store: ReturnType<typeof createStateModule>;
-  const NOW = Date.now();
+  // Fixed local-noon instant, not Date.now(): isSameDay keys off local date
+  // parts, so a real "now" within ~10min of midnight pushes NOW - 600_000 into
+  // "yesterday" and flakes the focus→break→focus test.
+  const NOW = new Date("2026-06-06T12:00:00").getTime();
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "pmdr-test-"));

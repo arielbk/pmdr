@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStateModule, deriveState } from "../state.js";
 import type { StateRecord } from "../state.js";
+import { DEFAULT_CONFIG } from "../config.js";
 
 // ─── deriveState (pure) ───────────────────────────────────────────────────────
 
@@ -272,7 +273,11 @@ describe("advancePhaseIfExpired", () => {
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "pmdr-test-"));
-    store = createStateModule(tmpDir);
+    // Pin defaults so break-duration assertions don't read the dev machine's
+    // real ~/.config/pmdr/config.json.
+    store = createStateModule(tmpDir, {
+      config: { readEffectiveConfig: () => ({ ...DEFAULT_CONFIG }) },
+    });
   });
 
   afterEach(() => {
@@ -492,7 +497,11 @@ describe("daily cadence", () => {
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "pmdr-test-daily-"));
-    store = createStateModule(tmpDir);
+    // Pin defaults so break-duration assertions don't read the dev machine's
+    // real ~/.config/pmdr/config.json.
+    store = createStateModule(tmpDir, {
+      config: { readEffectiveConfig: () => ({ ...DEFAULT_CONFIG }) },
+    });
   });
 
   afterEach(() => {
