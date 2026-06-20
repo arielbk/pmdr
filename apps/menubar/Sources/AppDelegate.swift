@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     private var notifier: PhaseNotifier?
     private var hotkeyManager: HotkeyManager?
     private var floatingTimerPanelController: FloatingTimerPanelController?
+    private var capturePanelController: CapturePanelController?
     private var manageProjectsController: ManageProjectsWindowController?
     private var settingsController: SettingsWindowController?
     private var pollTask: Task<Void, Never>?
@@ -47,6 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
 
         self.statusItem = item
         floatingTimerPanelController = FloatingTimerPanelController(actions: self)
+        capturePanelController = CapturePanelController(onSubmit: { [weak self] text in
+            self?.writeNote(text)
+        })
         rebuildMenu()
         registerHotkey()
 
@@ -172,6 +176,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         menu.addItem(.separator())
         menu.addItem(actionItem("Settings…", #selector(openSettings(_:)), keyEquivalent: ","))
         menu.addItem(actionItem("Manage projects…", #selector(openManageProjects(_:))))
+        // Temporary trigger for the capture panel; replaced by a global hotkey in a later slice.
+        menu.addItem(actionItem("Capture note…", #selector(openCaptureNote(_:))))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: "Quit",
@@ -290,6 +296,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
             }
         }
         manageProjectsController?.show()
+    }
+
+    @objc @MainActor private func openCaptureNote(_ sender: NSMenuItem) {
+        capturePanelController?.show()
+    }
+
+    private func writeNote(_ text: String) {
+        guard let client else { return }
+        Task { [weak self] in
+            do {
+                try await client.note(text)
+            } catch {
+                guard let self else { return }
+                os_log("Failed to write pmdr note: %{public}@", log: self.log, type: .error, String(describing: error))
+                await MainActor.run {
+                    self.surfaceClientErrorIfNeeded(error)
+                }
+            }
+        }
     }
 
     @objc @MainActor private func openSettings(_ sender: NSMenuItem) {
