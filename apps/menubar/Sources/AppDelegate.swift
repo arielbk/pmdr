@@ -176,8 +176,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         menu.addItem(.separator())
         menu.addItem(actionItem("Settings…", #selector(openSettings(_:)), keyEquivalent: ","))
         menu.addItem(actionItem("Manage projects…", #selector(openManageProjects(_:))))
-        // Temporary trigger for the capture panel; replaced by a global hotkey in a later slice.
-        menu.addItem(actionItem("Capture note…", #selector(openCaptureNote(_:))))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: "Quit",
@@ -296,10 +294,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
             }
         }
         manageProjectsController?.show()
-    }
-
-    @objc @MainActor private func openCaptureNote(_ sender: NSMenuItem) {
-        capturePanelController?.show()
     }
 
     private func writeNote(_ text: String) {
@@ -479,6 +473,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
                     self?.redrawFloatingTimer()
                     self?.floatingTimerPanelController?.toggle()
                 }
+            ),
+            HotkeyBinding(
+                keyCode: UInt32(kVK_ANSI_N),
+                modifiers: UInt32(controlKey | optionKey | cmdKey),
+                handler: { [weak self] in self?.capturePanelController?.show() }
             )
         ])
         do {
