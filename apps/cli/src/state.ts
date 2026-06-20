@@ -82,6 +82,15 @@ export interface EventRecord {
   project?: string;
 }
 
+export interface NoteRecord {
+  text: string;
+  at: number;
+  /** Stamped from the live session at capture; empty string when idle. */
+  sessionId: string;
+  project: string;
+  phase: string;
+}
+
 export function deriveState({
   file,
   now,
@@ -110,6 +119,7 @@ export function createStateModule(
   const stateFile = join(stateDir, "state.json");
   const completionsFile = join(stateDir, "completions.jsonl");
   const eventsFile = join(stateDir, "events.jsonl");
+  const notesFile = join(stateDir, "notes.jsonl");
   const config = options.config ?? createConfigModule();
 
   function appendEvent(event: EventRecord): void {
@@ -131,6 +141,24 @@ export function createStateModule(
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line) as EventRecord);
+    } catch {
+      return [];
+    }
+  }
+
+  function appendNote(note: NoteRecord): void {
+    mkdirSync(stateDir, { recursive: true });
+    appendFileSync(notesFile, JSON.stringify(note) + "\n", "utf8");
+  }
+
+  function readNotes(): NoteRecord[] {
+    try {
+      const raw = readFileSync(notesFile, "utf8");
+      return raw
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as NoteRecord);
     } catch {
       return [];
     }
@@ -317,6 +345,8 @@ export function createStateModule(
     rewriteCompletionProject,
     appendEvent,
     readEvents,
+    appendNote,
+    readNotes,
   };
 }
 
@@ -340,3 +370,5 @@ export const countTodayFocusBlocks = (now: number): number =>
   _prod.countTodayFocusBlocks(now);
 export const appendEvent = (e: EventRecord): void => _prod.appendEvent(e);
 export const readEvents = (): EventRecord[] => _prod.readEvents();
+export const appendNote = (n: NoteRecord): void => _prod.appendNote(n);
+export const readNotes = (): NoteRecord[] => _prod.readNotes();
