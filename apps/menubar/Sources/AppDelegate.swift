@@ -477,7 +477,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
             HotkeyBinding(
                 keyCode: UInt32(kVK_ANSI_N),
                 modifiers: UInt32(controlKey | optionKey | cmdKey),
-                handler: { [weak self] in self?.capturePanelController?.show() }
+                handler: { [weak self] in self?.capturePanelController?.toggle() }
             )
         ])
         do {

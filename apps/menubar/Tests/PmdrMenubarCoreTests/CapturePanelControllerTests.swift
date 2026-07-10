@@ -89,6 +89,33 @@ final class CapturePanelControllerTests: XCTestCase {
         XCTAssertFalse(controller.panelForTesting?.isVisible ?? true)
     }
 
+    func testShowFadesPanelInFromTransparent() {
+        let controller = CapturePanelController(onSubmit: { _ in })
+
+        controller.show()
+
+        XCTAssertLessThan(controller.panelForTesting?.alphaValue ?? 1, 1)
+    }
+
+    func testShowWithZeroTransitionDurationIsImmediatelyOpaque() {
+        let previous = CapturePanelController.showTransitionDuration
+        CapturePanelController.showTransitionDuration = 0
+        defer { CapturePanelController.showTransitionDuration = previous }
+        let controller = CapturePanelController(onSubmit: { _ in })
+
+        controller.show()
+
+        XCTAssertEqual(controller.panelForTesting?.alphaValue, 1)
+    }
+
+    func testPlaceholderNamesPmdr() {
+        let controller = CapturePanelController(onSubmit: { _ in })
+
+        controller.show()
+
+        XCTAssertEqual(controller.textFieldForTesting?.placeholderString, "Add a pmdr note…")
+    }
+
     func testReturnSubmitsEmptyTextVerbatimForCliToNoOp() {
         var submitted: [String] = []
         let controller = CapturePanelController(onSubmit: { submitted.append($0) })

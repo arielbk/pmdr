@@ -62,14 +62,27 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
     func show() {
         let panel = panel ?? makePanel()
         self.panel = panel
+        let wasVisible = panel.isVisible
         position(panel, on: screenProvider())
         textField?.stringValue = ""
         NSApp.activate(ignoringOtherApps: true)
+        if !wasVisible {
+            panel.alphaValue = Self.showTransitionDuration > 0 ? 0 : 1
+        }
         panel.makeKeyAndOrderFront(nil)
         if let textField {
             panel.makeFirstResponder(textField)
         }
+        if !wasVisible, Self.showTransitionDuration > 0 {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Self.showTransitionDuration
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().alphaValue = 1
+            }
+        }
     }
+
+    static var showTransitionDuration: TimeInterval = 0.12
 
     func hide() {
         panel?.orderOut(nil)
@@ -147,7 +160,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
         let field = NSTextField(frame: .zero)
         field.translatesAutoresizingMaskIntoConstraints = false
-        field.placeholderString = "Add a note…"
+        field.placeholderString = "Add a pmdr note…"
         field.isBordered = false
         field.drawsBackground = false
         field.bezelStyle = .roundedBezel
