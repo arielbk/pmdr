@@ -2,7 +2,7 @@ import { defineCommand } from "citty";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createStateModule } from "../state.js";
-import type { CompletionRecord } from "../state.js";
+import type { CompletionRecord, NoteRecord } from "../state.js";
 
 const STATE_DIR = join(homedir(), ".local", "state", "pmdr");
 
@@ -81,6 +81,46 @@ export function getTodayGrouped(opts: {
   return { groups, total };
 }
 
+// ─── Notes ──────────────────────────────────────────────────────────────────
+
+/**
+ * Today's captured notes, filtered to the local calendar day of `now` and
+ * returned in ascending time order.
+ */
+export function readTodayNotes(opts: {
+  store: ReturnType<typeof createStateModule>;
+  now: number;
+}): NoteRecord[] {
+  const { store, now } = opts;
+  const nowD = new Date(now);
+  return store
+    .readNotes()
+    .filter((n) => {
+      const d = new Date(n.at);
+      return (
+        d.getFullYear() === nowD.getFullYear() &&
+        d.getMonth() === nowD.getMonth() &&
+        d.getDate() === nowD.getDate()
+      );
+    })
+    .sort((a, b) => a.at - b.at);
+}
+
+export interface TodayJsonResult extends TodayGroupedResult {
+  notes: NoteRecord[];
+}
+
+/** Assemble the full JSON payload for `pmdr today --json`: groups + notes. */
+export function buildTodayJson(opts: {
+  store: ReturnType<typeof createStateModule>;
+  now: number;
+  project?: string;
+}): TodayJsonResult {
+  const grouped = getTodayGrouped(opts);
+  const notes = readTodayNotes({ store: opts.store, now: opts.now });
+  return { ...grouped, notes };
+}
+
 function formatTime(ts: number): string {
   const d = new Date(ts);
   const h = d.getHours();
@@ -93,7 +133,10 @@ function formatMs(ms: number): string {
   return `${totalMin}m`;
 }
 
-export function formatTodayGrouped(result: TodayGroupedResult): string {
+export function formatTodayGrouped(
+  result: TodayGroupedResult,
+  notes: NoteRecord[] = [],
+): string {
   const lines: string[] = [];
 
   for (const group of result.groups) {
@@ -106,6 +149,13 @@ export function formatTodayGrouped(result: TodayGroupedResult): string {
 
   const totalLabel = result.total.pomodoros === 1 ? "pomodoro" : "pomodoros";
   lines.push(`Total: ${result.total.pomodoros} ${totalLabel}, ${formatMs(result.total.totalMs)}`);
+
+  if (notes.length > 0) {
+    lines.push("Notes:");
+    for (const n of notes) {
+      lines.push(`  ${formatTime(n.at)}  ${n.text}`);
+    }
+  }
 
   return lines.join("\n");
 }
@@ -136,11 +186,12 @@ export default defineCommand({
     const store = createStateModule(STATE_DIR);
     const now = Date.now();
     const result = getTodayGrouped({ store, now, project: args.project });
+    const notes = readTodayNotes({ store, now });
 
     if (args.json) {
-      console.log(JSON.stringify(result));
+      console.log(JSON.stringify({ ...result, notes }));
     } else {
-      console.log(formatTodayGrouped(result));
+      console.log(formatTodayGrouped(result, notes));
     }
   },
 });
