@@ -20,28 +20,39 @@ packages/
 
 `docs/` holds per-feature specs, task breakdowns, implementation logs, and QA notes. It is **local-only and not tracked in Git** (see `.gitignore`) — these are working implementation details, not part of the shipped repo history.
 
-## Requirements
+## Install
 
-- Node 18+
-- pnpm 9
-- (Menubar only) macOS 13+, Xcode 15+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) — `brew install xcodegen`
-
-## Quickstart
+The CLI is published to npm as [`@arielbk/pmdr`](https://www.npmjs.com/package/@arielbk/pmdr):
 
 ```sh
-pnpm setup        # install, build, and link `pmdr` onto your PATH
+npm install -g @arielbk/pmdr
 ```
 
-Day-to-day:
+## Requirements
+
+- Node 18+ (install only); development also needs pnpm 9
+- (Menubar only) macOS 13+, Xcode 15+, and [XcodeGen](https://github.com/yonaskolb/XcodeGen) — `brew install xcodegen`
+
+## Developing
 
 ```sh
+pnpm setup        # install, build, and link the local `pmdr` build onto your PATH
 pnpm dev          # watch mode across the JS workspace
 pnpm build        # rebuild the CLI
 ```
 
-## Running the CLI
+`pnpm setup` links the working-tree build globally (replacing any npm-installed `pmdr` on your PATH) so you can dogfood changes.
 
-`pnpm setup` links the `pmdr` binary globally. Then:
+### Releasing
+
+```sh
+pnpm release:pmdr -- --dry-run --version X.Y.Z   # verify the tarball
+pnpm release:pmdr -- --version X.Y.Z             # stamp, build, publish to npm
+```
+
+The flow lives in `apps/cli/src/release.ts`; it stamps `apps/cli/package.json`, builds, `npm pack`s to `dist/releases/`, and publishes. Tagging and the GitHub release are manual.
+
+## Running the CLI
 
 ```sh
 pmdr                # opens the interactive TUI

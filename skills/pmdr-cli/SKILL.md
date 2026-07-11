@@ -5,7 +5,7 @@ description: Drives the `pmdr` pomodoro CLI non-interactively from an agent — 
 
 # pmdr CLI
 
-A pomodoro timer CLI. Binary is `pmdr` (installed globally via pnpm). State lives in `~/.local/state/pmdr/`.
+A pomodoro timer CLI. Binary is `pmdr` (installed globally from npm: `npm install -g @arielbk/pmdr`). State lives in `~/.local/state/pmdr/`.
 
 ## Non-interactive contract
 

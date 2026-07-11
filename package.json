@@ -7,13 +7,14 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
-    "setup": "pnpm install && pnpm build && pnpm --filter cli link --global",
+    "setup": "pnpm install && pnpm build && pnpm --filter @arielbk/pmdr link --global",
+    "release:pmdr": "node apps/cli/src/release.ts",
     "menubar": "./scripts/menubar-run.sh",
     "menubar:gen": "./scripts/menubar-gen.sh"
   },
   "devDependencies": {
+    "@arielbk/pmdr": "workspace:*",
     "ccusage": "18.0.11",
-    "cli": "workspace:*",
     "prettier": "^3.7.4",
     "turbo": "^2.9.14",
     "typescript": "5.9.2"

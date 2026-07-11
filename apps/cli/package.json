@@ -1,10 +1,16 @@
 {
-  "name": "cli",
+  "name": "@arielbk/pmdr",
   "version": "0.1.0",
   "type": "module",
-  "private": true,
+  "license": "MIT",
   "bin": {
-    "pmdr": "./dist/index.js"
+    "pmdr": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsup",
