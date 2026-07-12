@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     private var notifier: PhaseNotifier?
     private var hotkeyManager: HotkeyManager?
     private var floatingTimerPanelController: FloatingTimerPanelController?
+    private var capturePanelController: CapturePanelController?
     private var manageProjectsController: ManageProjectsWindowController?
     private var settingsController: SettingsWindowController?
     private var pollTask: Task<Void, Never>?
@@ -47,6 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
 
         self.statusItem = item
         floatingTimerPanelController = FloatingTimerPanelController(actions: self)
+        capturePanelController = CapturePanelController(onSubmit: { [weak self] text in
+            self?.writeNote(text)
+        })
         rebuildMenu()
         registerHotkey()
 
@@ -292,6 +296,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         manageProjectsController?.show()
     }
 
+    private func writeNote(_ text: String) {
+        guard let client else { return }
+        Task { [weak self] in
+            do {
+                try await client.note(text)
+            } catch {
+                guard let self else { return }
+                os_log("Failed to write pmdr note: %{public}@", log: self.log, type: .error, String(describing: error))
+                await MainActor.run {
+                    self.surfaceClientErrorIfNeeded(error)
+                }
+            }
+        }
+    }
+
     @objc @MainActor private func openSettings(_ sender: NSMenuItem) {
         guard let client else { return }
         if settingsController == nil {
@@ -454,6 +473,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
                     self?.redrawFloatingTimer()
                     self?.floatingTimerPanelController?.toggle()
                 }
+            ),
+            HotkeyBinding(
+                keyCode: UInt32(kVK_ANSI_N),
+                modifiers: UInt32(controlKey | optionKey | cmdKey),
+                handler: { [weak self] in self?.capturePanelController?.toggle() }
             )
         ])
         do {

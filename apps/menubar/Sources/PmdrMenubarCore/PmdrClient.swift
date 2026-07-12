@@ -128,6 +128,12 @@ public struct PmdrClient: Sendable {
         _ = try await run(arguments: args)
     }
 
+    /// Append a timestamped note via the CLI (`pmdr note <text>`). The CLI stamps
+    /// the live session/project/phase and no-ops on whitespace-only text.
+    public func note(_ text: String) async throws {
+        _ = try await run(arguments: ["note", text])
+    }
+
     public func setProject(_ name: String?) async throws {
         var args = ["project", "set"]
         if let name {
