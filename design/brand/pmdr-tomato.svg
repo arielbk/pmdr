@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320" role="img" aria-labelledby="title description">
+  <title id="title">pmdr tomato</title>
+  <description id="description">A wide red tomato with a green star-shaped calyx</description>
+  <path d="M42 142C53 109 92 96 131 105C150 110 170 110 189 105C228 96 267 109 278 142C294 192 260 256 216 274C196 282 176 272 160 262C144 272 124 282 104 274C60 256 26 192 42 142Z" fill="#ed4d43" stroke="#8d252b" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M68 151C80 126 104 117 134 124" fill="none" stroke="#ff9384" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="67" cy="151" r="5" fill="#ffb2a0"/>
+  <path d="M254 149C261 184 246 222 216 247" fill="none" stroke="#c7363c" stroke-width="11" stroke-linecap="round"/>
+  <path d="M111 158C109 181 115 202 126 216M209 158C211 181 205 202 194 216" fill="none" stroke="#b42e36" stroke-width="7" stroke-linecap="round"/>
+  <path d="M113 151C111 166 114 179 119 190M207 151C209 166 206 179 201 190" fill="none" stroke="#ff796d" stroke-width="3" stroke-linecap="round"/>
+  <path d="M160 116L143 87L97 91L129 65L117 36L151 57L160 22L170 57L204 36L192 66L224 91L178 87Z" fill="#3f7f4c" stroke="#245632" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M160 102L159 48M139 83L123 61M181 83L198 60" fill="none" stroke="#8fbf78" stroke-width="4" stroke-linecap="round"/>
+</svg>

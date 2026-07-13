@@ -1,5 +1,9 @@
 # pmdr
 
+<p align="center">
+  <img src="design/brand/pmdr-tomato.svg" width="144" alt="pmdr tomato mark">
+</p>
+
 A pomodoro timer with shared session state, surfaced through a CLI and a native macOS menubar app. One running session, many ways to drive it: start it in one terminal, check status from another, pause it with a global hotkey from the menubar, assign sessions to projects, and let agents (or scripts) read whether you're currently in deep focus.
 
 The CLI owns the session state. The menubar app is a thin native shell over the CLI — it polls `pmdr status --json` and shells out to `pmdr` for control. Anything else that wants to read or drive a session can do the same.

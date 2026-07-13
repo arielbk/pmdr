@@ -37,10 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            if let image = NSImage(systemSymbolName: "timer", accessibilityDescription: "pmdr") {
+            if let image = BrandIcon.templateImage() {
                 button.image = image
                 button.imagePosition = .imageLeading
                 button.title = ""
+                button.setAccessibilityLabel("pmdr")
             } else {
                 button.title = "pmdr"
             }
@@ -118,20 +119,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         )
     }
 
-    private func updateIcon(for status: Status) {
+    private func updateIcon(for _: Status) {
         guard let button = statusItem?.button else { return }
-        let symbolName: String
-        switch status {
-        case .idle:
-            symbolName = "timer"
-        case .running:
-            symbolName = "timer.circle.fill"
-        case .paused:
-            symbolName = "pause.circle"
-        }
-        if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "pmdr") {
+        if let image = BrandIcon.templateImage() {
             button.image = image
             button.imagePosition = .imageLeading
+            button.setAccessibilityLabel("pmdr")
         }
     }
 

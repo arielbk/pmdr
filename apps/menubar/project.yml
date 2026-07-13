@@ -37,6 +37,8 @@ targets:
       - path: Sources
         excludes:
           - "PmdrMenubarCore/**"
+      - path: Resources/Assets.xcassets
+        buildPhase: resources
     dependencies:
       - target: PmdrMenubarCore
         embed: true
