@@ -62,6 +62,7 @@ targets:
       - path: Sources/HotkeyManager.swift
       - path: Sources/FloatingTimerPanelController.swift
       - path: Sources/CapturePanelController.swift
+      - path: Sources/MainMenu.swift
     dependencies:
       - target: PmdrMenubarCore
     settings:
