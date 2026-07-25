@@ -13,13 +13,9 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         var pauseActionLabel: String
     }
 
+    private static let surface = OverlaySurface.standard
     private static let visualSize = NSSize(width: 240, height: 136)
-    private static let shadowMargin: CGFloat = 20
-    private static let panelSize = NSSize(
-        width: visualSize.width + shadowMargin * 2,
-        height: visualSize.height + shadowMargin * 2
-    )
-    private static let cornerRadius: CGFloat = 14
+    private static let panelSize = surface.panelSize(forVisualSize: visualSize)
 
     private var panel: NSPanel?
     private var phaseField: NSTextField?
@@ -85,7 +81,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         effectView?.trackingAreas.first
     }
 
-    var visualEffectViewForTesting: NSVisualEffectView? {
+    var surfaceViewForTesting: NSView? {
         effectView
     }
 
@@ -433,32 +429,18 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = true
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        // hasShadow = true lets the window server compute the shadow from visible pixels.
-        // The panel is larger than the visual content (shadowMargin padding on each side)
-        // so the system sees a rounded inset shape and casts a rounded shadow.
-        panel.hasShadow = true
+        // Clear, non-opaque, shadowed: the window server computes the shadow from
+        // the surface's visible pixels, which the surface pads on every side so
+        // the shadow comes out rounded rather than rectangular.
+        Self.surface.configure(panel)
 
         // Outer clear view fills the enlarged panel frame
         let contentView = NSView(frame: frame)
         contentView.wantsLayer = true
         contentView.autoresizingMask = [.width, .height]
 
-        // Visual content is inset by shadowMargin — transparent corners let the system
-        // compute a rounded shadow rather than a rectangular one
-        let effectFrame = CGRect(
-            x: Self.shadowMargin, y: Self.shadowMargin,
-            width: Self.visualSize.width, height: Self.visualSize.height
-        )
-        let effect = FloatingTimerBackgroundView(frame: effectFrame)
-        effect.material = .hudWindow
-        effect.blendingMode = .behindWindow
-        effect.state = .active
-        effect.appearance = NSAppearance(named: .vibrantDark)
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = Self.cornerRadius
-        effect.layer?.masksToBounds = true
+        let effect = FloatingTimerBackgroundView(frame: Self.surface.surfaceFrame(forVisualSize: Self.visualSize))
+        Self.surface.apply(to: effect)
 
         let trackingArea = NSTrackingArea(
             rect: effect.bounds,
@@ -654,7 +636,7 @@ private final class FloatingTimerPanel: NSPanel {
     }
 }
 
-private final class FloatingTimerBackgroundView: NSVisualEffectView {
+private final class FloatingTimerBackgroundView: NSView {
     var onHoverChange: ((Bool) -> Void)?
 
     override var mouseDownCanMoveWindow: Bool {

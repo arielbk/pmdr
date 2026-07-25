@@ -81,14 +81,22 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertFalse(panel.isOpaque)
         XCTAssertEqual(panel.backgroundColor, .clear)
 
-        let effect = controller.visualEffectViewForTesting
-        XCTAssertNotNil(effect)
-        XCTAssertEqual(effect?.material, .hudWindow)
-        XCTAssertEqual(effect?.blendingMode, .behindWindow)
-        XCTAssertEqual(effect?.state, .active)
-        XCTAssertEqual(effect?.appearance?.name, NSAppearance.Name.vibrantDark)
-        XCTAssertEqual(effect?.layer?.cornerRadius, 14)
-        XCTAssertEqual(effect?.layer?.masksToBounds, true)
+        let surface = OverlaySurface.standard
+        guard let surfaceView = controller.surfaceViewForTesting else {
+            XCTFail("Expected the timer to present an overlay surface")
+            return
+        }
+        XCTAssertFalse(
+            surfaceView is NSVisualEffectView,
+            "the timer must not derive its legibility from window vibrancy"
+        )
+        XCTAssertEqual(surfaceView.layer?.backgroundColor, surface.backgroundColor.cgColor)
+        XCTAssertEqual(surfaceView.layer?.borderColor, surface.borderColor.cgColor)
+        XCTAssertEqual(surfaceView.layer?.borderWidth, surface.borderWidth)
+        XCTAssertEqual(surfaceView.layer?.cornerRadius, surface.cornerRadius)
+        XCTAssertEqual(surfaceView.layer?.masksToBounds, true)
+        XCTAssertEqual(surfaceView.effectiveAppearance.name, surface.appearanceName)
+        XCTAssertTrue(panel.hasShadow)
 
         controller.toggle()
 

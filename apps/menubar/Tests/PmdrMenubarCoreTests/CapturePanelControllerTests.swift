@@ -1,4 +1,5 @@
 import AppKit
+import PmdrMenubarCore
 import XCTest
 
 @MainActor
@@ -20,6 +21,32 @@ final class CapturePanelControllerTests: XCTestCase {
         XCTAssertTrue(panel.collectionBehavior.contains(.canJoinAllSpaces))
         XCTAssertFalse(panel.isOpaque)
         XCTAssertEqual(panel.backgroundColor, .clear)
+    }
+
+    func testShowPresentsTheSharedDarkOverlaySurface() {
+        let controller = CapturePanelController(onSubmit: { _ in })
+
+        controller.show()
+
+        let surface = OverlaySurface.standard
+        guard let panel = controller.panelForTesting,
+              let surfaceView = controller.surfaceViewForTesting
+        else {
+            XCTFail("Expected show() to present an overlay surface")
+            return
+        }
+        XCTAssertFalse(
+            surfaceView is NSVisualEffectView,
+            "capture must not derive its legibility from window vibrancy"
+        )
+        XCTAssertEqual(surfaceView.layer?.backgroundColor, surface.backgroundColor.cgColor)
+        XCTAssertEqual(surfaceView.layer?.borderColor, surface.borderColor.cgColor)
+        XCTAssertEqual(surfaceView.layer?.borderWidth, surface.borderWidth)
+        XCTAssertEqual(surfaceView.layer?.cornerRadius, surface.cornerRadius)
+        XCTAssertEqual(surfaceView.layer?.masksToBounds, true)
+        XCTAssertEqual(surfaceView.effectiveAppearance.name, surface.appearanceName)
+        XCTAssertTrue(panel.hasShadow)
+        XCTAssertEqual(panel.frame.size, surface.panelSize(forVisualSize: surfaceView.frame.size))
     }
 
     func testShowPresentsASingleTextField() {

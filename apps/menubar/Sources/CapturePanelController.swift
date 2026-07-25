@@ -1,4 +1,5 @@
 import AppKit
+import PmdrMenubarCore
 
 /// Borderless, always-on-top capture panel with a single text field.
 ///
@@ -9,11 +10,14 @@ import AppKit
 /// summoned from anywhere.
 @MainActor
 final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
-    private static let panelSize = NSSize(width: 380, height: 46)
+    private static let surface = OverlaySurface.standard
+    private static let visualSize = NSSize(width: 380, height: 46)
+    private static let panelSize = surface.panelSize(forVisualSize: visualSize)
     private static let fieldInset: CGFloat = 8
 
     private var panel: NSPanel?
     private var textField: NSTextField?
+    private weak var surfaceView: NSView?
 
     private let onSubmit: (String) -> Void
     private let screenProvider: () -> NSScreen?
@@ -36,6 +40,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
     var panelForTesting: NSPanel? { panel }
     var textFieldForTesting: NSTextField? { textField }
+    var surfaceViewForTesting: NSView? { surfaceView }
 
     /// Drives the real field-editor command dispatch used by Enter/Escape, so
     /// tests exercise the same path AppKit takes for those keys.
@@ -139,23 +144,17 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.hidesOnDeactivate = false
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = true
+        // Clear, non-opaque, shadowed: the window server derives the shadow from
+        // the surface's visible pixels inside the panel's transparent padding.
+        Self.surface.configure(panel)
         panel.delegate = self
 
         let contentView = NSView(frame: frame)
         contentView.wantsLayer = true
         contentView.autoresizingMask = [.width, .height]
 
-        let effect = NSVisualEffectView(frame: frame)
-        effect.material = .hudWindow
-        effect.blendingMode = .behindWindow
-        effect.state = .active
-        effect.appearance = NSAppearance(named: .vibrantDark)
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = 12
-        effect.layer?.masksToBounds = true
+        let effect = NSView(frame: Self.surface.surfaceFrame(forVisualSize: Self.visualSize))
+        Self.surface.apply(to: effect)
         effect.autoresizingMask = [.width, .height]
 
         let field = NSTextField(frame: .zero)
@@ -182,6 +181,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         panel.contentView = contentView
 
         self.textField = field
+        self.surfaceView = effect
 
         return panel
     }
