@@ -30,12 +30,14 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
     private let onSubmit: (String) -> Void
     private let iconProvider: () -> NSImage?
     private let notesProvider: () async -> [NoteRecord]?
+    private let positionStore: CapturePanelPosition
     private let screenProvider: () -> NSScreen?
 
     init(
         onSubmit: @escaping (String) -> Void,
         iconProvider: @escaping () -> NSImage? = { BrandIcon.templateImage(.filled, size: iconSize) },
         notesProvider: @escaping () async -> [NoteRecord]? = { nil },
+        positionStore: CapturePanelPosition = CapturePanelPosition(),
         screenProvider: @escaping () -> NSScreen? = {
             let mouse = NSEvent.mouseLocation
             return NSScreen.screens.first { $0.frame.contains(mouse) }
@@ -46,6 +48,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         self.onSubmit = onSubmit
         self.iconProvider = iconProvider
         self.notesProvider = notesProvider
+        self.positionStore = positionStore
         self.screenProvider = screenProvider
         super.init()
     }
@@ -110,7 +113,21 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
     static var showTransitionDuration: TimeInterval = 0.12
 
     func hide() {
+        saveCurrentPosition()
         panel?.orderOut(nil)
+    }
+
+    /// Records where the panel currently sits so the next invocation on this
+    /// display reopens in the same place. Called on every dismissal, which is
+    /// also the only moment a drag can have finished.
+    func saveCurrentPosition() {
+        guard let panel,
+              let screen = screen(containing: panel.frame) ?? screenProvider()
+        else {
+            return
+        }
+
+        positionStore.record(panel.frame.origin, for: screen)
     }
 
     // MARK: - Actions
@@ -192,6 +209,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.hidesOnDeactivate = false
+        panel.isMovableByWindowBackground = true
         // Clear, non-opaque, shadowed: the window server derives the shadow from
         // the surface's visible pixels inside the panel's transparent padding.
         Self.surface.configure(panel)
@@ -201,7 +219,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         contentView.wantsLayer = true
         contentView.autoresizingMask = [.width, .height]
 
-        let effect = NSView(frame: Self.surface.surfaceFrame(forVisualSize: Self.visualSize))
+        let effect = CaptureBackgroundView(frame: Self.surface.surfaceFrame(forVisualSize: Self.visualSize))
         Self.surface.apply(to: effect)
         effect.autoresizingMask = [.width, .height]
 
@@ -230,7 +248,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         history.setButtonType(.momentaryChange)
         history.setAccessibilityLabel("Today's notes")
 
-        let icon = NSImageView(frame: .zero)
+        let icon = CaptureDragHandleImageView(frame: .zero)
         icon.translatesAutoresizingMaskIntoConstraints = false
         icon.image = iconProvider()
         icon.imageScaling = .scaleProportionallyUpOrDown
@@ -268,13 +286,15 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
     private func position(_ panel: NSPanel, on screen: NSScreen?) {
         guard let screen else { return }
-        let visible = screen.visibleFrame
-        let size = Self.panelSize
-        let origin = NSPoint(
-            x: visible.midX - size.width / 2,
-            y: visible.midY + visible.height / 6
-        )
+
+        let origin = positionStore.position(for: screen)
+            ?? positionStore.defaultPosition(for: screen, windowSize: Self.panelSize)
         panel.setFrameOrigin(origin)
+    }
+
+    private func screen(containing frame: NSRect) -> NSScreen? {
+        let center = NSPoint(x: frame.midX, y: frame.midY)
+        return NSScreen.screens.first { $0.frame.contains(center) }
     }
 
     static var defaultPanelSize: NSSize { panelSize }
@@ -282,6 +302,18 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
 /// Borderless panels are not keyable by default; capture needs key status to
 /// accept typed text while floating over another app.
+/// The row background is a drag handle: pressing anywhere that is not the
+/// input or the history control moves the panel, and because the drag never
+/// changes first responder the caret and typed text survive it.
+private final class CaptureBackgroundView: NSView {
+    override var mouseDownCanMoveWindow: Bool { true }
+}
+
+/// The brand mark is the panel's deliberate grab point, so it drags too.
+private final class CaptureDragHandleImageView: NSImageView {
+    override var mouseDownCanMoveWindow: Bool { true }
+}
+
 private final class CapturePanel: NSPanel {
     override var canBecomeKey: Bool { true }
 

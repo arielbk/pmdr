@@ -317,4 +317,177 @@ final class CapturePanelControllerTests: XCTestCase {
 
         XCTAssertEqual(submitted, [""])
     }
+
+    // MARK: - Movable, remembered placement
+
+    func testFirstInvocationUsesTheDefaultPlacementForTheActiveDisplay() {
+        let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let store = CapturePanelPosition(defaults: makeDefaults())
+        let controller = CapturePanelController(
+            onSubmit: { _ in },
+            positionStore: store,
+            screenProvider: { screen }
+        )
+
+        controller.show()
+
+        let expected = store.defaultPosition(for: screen, windowSize: CapturePanelController.defaultPanelSize)
+        XCTAssertEqual(controller.panelForTesting?.frame.origin, expected)
+    }
+
+    func testDismissingRecordsWhereThePanelWasDraggedTo() {
+        let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let store = CapturePanelPosition(defaults: makeDefaults())
+        let controller = CapturePanelController(
+            onSubmit: { _ in },
+            positionStore: store,
+            screenProvider: { screen }
+        )
+        controller.show()
+        controller.panelForTesting?.setFrameOrigin(NSPoint(x: 333, y: 444))
+
+        controller.sendCommandForTesting(#selector(NSResponder.cancelOperation(_:)))
+
+        XCTAssertEqual(store.position(for: screen), NSPoint(x: 333, y: 444))
+    }
+
+    func testSubmittingRecordsWhereThePanelWasDraggedTo() {
+        let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let store = CapturePanelPosition(defaults: makeDefaults())
+        let controller = CapturePanelController(
+            onSubmit: { _ in },
+            positionStore: store,
+            screenProvider: { screen }
+        )
+        controller.show()
+        controller.panelForTesting?.setFrameOrigin(NSPoint(x: 210, y: 620))
+
+        controller.sendCommandForTesting(#selector(NSResponder.insertNewline(_:)))
+
+        XCTAssertEqual(store.position(for: screen), NSPoint(x: 210, y: 620))
+    }
+
+    func testReopeningRestoresTheSavedPositionOfTheActiveDisplay() {
+        let left = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let right = TestScreen(displayID: 200, frame: NSRect(x: 1440, y: 0, width: 1920, height: 1080))
+        var activeScreen: NSScreen? = left
+        let store = CapturePanelPosition(defaults: makeDefaults())
+        let controller = CapturePanelController(
+            onSubmit: { _ in },
+            positionStore: store,
+            screenProvider: { activeScreen }
+        )
+
+        controller.show()
+        controller.panelForTesting?.setFrameOrigin(NSPoint(x: 120, y: 340))
+        controller.sendCommandForTesting(#selector(NSResponder.cancelOperation(_:)))
+
+        controller.show()
+        XCTAssertEqual(controller.panelForTesting?.frame.origin, NSPoint(x: 120, y: 340))
+
+        // A second display keeps its own placement rather than inheriting the first's.
+        controller.sendCommandForTesting(#selector(NSResponder.cancelOperation(_:)))
+        activeScreen = right
+        controller.show()
+        XCTAssertEqual(
+            controller.panelForTesting?.frame.origin,
+            store.defaultPosition(for: right, windowSize: CapturePanelController.defaultPanelSize)
+        )
+        controller.panelForTesting?.setFrameOrigin(NSPoint(x: 1600, y: 800))
+        controller.sendCommandForTesting(#selector(NSResponder.cancelOperation(_:)))
+
+        activeScreen = left
+        controller.show()
+        XCTAssertEqual(controller.panelForTesting?.frame.origin, NSPoint(x: 120, y: 340))
+        controller.sendCommandForTesting(#selector(NSResponder.cancelOperation(_:)))
+
+        activeScreen = right
+        controller.show()
+        XCTAssertEqual(controller.panelForTesting?.frame.origin, NSPoint(x: 1600, y: 800))
+    }
+
+    func testBackgroundAndBrandMarkDragThePanelWhileControlsDoNot() {
+        let controller = CapturePanelController(onSubmit: { _ in })
+
+        controller.show()
+
+        XCTAssertEqual(controller.panelForTesting?.isMovableByWindowBackground, true)
+        XCTAssertEqual(
+            controller.surfaceViewForTesting?.mouseDownCanMoveWindow, true,
+            "the noninteractive row background must be a drag handle"
+        )
+        XCTAssertEqual(
+            controller.iconViewForTesting?.mouseDownCanMoveWindow, true,
+            "the pmdr mark must be a drag handle"
+        )
+        XCTAssertEqual(
+            controller.textFieldForTesting?.mouseDownCanMoveWindow, false,
+            "clicking the input must place the caret, not drag the panel"
+        )
+        XCTAssertEqual(
+            controller.historyControlForTesting?.mouseDownCanMoveWindow, false,
+            "clicking Today · N must toggle history, not drag the panel"
+        )
+    }
+
+    func testDraggingThePanelDoesNotInterruptTyping() {
+        var submitted: [String] = []
+        let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let controller = CapturePanelController(
+            onSubmit: { submitted.append($0) },
+            positionStore: CapturePanelPosition(defaults: makeDefaults()),
+            screenProvider: { screen }
+        )
+        controller.show()
+        controller.textFieldForTesting?.stringValue = "half-typed"
+
+        controller.panelForTesting?.setFrameOrigin(NSPoint(x: 700, y: 100))
+
+        guard let panel = controller.panelForTesting,
+              let field = controller.textFieldForTesting
+        else {
+            XCTFail("Expected a visible panel")
+            return
+        }
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertEqual(field.stringValue, "half-typed")
+        let responder = panel.firstResponder
+        XCTAssertTrue(
+            responder === field || (responder as? NSTextView)?.delegate === field,
+            "moving the panel must not drop the caret"
+        )
+        controller.sendCommandForTesting(#selector(NSResponder.insertNewline(_:)))
+        XCTAssertEqual(submitted, ["half-typed"])
+    }
+
+    private func makeDefaults() -> UserDefaults {
+        let suiteName = "CapturePanelControllerTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        return defaults
+    }
+}
+
+private final class TestScreen: NSScreen {
+    private let testDisplayID: CGDirectDisplayID
+    private let testFrame: NSRect
+
+    init(displayID: CGDirectDisplayID, frame: NSRect) {
+        self.testDisplayID = displayID
+        self.testFrame = frame
+        super.init()
+    }
+
+    override var frame: NSRect {
+        testFrame
+    }
+
+    override var visibleFrame: NSRect {
+        testFrame
+    }
+
+    override var deviceDescription: [NSDeviceDescriptionKey: Any] {
+        [NSDeviceDescriptionKey("NSScreenNumber"): NSNumber(value: testDisplayID)]
+    }
 }
