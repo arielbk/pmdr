@@ -3,6 +3,7 @@ import { Box, Text } from "ink";
 import BigText from "ink-big-text";
 import type { DerivedPhaseState } from "./phase-state-machine.js";
 import { DEFAULT_FOCUS_GOAL } from "../state.js";
+import TomatoArt from "./TomatoArt.js";
 
 interface CountdownViewProps extends DerivedPhaseState {
   project?: string;
@@ -37,7 +38,8 @@ function buildDotRow(
   for (let i = 0; i < goal; i++) {
     const isFilled = i < filled;
     const dot = isFilled ? "●" : "○";
-    const isGroupBoundary = longBreakEvery > 0 && i > 0 && i % longBreakEvery === 0;
+    const isGroupBoundary =
+      longBreakEvery > 0 && i > 0 && i % longBreakEvery === 0;
     const sep = isGroupBoundary ? "  " : i > 0 ? " " : "";
     if (sep) {
       segments.push(<React.Fragment key={`sep-${i}`}>{sep}</React.Fragment>);
@@ -78,17 +80,25 @@ export default function CountdownView({
   longBreakEvery = 4,
 }: CountdownViewProps) {
   const timeStr = formatTime(remainingMs);
-  const colors: string[] = paused ? ["gray"] : phase === "focus" ? ["red"] : ["green"];
+  const colors: string[] = paused
+    ? ["gray"]
+    : phase === "focus"
+      ? ["red"]
+      : ["green"];
   const hints = phase === "break" ? BREAK_HINTS : FOCUS_HINTS;
 
   return (
     <Box flexDirection="column" flexGrow={1}>
+      <TomatoArt paused={paused} />
+
       <Box justifyContent="center">
         <Text bold>{phase === "focus" ? "FOCUS" : "BREAK"}</Text>
       </Box>
 
       <Box justifyContent="center">
-        <Text dimColor>{project && project !== "(unassigned)" ? project : ""}</Text>
+        <Text dimColor>
+          {project && project !== "(unassigned)" ? project : ""}
+        </Text>
       </Box>
 
       <Box justifyContent="center">
@@ -106,7 +116,9 @@ export default function CountdownView({
           {hints.map(([key, desc], i) => (
             <React.Fragment key={key}>
               {i > 0 ? <Text dimColor>{"  ·  "}</Text> : null}
-              <Text color="cyan" bold>{key}</Text>
+              <Text color="cyan" bold>
+                {key}
+              </Text>
               <Text dimColor>{` ${desc}`}</Text>
             </React.Fragment>
           ))}

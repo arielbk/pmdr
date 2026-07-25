@@ -37,10 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            if let image = NSImage(systemSymbolName: "timer", accessibilityDescription: "pmdr") {
+            if let image = BrandIcon.templateImage() {
                 button.image = image
                 button.imagePosition = .imageLeading
                 button.title = ""
+                button.setAccessibilityLabel("pmdr")
             } else {
                 button.title = "pmdr"
             }
@@ -112,27 +113,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
 
     private func redrawTitle() {
         let elapsed = max(0, Date().timeIntervalSince(lastPollAt))
-        statusItem?.button?.title = TitleFormatter.title(
-            for: lastStatus,
-            elapsedSincePoll: elapsed
+        statusItem?.button?.attributedTitle = BrandIcon.menuBarTitle(
+            TitleFormatter.title(for: lastStatus, elapsedSincePoll: elapsed)
         )
     }
 
     private func updateIcon(for status: Status) {
         guard let button = statusItem?.button else { return }
-        let symbolName: String
-        switch status {
-        case .idle:
-            symbolName = "timer"
-        case .running:
-            symbolName = "timer.circle.fill"
-        case .paused:
-            symbolName = "pause.circle"
-        }
-        if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "pmdr") {
+        let style = MenuBarIconStyle(status: status)
+        if let image = BrandIcon.templateImage(style.weight) {
             button.image = image
             button.imagePosition = .imageLeading
+            button.setAccessibilityLabel(style.accessibilityLabel)
         }
+        button.alphaValue = style.isDimmed ? BrandIcon.dimmedAlpha : 1
     }
 
     private func rebuildMenu() {

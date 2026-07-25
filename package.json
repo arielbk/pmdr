@@ -9,6 +9,7 @@
     "check-types": "turbo run check-types",
     "setup": "pnpm install && pnpm build && pnpm --filter @arielbk/pmdr link --global",
     "release:pmdr": "node apps/cli/src/release.ts",
+    "brand:assets": "node scripts/generate-brand-assets.mjs",
     "menubar": "./scripts/menubar-run.sh",
     "menubar:gen": "./scripts/menubar-gen.sh"
   },
