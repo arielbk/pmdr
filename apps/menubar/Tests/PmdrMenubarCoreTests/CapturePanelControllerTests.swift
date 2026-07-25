@@ -506,6 +506,186 @@ final class CapturePanelControllerTests: XCTestCase {
         )
     }
 
+    // MARK: - Anchored history motion
+
+    func testExpandingNearTheBottomEdgeShiftsThePanelUpToStayFullyVisible() async {
+        let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let store = CapturePanelPosition(defaults: makeDefaults())
+        store.record(NSPoint(x: 200, y: 0), for: screen)
+        let controller = makeExpandableController(notes: 40, store: store, screen: screen)
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        guard let frame = controller.panelForTesting?.frame else {
+            XCTFail("Expected a visible panel")
+            return
+        }
+        XCTAssertGreaterThanOrEqual(frame.minY, screen.visibleFrame.minY)
+        XCTAssertLessThanOrEqual(frame.maxY, screen.visibleFrame.maxY)
+    }
+
+    func testExpandingAwayFromAnyEdgeGrowsDownwardFromAFixedTopEdge() async {
+        let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let store = CapturePanelPosition(defaults: makeDefaults())
+        store.record(NSPoint(x: 200, y: 500), for: screen)
+        let controller = makeExpandableController(notes: 5, store: store, screen: screen)
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        guard let collapsed = controller.panelForTesting?.frame else {
+            XCTFail("Expected a visible panel")
+            return
+        }
+        controller.historyControlForTesting?.performClick(nil)
+
+        guard let expanded = controller.panelForTesting?.frame else {
+            XCTFail("Expected a visible panel")
+            return
+        }
+        XCTAssertEqual(expanded.maxY, collapsed.maxY, "the input row's top edge is the anchor")
+        XCTAssertLessThan(expanded.minY, collapsed.minY, "history unfolds downward")
+        XCTAssertEqual(expanded.origin.x, collapsed.origin.x)
+    }
+
+    func testExpandingOnAShortDisplayCapsTheHistoryToWhatFits() async {
+        let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 260))
+        let controller = makeExpandableController(notes: 40, screen: screen)
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        guard let frame = controller.panelForTesting?.frame else {
+            XCTFail("Expected a visible panel")
+            return
+        }
+        XCTAssertLessThanOrEqual(frame.height, screen.visibleFrame.height)
+        XCTAssertGreaterThanOrEqual(frame.minY, screen.visibleFrame.minY)
+        XCTAssertLessThanOrEqual(frame.maxY, screen.visibleFrame.maxY)
+        XCTAssertTrue(
+            controller.historyViewForTesting?.isScrollable == true,
+            "history the display cannot fit must still be reachable by scrolling"
+        )
+    }
+
+    func testExpandingTransitionsHeightAndHistoryOpacityOverOneDuration() async {
+        let controller = makeExpandableController(notes: 5, reduceMotion: false)
+        controller.show()
+        await controller.historyLoadForTesting?.value
+        let collapsedHeight = controller.panelForTesting?.frame.height ?? 0
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        XCTAssertEqual(
+            controller.lastHistoryTransitionForTesting,
+            CapturePanelController.HistoryTransition(
+                duration: CapturePanelController.historyTransitionDuration,
+                isExpanding: true
+            ),
+            "height and opacity must move together over the disclosure duration"
+        )
+        XCTAssertGreaterThan(controller.panelForTesting?.frame.height ?? 0, collapsedHeight)
+        XCTAssertEqual(controller.historyViewForTesting?.isHidden, false)
+        XCTAssertEqual(controller.historyViewForTesting?.alphaValue ?? 0, 1, accuracy: 0.001)
+    }
+
+    func testReduceMotionAppliesTheExpandedAndCollapsedFramesWithoutTransition() async {
+        let controller = makeExpandableController(notes: 5, reduceMotion: true)
+        controller.show()
+        await controller.historyLoadForTesting?.value
+        let collapsedHeight = controller.panelForTesting?.frame.height ?? 0
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        XCTAssertEqual(controller.lastHistoryTransitionForTesting?.duration, 0)
+        XCTAssertGreaterThan(controller.panelForTesting?.frame.height ?? 0, collapsedHeight)
+        XCTAssertEqual(controller.historyViewForTesting?.alphaValue ?? 0, 1, accuracy: 0.001)
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        XCTAssertEqual(controller.lastHistoryTransitionForTesting?.duration, 0)
+        XCTAssertEqual(controller.panelForTesting?.frame.height, collapsedHeight)
+    }
+
+    func testCollapsingReversesTheSameTransition() async {
+        let controller = makeExpandableController(notes: 5, reduceMotion: false)
+        controller.show()
+        await controller.historyLoadForTesting?.value
+        guard let collapsed = controller.panelForTesting?.frame else {
+            XCTFail("Expected a visible panel")
+            return
+        }
+
+        controller.historyControlForTesting?.performClick(nil)
+        controller.historyControlForTesting?.performClick(nil)
+
+        XCTAssertEqual(
+            controller.lastHistoryTransitionForTesting,
+            CapturePanelController.HistoryTransition(
+                duration: CapturePanelController.historyTransitionDuration,
+                isExpanding: false
+            )
+        )
+        XCTAssertEqual(controller.panelForTesting?.frame, collapsed, "collapsing undoes the growth exactly")
+        XCTAssertEqual(controller.historyViewForTesting?.isHidden, true)
+        XCTAssertTrue(controller.historyRowsForTesting.isEmpty)
+    }
+
+    func testTypingSurvivesTheAnimatedExpandAndCollapse() async {
+        let controller = makeExpandableController(notes: 5, reduceMotion: false)
+        controller.show()
+        await controller.historyLoadForTesting?.value
+        controller.textFieldForTesting?.stringValue = "half-typed"
+
+        controller.historyControlForTesting?.performClick(nil)
+        controller.historyControlForTesting?.performClick(nil)
+
+        guard let panel = controller.panelForTesting,
+              let field = controller.textFieldForTesting
+        else {
+            XCTFail("Expected a visible panel")
+            return
+        }
+        XCTAssertEqual(field.stringValue, "half-typed")
+        let responder = panel.firstResponder
+        XCTAssertTrue(
+            responder === field || (responder as? NSTextView)?.delegate === field,
+            "the transition must not steal the caret"
+        )
+    }
+
+    func testTheDisclosureChevronReflectsTheHistoryState() async {
+        let controller = makeExpandableController(notes: 5)
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        XCTAssertEqual(
+            controller.historyControlForTesting?.image?.accessibilityDescription,
+            "Show today's notes"
+        )
+        XCTAssertEqual(controller.historyControlForTesting?.imagePosition, .imageTrailing)
+
+        controller.historyControlForTesting?.performClick(nil)
+        XCTAssertEqual(
+            controller.historyControlForTesting?.image?.accessibilityDescription,
+            "Hide today's notes"
+        )
+        XCTAssertEqual(controller.historyControlForTesting?.accessibilityValue() as? String, "expanded")
+
+        controller.historyControlForTesting?.performClick(nil)
+        XCTAssertEqual(
+            controller.historyControlForTesting?.image?.accessibilityDescription,
+            "Show today's notes"
+        )
+        XCTAssertEqual(controller.historyControlForTesting?.accessibilityValue() as? String, "collapsed")
+    }
+
+    func testTheDisclosureTransitionIsRestrained() {
+        XCTAssertEqual(CapturePanelController.historyTransitionDuration, 0.18, accuracy: 0.001)
+    }
+
     func testDefaultTimestampsUseTheSystemLocaleAndTimePreference() {
         let noon = Date(timeIntervalSince1970: 1_700_000_000)
 
@@ -666,6 +846,24 @@ final class CapturePanelControllerTests: XCTestCase {
         )
         controller.sendCommandForTesting(#selector(NSResponder.insertNewline(_:)))
         XCTAssertEqual(submitted, ["half-typed"])
+    }
+
+    /// A controller with `count` notes ready to expand on a stubbed display.
+    private func makeExpandableController(
+        notes count: Int,
+        store: CapturePanelPosition? = nil,
+        screen: NSScreen? = nil,
+        reduceMotion: Bool = true
+    ) -> CapturePanelController {
+        let notes = (0..<count).map { NoteRecord(text: "note \($0)", at: 1_700_000_000_000 + $0 * 60_000) }
+        let screen = screen ?? TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        return CapturePanelController(
+            onSubmit: { _ in },
+            notesProvider: { notes },
+            positionStore: store ?? CapturePanelPosition(defaults: makeDefaults()),
+            screenProvider: { screen },
+            reduceMotionProvider: { reduceMotion }
+        )
     }
 
     private func makeDefaults() -> UserDefaults {

@@ -36,6 +36,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
     private let timeFormatter: (Date) -> String
     private let positionStore: CapturePanelPosition
     private let screenProvider: () -> NSScreen?
+    private let reduceMotionProvider: () -> Bool
 
     init(
         onSubmit: @escaping (String) -> Void,
@@ -48,6 +49,9 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
             return NSScreen.screens.first { $0.frame.contains(mouse) }
                 ?? NSScreen.main
                 ?? NSScreen.screens.first
+        },
+        reduceMotionProvider: @escaping () -> Bool = {
+            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         }
     ) {
         self.onSubmit = onSubmit
@@ -56,6 +60,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         self.timeFormatter = timeFormatter
         self.positionStore = positionStore
         self.screenProvider = screenProvider
+        self.reduceMotionProvider = reduceMotionProvider
         super.init()
     }
 
@@ -72,6 +77,14 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
     var historyRowsForTesting: [NoteHistoryRowView] { historyView?.rows ?? [] }
     var historyPlaceholderForTesting: NSTextField? { historyView?.placeholderLabel }
     var inputRowForTesting: NSView? { rowView }
+    private(set) var lastHistoryTransitionForTesting: HistoryTransition?
+
+    /// What the last disclosure change did, so tests can tell the animated
+    /// branch from the Reduce Motion one.
+    struct HistoryTransition: Equatable {
+        let duration: TimeInterval
+        let isExpanding: Bool
+    }
 
     /// Drives the real field-editor command dispatch used by Enter/Escape, so
     /// tests exercise the same path AppKit takes for those keys.
@@ -165,6 +178,16 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         return "Today · \(count)"
     }
 
+    /// The disclosure control's chevron: down while collapsed, up once the
+    /// history is open. The accessibility description carries the state, so
+    /// VoiceOver announces the action and tests can assert it.
+    static func historyChevron(expanded: Bool) -> NSImage? {
+        NSImage(
+            systemSymbolName: expanded ? "chevron.up" : "chevron.down",
+            accessibilityDescription: expanded ? "Hide today's notes" : "Show today's notes"
+        )
+    }
+
     private func loadHistory() {
         historyLoad?.cancel()
         historyLoad = Task { [weak self] in
@@ -184,14 +207,33 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
     @objc private func toggleHistory() {
         isHistoryExpanded.toggle()
-        updateHistoryPresentation()
+        updateHistoryPresentation(animated: true)
+    }
+
+    /// Duration of the coordinated height-and-fade transition. Restrained on
+    /// purpose; overridable so tests can drive both branches deterministically.
+    static var historyTransitionDuration: TimeInterval = 0.18
+
+    /// True when the disclosure should animate: the caller asked for it, the
+    /// duration is nonzero, and macOS Reduce Motion is off.
+    private var shouldAnimateHistory: Bool {
+        Self.historyTransitionDuration > 0 && !reduceMotionProvider()
     }
 
     /// Renders the disclosure state: collapsed is the bare input row, expanded
     /// adds today's notes beneath it and grows the panel downward from its fixed
-    /// top edge.
-    private func updateHistoryPresentation() {
+    /// top edge. Height and opacity move together over the same duration, or
+    /// land immediately under Reduce Motion.
+    private func updateHistoryPresentation(animated: Bool = false) {
         guard let historyView else { return }
+
+        let duration = animated && shouldAnimateHistory ? Self.historyTransitionDuration : 0
+        lastHistoryTransitionForTesting = HistoryTransition(
+            duration: duration,
+            isExpanding: isHistoryExpanded
+        )
+        historyControl?.image = Self.historyChevron(expanded: isHistoryExpanded)
+        historyControl?.setAccessibilityValue(isHistoryExpanded ? "expanded" : "collapsed")
 
         if isHistoryExpanded {
             let height = historyView.update(
@@ -200,27 +242,85 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
                 time: timeFormatter
             )
             historyView.isHidden = false
-            applyVisualHeight(Self.visualSize.height + height)
+            historyView.alphaValue = duration > 0 ? 0 : 1
+            fadeHistory(to: 1, over: duration)
+            applyVisualHeight(Self.visualSize.height + height, over: duration)
+            // The resize returns once the transition has run, so settling the
+            // end state here keeps it independent of the animation.
+            historyView.alphaValue = 1
         } else {
+            fadeHistory(to: 0, over: duration)
+            applyVisualHeight(Self.visualSize.height, over: duration)
             historyView.clear()
             historyView.isHidden = true
-            applyVisualHeight(Self.visualSize.height)
+            historyView.alphaValue = 1
+        }
+    }
+
+    /// Starts the history's opacity change. Paired with the panel resize, which
+    /// runs over the same duration, so the two read as one transition.
+    private func fadeHistory(to alpha: CGFloat, over duration: TimeInterval) {
+        guard let historyView else { return }
+        guard duration > 0 else {
+            historyView.alphaValue = alpha
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = duration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            historyView.animator().alphaValue = alpha
         }
     }
 
     /// Resizes the panel to a visual height, keeping the input row's top edge
     /// where it is so the typing target never moves.
-    private func applyVisualHeight(_ height: CGFloat) {
+    private func applyVisualHeight(_ height: CGFloat, over duration: TimeInterval = 0) {
         guard let panel else { return }
 
-        let visual = NSSize(width: Self.visualSize.width, height: height)
+        let visual = NSSize(width: Self.visualSize.width, height: fittedVisualHeight(height))
         let newPanelSize = Self.surface.panelSize(forVisualSize: visual)
         var frame = panel.frame
         frame.origin.y += frame.height - newPanelSize.height
         frame.size = newPanelSize
-        panel.setFrame(frame, display: true)
+        frame = clampedIntoVisibleFrame(frame)
+        // `setFrame(_:display:animate:)` rather than `animator()`: the window's
+        // own resize animation pumps the run loop and returns with the model
+        // frame already final, so the panel's state never depends on an
+        // animation having run. `CapturePanel` reports the duration below.
+        (panel as? CapturePanel)?.resizeDuration = duration
+        panel.setFrame(frame, display: true, animate: duration > 0)
         surfaceView?.frame = Self.surface.surfaceFrame(forVisualSize: visual)
         surfaceView?.layoutSubtreeIfNeeded()
+    }
+
+    /// The tallest visual height the active display can show, so a long history
+    /// on a short screen is capped (and scrolled) rather than hanging off it.
+    private func fittedVisualHeight(_ height: CGFloat) -> CGFloat {
+        guard let visible = (screen(containing: panel?.frame ?? .zero) ?? screenProvider())?.visibleFrame else {
+            return height
+        }
+
+        let available = visible.height - Self.surface.shadowMargin * 2
+        return max(Self.visualSize.height, min(height, available))
+    }
+
+    /// Nudges `frame` back inside the active display, moving it only as far as
+    /// it takes to stay fully visible. Growing history downward from a low
+    /// starting point is the case this exists for.
+    private func clampedIntoVisibleFrame(_ frame: NSRect) -> NSRect {
+        guard let visible = (screen(containing: frame) ?? screenProvider())?.visibleFrame else {
+            return frame
+        }
+
+        var frame = frame
+        if frame.maxY > visible.maxY {
+            frame.origin.y = visible.maxY - frame.height
+        }
+        if frame.minY < visible.minY {
+            frame.origin.y = visible.minY
+        }
+        return frame
     }
 
     // MARK: - NSTextFieldDelegate
@@ -296,6 +396,9 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         history.font = .systemFont(ofSize: 12, weight: .medium)
         history.contentTintColor = .secondaryLabelColor
         history.title = Self.historyTitle(forCount: nil)
+        history.image = Self.historyChevron(expanded: false)
+        history.imagePosition = .imageTrailing
+        history.imageHugsTitle = true
         history.target = self
         history.action = #selector(toggleHistory)
         history.setButtonType(.momentaryChange)
@@ -391,9 +494,17 @@ private final class CaptureDragHandleImageView: NSImageView {
 }
 
 private final class CapturePanel: NSPanel {
+    /// Duration the next animated resize should take, so the height change and
+    /// the history fade share one timing instead of AppKit's default.
+    var resizeDuration: TimeInterval = 0
+
     override var canBecomeKey: Bool { true }
 
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
         frameRect
+    }
+
+    override func animationResizeTime(_ newFrame: NSRect) -> TimeInterval {
+        resizeDuration > 0 ? resizeDuration : super.animationResizeTime(newFrame)
     }
 }
