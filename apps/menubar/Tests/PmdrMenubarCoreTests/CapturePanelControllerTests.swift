@@ -307,6 +307,214 @@ final class CapturePanelControllerTests: XCTestCase {
         XCTAssertTrue(submitted.isEmpty)
     }
 
+    // MARK: - Daily note history
+
+    func testCollapsedPanelShowsNoHistoryRows() async {
+        let controller = CapturePanelController(
+            onSubmit: { _ in },
+            notesProvider: { [NoteRecord(text: "one", at: 1_700_000_000_000)] }
+        )
+
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        XCTAssertEqual(controller.historyViewForTesting?.isHidden, true)
+        XCTAssertTrue(controller.historyRowsForTesting.isEmpty)
+    }
+
+    func testActivatingHistoryRevealsARowPerNote() async {
+        let controller = CapturePanelController(
+            onSubmit: { _ in },
+            notesProvider: {
+                [
+                    NoteRecord(text: "one", at: 1_700_000_000_000),
+                    NoteRecord(text: "two", at: 1_700_000_060_000),
+                ]
+            }
+        )
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        XCTAssertEqual(controller.historyViewForTesting?.isHidden, false)
+        XCTAssertEqual(controller.historyRowsForTesting.count, 2)
+    }
+
+    func testHistoryShowsNewestNoteFirstWithItsCaptureTime() async {
+        let controller = CapturePanelController(
+            onSubmit: { _ in },
+            notesProvider: {
+                // The CLI hands notes back ascending by capture time.
+                [
+                    NoteRecord(text: "earliest", at: 1_700_000_000_000),
+                    NoteRecord(text: "middle", at: 1_700_000_060_000),
+                    NoteRecord(text: "latest", at: 1_700_000_120_000),
+                ]
+            },
+            timeFormatter: { date in "T\(Int(date.timeIntervalSince1970))" }
+        )
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        let rows = controller.historyRowsForTesting
+        XCTAssertEqual(rows.map(\.textLabel.stringValue), ["latest", "middle", "earliest"])
+        XCTAssertEqual(rows.map(\.timeLabel.stringValue), ["T1700000120", "T1700000060", "T1700000000"])
+        XCTAssertEqual(
+            rows.map(\.frame.minY).sorted(), rows.map(\.frame.minY),
+            "rows stack top-down in the order they are listed"
+        )
+    }
+
+    func testHistorySaysSoWhenNoNotesWereCapturedToday() async {
+        let controller = CapturePanelController(onSubmit: { _ in }, notesProvider: { [] })
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        XCTAssertTrue(controller.historyRowsForTesting.isEmpty)
+        XCTAssertEqual(controller.historyPlaceholderForTesting?.stringValue, "No notes yet")
+    }
+
+    func testHistoryDistinguishesUnreadableNotesFromAnEmptyDay() async {
+        let controller = CapturePanelController(onSubmit: { _ in }, notesProvider: { nil })
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        // The disabled control cannot be clicked into an expanded state by the
+        // user, so drive the same toggle the control would.
+        controller.historyControlForTesting?.isEnabled = true
+        controller.historyControlForTesting?.performClick(nil)
+
+        XCTAssertTrue(controller.historyRowsForTesting.isEmpty)
+        XCTAssertEqual(controller.historyPlaceholderForTesting?.stringValue, "Notes unavailable")
+    }
+
+    func testALongNoteIsClampedToTwoLines() async {
+        let long = String(repeating: "a scannable fragment of a very long note ", count: 12)
+        let controller = CapturePanelController(
+            onSubmit: { _ in },
+            notesProvider: {
+                [
+                    NoteRecord(text: "short", at: 1_700_000_000_000),
+                    NoteRecord(text: long, at: 1_700_000_060_000),
+                ]
+            }
+        )
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        guard let longRow = controller.historyRowsForTesting.first,
+              let shortRow = controller.historyRowsForTesting.last
+        else {
+            XCTFail("Expected two history rows")
+            return
+        }
+        XCTAssertEqual(longRow.textLabel.maximumNumberOfLines, 2)
+        XCTAssertEqual(longRow.textLabel.lineBreakMode, .byTruncatingTail)
+        XCTAssertGreaterThan(
+            longRow.frame.height, shortRow.frame.height,
+            "a long note should use its second line"
+        )
+        XCTAssertLessThan(
+            longRow.frame.height, shortRow.frame.height * 2.5,
+            "one note must not dominate the history"
+        )
+    }
+
+    func testManyNotesCapTheHistoryHeightAndScroll() async {
+        let notes = (0..<40).map { NoteRecord(text: "note \($0)", at: 1_700_000_000_000 + $0 * 60_000) }
+        let controller = CapturePanelController(onSubmit: { _ in }, notesProvider: { notes })
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        guard let historyView = controller.historyViewForTesting else {
+            XCTFail("Expected a history list")
+            return
+        }
+        XCTAssertEqual(historyView.frame.height, NoteHistoryListView.maximumHeight)
+        XCTAssertTrue(historyView.isScrollable, "capped history must scroll to the rest of the day")
+        XCTAssertTrue(historyView.hasVerticalScroller)
+        XCTAssertEqual(controller.historyRowsForTesting.count, 40)
+    }
+
+    func testAShortHistoryIsNotScrollable() async {
+        let notes = (0..<2).map { NoteRecord(text: "note \($0)", at: 1_700_000_000_000 + $0 * 60_000) }
+        let controller = CapturePanelController(onSubmit: { _ in }, notesProvider: { notes })
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        guard let historyView = controller.historyViewForTesting else {
+            XCTFail("Expected a history list")
+            return
+        }
+        XCTAssertLessThan(historyView.frame.height, NoteHistoryListView.maximumHeight)
+        XCTAssertFalse(historyView.isScrollable)
+    }
+
+    func testCollapsingHistoryReturnsThePanelToTheBareInputRow() async {
+        let notes = (0..<5).map { NoteRecord(text: "note \($0)", at: 1_700_000_000_000 + $0 * 60_000) }
+        let controller = CapturePanelController(onSubmit: { _ in }, notesProvider: { notes })
+        controller.show()
+        await controller.historyLoadForTesting?.value
+        let collapsedHeight = controller.panelForTesting?.frame.height
+
+        controller.historyControlForTesting?.performClick(nil)
+        let expandedHeight = controller.panelForTesting?.frame.height
+        controller.historyControlForTesting?.performClick(nil)
+
+        XCTAssertEqual(collapsedHeight, CapturePanelController.defaultPanelSize.height)
+        XCTAssertGreaterThan(expandedHeight ?? 0, collapsedHeight ?? 0)
+        XCTAssertEqual(controller.panelForTesting?.frame.height, collapsedHeight)
+        XCTAssertEqual(controller.historyViewForTesting?.isHidden, true)
+        XCTAssertTrue(controller.historyRowsForTesting.isEmpty)
+    }
+
+    func testReopeningAfterAnExpandedHistoryStartsCollapsed() async {
+        let notes = (0..<5).map { NoteRecord(text: "note \($0)", at: 1_700_000_000_000 + $0 * 60_000) }
+        let controller = CapturePanelController(
+            onSubmit: { _ in },
+            notesProvider: { notes },
+            positionStore: CapturePanelPosition(defaults: makeDefaults()),
+            screenProvider: { TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900)) }
+        )
+        controller.show()
+        await controller.historyLoadForTesting?.value
+        controller.historyControlForTesting?.performClick(nil)
+        let expandedTop = controller.panelForTesting?.frame.maxY
+        controller.sendCommandForTesting(#selector(NSResponder.cancelOperation(_:)))
+
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        XCTAssertFalse(controller.isHistoryExpandedForTesting)
+        XCTAssertEqual(controller.historyViewForTesting?.isHidden, true)
+        XCTAssertTrue(controller.historyRowsForTesting.isEmpty)
+        XCTAssertEqual(controller.panelForTesting?.frame.height, CapturePanelController.defaultPanelSize.height)
+        XCTAssertEqual(
+            controller.panelForTesting?.frame.maxY, expandedTop,
+            "the input row reopens where it was left, not where the expanded panel's bottom was"
+        )
+    }
+
+    func testDefaultTimestampsUseTheSystemLocaleAndTimePreference() {
+        let noon = Date(timeIntervalSince1970: 1_700_000_000)
+
+        XCTAssertEqual(
+            NoteHistory.localizedTime(for: noon),
+            DateFormatter.localizedString(from: noon, dateStyle: .none, timeStyle: .short)
+        )
+    }
+
     func testReturnSubmitsEmptyTextVerbatimForCliToNoOp() {
         var submitted: [String] = []
         let controller = CapturePanelController(onSubmit: { submitted.append($0) })

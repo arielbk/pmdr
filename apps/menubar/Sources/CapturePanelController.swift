@@ -22,14 +22,18 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
     private var panel: NSPanel?
     private var textField: NSTextField?
     private weak var surfaceView: NSView?
+    private weak var rowView: NSView?
     private weak var iconView: NSImageView?
     private weak var historyControl: NSButton?
+    private weak var historyView: NoteHistoryListView?
     private var historyLoad: Task<Void, Never>?
     private var isHistoryExpanded = false
+    private var notes: [NoteRecord]?
 
     private let onSubmit: (String) -> Void
     private let iconProvider: () -> NSImage?
     private let notesProvider: () async -> [NoteRecord]?
+    private let timeFormatter: (Date) -> String
     private let positionStore: CapturePanelPosition
     private let screenProvider: () -> NSScreen?
 
@@ -37,6 +41,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         onSubmit: @escaping (String) -> Void,
         iconProvider: @escaping () -> NSImage? = { BrandIcon.templateImage(.filled, size: iconSize) },
         notesProvider: @escaping () async -> [NoteRecord]? = { nil },
+        timeFormatter: @escaping (Date) -> String = NoteHistory.localizedTime(for:),
         positionStore: CapturePanelPosition = CapturePanelPosition(),
         screenProvider: @escaping () -> NSScreen? = {
             let mouse = NSEvent.mouseLocation
@@ -48,6 +53,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         self.onSubmit = onSubmit
         self.iconProvider = iconProvider
         self.notesProvider = notesProvider
+        self.timeFormatter = timeFormatter
         self.positionStore = positionStore
         self.screenProvider = screenProvider
         super.init()
@@ -62,6 +68,10 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
     var historyControlForTesting: NSButton? { historyControl }
     var historyLoadForTesting: Task<Void, Never>? { historyLoad }
     var isHistoryExpandedForTesting: Bool { isHistoryExpanded }
+    var historyViewForTesting: NoteHistoryListView? { historyView }
+    var historyRowsForTesting: [NoteHistoryRowView] { historyView?.rows ?? [] }
+    var historyPlaceholderForTesting: NSTextField? { historyView?.placeholderLabel }
+    var inputRowForTesting: NSView? { rowView }
 
     /// Drives the real field-editor command dispatch used by Enter/Escape, so
     /// tests exercise the same path AppKit takes for those keys.
@@ -92,6 +102,10 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         position(panel, on: screenProvider())
         textField?.stringValue = ""
         isHistoryExpanded = false
+        // Collapse after positioning: the saved origin belongs to whatever frame
+        // was dismissed, and shrinking from a fixed top edge puts the input row
+        // back where the user left it.
+        updateHistoryPresentation()
         loadHistory()
         NSApp.activate(ignoringOtherApps: true)
         if !wasVisible {
@@ -162,12 +176,51 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
     }
 
     private func apply(notes: [NoteRecord]?) {
+        self.notes = notes
         historyControl?.title = Self.historyTitle(forCount: notes?.count)
         historyControl?.isEnabled = notes != nil
+        updateHistoryPresentation()
     }
 
     @objc private func toggleHistory() {
         isHistoryExpanded.toggle()
+        updateHistoryPresentation()
+    }
+
+    /// Renders the disclosure state: collapsed is the bare input row, expanded
+    /// adds today's notes beneath it and grows the panel downward from its fixed
+    /// top edge.
+    private func updateHistoryPresentation() {
+        guard let historyView else { return }
+
+        if isHistoryExpanded {
+            let height = historyView.update(
+                notes: notes,
+                width: Self.visualSize.width,
+                time: timeFormatter
+            )
+            historyView.isHidden = false
+            applyVisualHeight(Self.visualSize.height + height)
+        } else {
+            historyView.clear()
+            historyView.isHidden = true
+            applyVisualHeight(Self.visualSize.height)
+        }
+    }
+
+    /// Resizes the panel to a visual height, keeping the input row's top edge
+    /// where it is so the typing target never moves.
+    private func applyVisualHeight(_ height: CGFloat) {
+        guard let panel else { return }
+
+        let visual = NSSize(width: Self.visualSize.width, height: height)
+        let newPanelSize = Self.surface.panelSize(forVisualSize: visual)
+        var frame = panel.frame
+        frame.origin.y += frame.height - newPanelSize.height
+        frame.size = newPanelSize
+        panel.setFrame(frame, display: true)
+        surfaceView?.frame = Self.surface.surfaceFrame(forVisualSize: visual)
+        surfaceView?.layoutSubtreeIfNeeded()
     }
 
     // MARK: - NSTextFieldDelegate
@@ -256,21 +309,42 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         // Purely decorative identity: VoiceOver should land on the input, not here.
         icon.setAccessibilityElement(false)
 
-        effect.addSubview(icon)
-        effect.addSubview(field)
-        effect.addSubview(history)
+        // The input row is its own view pinned to the surface's top edge, so the
+        // history can unfold below it without moving the typing target.
+        let row = CaptureBackgroundView(frame: .zero)
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let notesList = NoteHistoryListView(width: Self.visualSize.width)
+        notesList.translatesAutoresizingMaskIntoConstraints = false
+        notesList.isHidden = true
+
+        row.addSubview(icon)
+        row.addSubview(field)
+        row.addSubview(history)
+        effect.addSubview(row)
+        effect.addSubview(notesList)
         NSLayoutConstraint.activate([
-            icon.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: Self.fieldInset * 1.5),
-            icon.centerYAnchor.constraint(equalTo: effect.centerYAnchor),
+            row.topAnchor.constraint(equalTo: effect.topAnchor),
+            row.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+            row.heightAnchor.constraint(equalToConstant: Self.visualSize.height),
+
+            icon.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: Self.fieldInset * 1.5),
+            icon.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             icon.widthAnchor.constraint(equalToConstant: Self.iconSize.width),
             icon.heightAnchor.constraint(equalToConstant: Self.iconSize.height),
 
             field.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: Self.fieldInset * 1.25),
             field.trailingAnchor.constraint(equalTo: history.leadingAnchor, constant: -Self.fieldInset),
-            field.centerYAnchor.constraint(equalTo: effect.centerYAnchor),
+            field.centerYAnchor.constraint(equalTo: row.centerYAnchor),
 
-            history.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: -Self.fieldInset * 1.5),
-            history.centerYAnchor.constraint(equalTo: effect.centerYAnchor)
+            history.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -Self.fieldInset * 1.5),
+            history.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+
+            notesList.topAnchor.constraint(equalTo: row.bottomAnchor),
+            notesList.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+            notesList.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+            notesList.bottomAnchor.constraint(equalTo: effect.bottomAnchor)
         ])
 
         contentView.addSubview(effect)
@@ -278,8 +352,10 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
         self.textField = field
         self.surfaceView = effect
+        self.rowView = row
         self.iconView = icon
         self.historyControl = history
+        self.historyView = notesList
 
         return panel
     }
