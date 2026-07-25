@@ -21,7 +21,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
     private var panel: NSPanel?
     private var textField: NSTextField?
-    private weak var surfaceView: NSView?
+    private weak var surfaceView: NSVisualEffectView?
     private weak var rowView: NSView?
     private weak var iconView: NSImageView?
     private weak var historyControl: NSButton?
@@ -68,7 +68,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
     var panelForTesting: NSPanel? { panel }
     var textFieldForTesting: NSTextField? { textField }
-    var surfaceViewForTesting: NSView? { surfaceView }
+    var surfaceViewForTesting: NSVisualEffectView? { surfaceView }
     var iconViewForTesting: NSImageView? { iconView }
     var historyControlForTesting: NSButton? { historyControl }
     var historyLoadForTesting: Task<Void, Never>? { historyLoad }
@@ -381,7 +381,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         contentView.wantsLayer = true
         contentView.autoresizingMask = [.width, .height]
 
-        let effect = CaptureBackgroundView(frame: Self.surface.surfaceFrame(forVisualSize: Self.visualSize))
+        let effect = CaptureSurfaceView(frame: Self.surface.surfaceFrame(forVisualSize: Self.visualSize))
         Self.surface.apply(to: effect)
         effect.autoresizingMask = [.width, .height]
 
@@ -501,6 +501,10 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
 /// input or the history control moves the panel, and because the drag never
 /// changes first responder the caret and typed text survive it.
 private final class CaptureBackgroundView: NSView {
+    override var mouseDownCanMoveWindow: Bool { true }
+}
+
+private final class CaptureSurfaceView: NSVisualEffectView {
     override var mouseDownCanMoveWindow: Bool { true }
 }
 

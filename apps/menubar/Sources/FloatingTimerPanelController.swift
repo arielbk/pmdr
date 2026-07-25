@@ -636,7 +636,7 @@ private final class FloatingTimerPanel: NSPanel {
     }
 }
 
-private final class FloatingTimerBackgroundView: NSView {
+private final class FloatingTimerBackgroundView: NSVisualEffectView {
     var onHoverChange: ((Bool) -> Void)?
 
     override var mouseDownCanMoveWindow: Bool {

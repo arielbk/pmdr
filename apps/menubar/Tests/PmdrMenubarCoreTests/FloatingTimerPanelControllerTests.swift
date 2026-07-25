@@ -86,11 +86,18 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
             XCTFail("Expected the timer to present an overlay surface")
             return
         }
-        XCTAssertFalse(
-            surfaceView is NSVisualEffectView,
-            "the timer must not derive its legibility from window vibrancy"
-        )
-        XCTAssertEqual(surfaceView.layer?.backgroundColor, surface.backgroundColor.cgColor)
+        guard let effectView = surfaceView as? NSVisualEffectView else {
+            XCTFail("Expected the timer surface to provide native blur")
+            return
+        }
+        XCTAssertEqual(effectView.material, surface.material)
+        XCTAssertEqual(effectView.blendingMode, surface.blendingMode)
+        XCTAssertEqual(effectView.state, surface.effectState)
+        XCTAssertTrue(effectView.isEmphasized)
+        let tintView = surfaceView.subviews.first {
+            $0.identifier == OverlaySurface.tintViewIdentifier
+        }
+        XCTAssertEqual(tintView?.layer?.backgroundColor, surface.tintColor.cgColor)
         XCTAssertEqual(surfaceView.layer?.borderColor, surface.borderColor.cgColor)
         XCTAssertEqual(surfaceView.layer?.borderWidth, surface.borderWidth)
         XCTAssertEqual(surfaceView.layer?.cornerRadius, surface.cornerRadius)

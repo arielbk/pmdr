@@ -35,11 +35,14 @@ final class CapturePanelControllerTests: XCTestCase {
             XCTFail("Expected show() to present an overlay surface")
             return
         }
-        XCTAssertFalse(
-            surfaceView is NSVisualEffectView,
-            "capture must not derive its legibility from window vibrancy"
-        )
-        XCTAssertEqual(surfaceView.layer?.backgroundColor, surface.backgroundColor.cgColor)
+        XCTAssertEqual(surfaceView.material, surface.material)
+        XCTAssertEqual(surfaceView.blendingMode, surface.blendingMode)
+        XCTAssertEqual(surfaceView.state, surface.effectState)
+        XCTAssertTrue(surfaceView.isEmphasized)
+        let tintView = surfaceView.subviews.first {
+            $0.identifier == OverlaySurface.tintViewIdentifier
+        }
+        XCTAssertEqual(tintView?.layer?.backgroundColor, surface.tintColor.cgColor)
         XCTAssertEqual(surfaceView.layer?.borderColor, surface.borderColor.cgColor)
         XCTAssertEqual(surfaceView.layer?.borderWidth, surface.borderWidth)
         XCTAssertEqual(surfaceView.layer?.cornerRadius, surface.cornerRadius)

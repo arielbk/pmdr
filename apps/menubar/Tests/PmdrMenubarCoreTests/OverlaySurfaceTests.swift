@@ -9,28 +9,52 @@ final class OverlaySurfaceTests: XCTestCase {
         return 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
     }
 
-    func testSurfaceFillsTheViewWithAStableDarkColor() {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+    func testSurfaceUsesAnActiveBehindWindowMaterial() {
+        let view = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
 
         OverlaySurface.standard.apply(to: view)
 
-        guard let fill = view.layer?.backgroundColor.map({ NSColor(cgColor: $0) }) ?? nil else {
-            XCTFail("Expected the surface to install a background fill")
+        XCTAssertEqual(view.material, .hudWindow)
+        XCTAssertEqual(view.blendingMode, .behindWindow)
+        XCTAssertEqual(view.state, .active)
+        XCTAssertTrue(view.isEmphasized)
+    }
+
+    func testSurfaceAddsATranslucentDarkTintWithoutHidingTheMaterial() {
+        let view = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+
+        OverlaySurface.standard.apply(to: view)
+
+        guard let tintView = view.subviews.first(where: {
+            $0.identifier == OverlaySurface.tintViewIdentifier
+        }),
+        let fill = tintView.layer?.backgroundColor.map({ NSColor(cgColor: $0) }) ?? nil
+        else {
+            XCTFail("Expected the surface to install a stabilising tint")
             return
         }
-        // Legibility must not depend on the content behind the window.
-        XCTAssertGreaterThanOrEqual(fill.alphaComponent, 0.95)
+        // Opaque enough to hold contrast over white; translucent enough for the
+        // material's blur and colour bleed to remain visible.
+        XCTAssertGreaterThanOrEqual(fill.alphaComponent, 0.45)
+        XCTAssertLessThanOrEqual(fill.alphaComponent, 0.75)
         XCTAssertLessThan(luminance(of: fill), 0.2)
+        XCTAssertEqual(tintView.frame, view.bounds)
+        XCTAssertTrue(tintView.autoresizingMask.contains(.width))
+        XCTAssertTrue(tintView.autoresizingMask.contains(.height))
+        XCTAssertNil(tintView.hitTest(NSPoint(x: 50, y: 50)))
     }
 
     func testSurfaceDrawsAHairlineBorderLighterThanItsFill() {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        let view = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
 
         OverlaySurface.standard.apply(to: view)
 
         guard let layer = view.layer,
               let border = layer.borderColor.map({ NSColor(cgColor: $0) }) ?? nil,
-              let fill = layer.backgroundColor.map({ NSColor(cgColor: $0) }) ?? nil
+              let tintView = view.subviews.first(where: {
+                  $0.identifier == OverlaySurface.tintViewIdentifier
+              }),
+              let fill = tintView.layer?.backgroundColor.map({ NSColor(cgColor: $0) }) ?? nil
         else {
             XCTFail("Expected the surface to install a border")
             return
@@ -45,7 +69,7 @@ final class OverlaySurfaceTests: XCTestCase {
     }
 
     func testSurfaceRoundsAndClipsItsCorners() {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        let view = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
 
         OverlaySurface.standard.apply(to: view)
 
@@ -55,7 +79,7 @@ final class OverlaySurfaceTests: XCTestCase {
     }
 
     func testSurfaceResolvesSemanticForegroundColorsForDarkContent() {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        let view = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
         let label = NSTextField(labelWithString: "IDLE")
         view.addSubview(label)
 
