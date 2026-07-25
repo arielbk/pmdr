@@ -178,6 +178,14 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         return "Today · \(count)"
     }
 
+    /// What VoiceOver announces for the disclosure control. An accessibility
+    /// label replaces the button's title, so it has to carry the count itself or
+    /// the number of notes is inaudible.
+    static func historyAccessibilityLabel(forCount count: Int?) -> String {
+        guard let count else { return "Today's notes: count unavailable" }
+        return "Today's notes: \(count)"
+    }
+
     /// The disclosure control's chevron: down while collapsed, up once the
     /// history is open. The accessibility description carries the state, so
     /// VoiceOver announces the action and tests can assert it.
@@ -201,6 +209,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
     private func apply(notes: [NoteRecord]?) {
         self.notes = notes
         historyControl?.title = Self.historyTitle(forCount: notes?.count)
+        historyControl?.setAccessibilityLabel(Self.historyAccessibilityLabel(forCount: notes?.count))
         historyControl?.isEnabled = notes != nil
         updateHistoryPresentation()
     }
@@ -402,7 +411,7 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         history.target = self
         history.action = #selector(toggleHistory)
         history.setButtonType(.momentaryChange)
-        history.setAccessibilityLabel("Today's notes")
+        history.setAccessibilityLabel(Self.historyAccessibilityLabel(forCount: nil))
 
         let icon = CaptureDragHandleImageView(frame: .zero)
         icon.translatesAutoresizingMaskIntoConstraints = false
@@ -452,6 +461,13 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
         contentView.addSubview(effect)
         panel.contentView = contentView
+
+        // Explicit two-stop key view loop: with Full Keyboard Access on, Tab
+        // moves between the input and the disclosure control and back, instead
+        // of dead-ending on whatever order AppKit derives from the view tree.
+        field.nextKeyView = history
+        history.nextKeyView = field
+        panel.initialFirstResponder = field
 
         self.textField = field
         self.surfaceView = effect

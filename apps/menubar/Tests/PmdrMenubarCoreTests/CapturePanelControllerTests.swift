@@ -848,6 +848,91 @@ final class CapturePanelControllerTests: XCTestCase {
         XCTAssertEqual(submitted, ["half-typed"])
     }
 
+    // MARK: - Assistive technology acceptance
+
+    func testTheDisclosureControlAnnouncesTheCurrentNoteCount() async {
+        let controller = makeExpandableController(notes: 3)
+
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        XCTAssertEqual(
+            controller.historyControlForTesting?.accessibilityLabel(),
+            "Today's notes: 3",
+            "an accessibility label replaces the button title, so it has to carry the count"
+        )
+    }
+
+    func testKeyboardFocusMovesFromTheInputToTheDisclosureControlAndBack() {
+        let controller = CapturePanelController(onSubmit: { _ in })
+
+        controller.show()
+
+        XCTAssertTrue(
+            controller.textFieldForTesting?.nextKeyView === controller.historyControlForTesting,
+            "Tab from the input must reach the disclosure control"
+        )
+        XCTAssertTrue(
+            controller.historyControlForTesting?.nextKeyView === controller.textFieldForTesting,
+            "the row's focus loop must return to the input rather than dead-end"
+        )
+        XCTAssertTrue(
+            controller.panelForTesting?.initialFirstResponder === controller.textFieldForTesting,
+            "keyboard focus must start on the input"
+        )
+    }
+
+    func testEachHistoryRowIsOneVoiceOverItemAnnouncingItsTimeAndText() async {
+        let controller = makeExpandableController(notes: 2)
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        guard let newest = controller.historyRowsForTesting.first else {
+            XCTFail("Expected the expanded history to have rows")
+            return
+        }
+        XCTAssertTrue(newest.isAccessibilityElement(), "a note must be a single VoiceOver stop")
+        XCTAssertEqual(newest.accessibilityRole(), .staticText)
+        let announced = newest.accessibilityLabel() ?? ""
+        XCTAssertTrue(
+            announced.contains(newest.timeLabel.stringValue) && announced.contains("note 1"),
+            "expected the capture time and note text in one announcement, got \(announced)"
+        )
+        XCTAssertFalse(
+            newest.timeLabel.isAccessibilityElement(),
+            "the time must not be a separate stop from its note"
+        )
+        XCTAssertFalse(
+            newest.textLabel.isAccessibilityElement(),
+            "the text must not be a separate stop from its time"
+        )
+    }
+
+    func testAnUnreadableCountIsAnnouncedAsUnavailableRatherThanAsZero() async {
+        let controller = CapturePanelController(onSubmit: { _ in }, notesProvider: { nil })
+
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        XCTAssertEqual(
+            controller.historyControlForTesting?.accessibilityLabel(),
+            "Today's notes: count unavailable"
+        )
+    }
+
+    func testTheBrandMarkIsDecorativeForVoiceOver() {
+        let controller = CapturePanelController(onSubmit: { _ in })
+
+        controller.show()
+
+        XCTAssertEqual(
+            controller.iconViewForTesting?.isAccessibilityElement(), false,
+            "the mark carries no information; VoiceOver should land on the input"
+        )
+    }
+
     /// A controller with `count` notes ready to expand on a stubbed display.
     private func makeExpandableController(
         notes count: Int,

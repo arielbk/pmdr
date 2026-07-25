@@ -57,6 +57,15 @@ final class NoteHistoryRowView: NSView {
         // Timestamps sit on the first line of a wrapped note, not centred on it.
         timeLabel.frame.origin.y = height - NoteHistoryRowView.verticalInset - timeLabel.frame.height
         textLabel.frame.origin.y = height - NoteHistoryRowView.verticalInset - textHeight
+
+        // One VoiceOver stop per note: the row announces the capture time and
+        // the text together, and its two labels stop being separate elements so
+        // navigating the history is one item per note.
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+        setAccessibilityLabel("\(time), \(note.text)")
+        timeLabel.setAccessibilityElement(false)
+        textLabel.setAccessibilityElement(false)
     }
 
     @available(*, unavailable)
