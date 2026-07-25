@@ -11,19 +11,31 @@ import PmdrMenubarCore
 @MainActor
 final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     private static let surface = OverlaySurface.standard
-    private static let visualSize = NSSize(width: 380, height: 46)
+    private static let visualSize = NSSize(width: 480, height: 46)
     private static let panelSize = surface.panelSize(forVisualSize: visualSize)
     private static let fieldInset: CGFloat = 8
+
+    /// Point size of the leading brand mark. The asset's bottom two units are
+    /// padding (see `BrandIcon`), so the fruit reads slightly smaller than this.
+    private static let iconSize = NSSize(width: 18, height: 20.25)
 
     private var panel: NSPanel?
     private var textField: NSTextField?
     private weak var surfaceView: NSView?
+    private weak var iconView: NSImageView?
+    private weak var historyControl: NSButton?
+    private var historyLoad: Task<Void, Never>?
+    private var isHistoryExpanded = false
 
     private let onSubmit: (String) -> Void
+    private let iconProvider: () -> NSImage?
+    private let notesProvider: () async -> [NoteRecord]?
     private let screenProvider: () -> NSScreen?
 
     init(
         onSubmit: @escaping (String) -> Void,
+        iconProvider: @escaping () -> NSImage? = { BrandIcon.templateImage(.filled, size: iconSize) },
+        notesProvider: @escaping () async -> [NoteRecord]? = { nil },
         screenProvider: @escaping () -> NSScreen? = {
             let mouse = NSEvent.mouseLocation
             return NSScreen.screens.first { $0.frame.contains(mouse) }
@@ -32,6 +44,8 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         }
     ) {
         self.onSubmit = onSubmit
+        self.iconProvider = iconProvider
+        self.notesProvider = notesProvider
         self.screenProvider = screenProvider
         super.init()
     }
@@ -41,6 +55,10 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
     var panelForTesting: NSPanel? { panel }
     var textFieldForTesting: NSTextField? { textField }
     var surfaceViewForTesting: NSView? { surfaceView }
+    var iconViewForTesting: NSImageView? { iconView }
+    var historyControlForTesting: NSButton? { historyControl }
+    var historyLoadForTesting: Task<Void, Never>? { historyLoad }
+    var isHistoryExpandedForTesting: Bool { isHistoryExpanded }
 
     /// Drives the real field-editor command dispatch used by Enter/Escape, so
     /// tests exercise the same path AppKit takes for those keys.
@@ -70,6 +88,8 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         let wasVisible = panel.isVisible
         position(panel, on: screenProvider())
         textField?.stringValue = ""
+        isHistoryExpanded = false
+        loadHistory()
         NSApp.activate(ignoringOtherApps: true)
         if !wasVisible {
             panel.alphaValue = Self.showTransitionDuration > 0 ? 0 : 1
@@ -103,6 +123,34 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
     private func cancel() {
         hide()
+    }
+
+    // MARK: - Note history
+
+    /// `Today · N` once the count is known; `Today · —` when `pmdr today --json`
+    /// could not be read, so the row never claims a count it does not have.
+    static func historyTitle(forCount count: Int?) -> String {
+        guard let count else { return "Today · —" }
+        return "Today · \(count)"
+    }
+
+    private func loadHistory() {
+        historyLoad?.cancel()
+        historyLoad = Task { [weak self] in
+            guard let provider = self?.notesProvider else { return }
+            let notes = await provider()
+            guard !Task.isCancelled else { return }
+            self?.apply(notes: notes)
+        }
+    }
+
+    private func apply(notes: [NoteRecord]?) {
+        historyControl?.title = Self.historyTitle(forCount: notes?.count)
+        historyControl?.isEnabled = notes != nil
+    }
+
+    @objc private func toggleHistory() {
+        isHistoryExpanded.toggle()
     }
 
     // MARK: - NSTextFieldDelegate
@@ -170,11 +218,41 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         field.usesSingleLineMode = true
         field.delegate = self
 
+        let history = NSButton(frame: .zero)
+        history.translatesAutoresizingMaskIntoConstraints = false
+        history.bezelStyle = .inline
+        history.isBordered = false
+        history.font = .systemFont(ofSize: 12, weight: .medium)
+        history.contentTintColor = .secondaryLabelColor
+        history.title = Self.historyTitle(forCount: nil)
+        history.target = self
+        history.action = #selector(toggleHistory)
+        history.setButtonType(.momentaryChange)
+        history.setAccessibilityLabel("Today's notes")
+
+        let icon = NSImageView(frame: .zero)
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.image = iconProvider()
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        icon.contentTintColor = .labelColor
+        // Purely decorative identity: VoiceOver should land on the input, not here.
+        icon.setAccessibilityElement(false)
+
+        effect.addSubview(icon)
         effect.addSubview(field)
+        effect.addSubview(history)
         NSLayoutConstraint.activate([
-            field.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: Self.fieldInset * 2),
-            field.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: -Self.fieldInset * 2),
-            field.centerYAnchor.constraint(equalTo: effect.centerYAnchor)
+            icon.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: Self.fieldInset * 1.5),
+            icon.centerYAnchor.constraint(equalTo: effect.centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: Self.iconSize.width),
+            icon.heightAnchor.constraint(equalToConstant: Self.iconSize.height),
+
+            field.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: Self.fieldInset * 1.25),
+            field.trailingAnchor.constraint(equalTo: history.leadingAnchor, constant: -Self.fieldInset),
+            field.centerYAnchor.constraint(equalTo: effect.centerYAnchor),
+
+            history.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: -Self.fieldInset * 1.5),
+            history.centerYAnchor.constraint(equalTo: effect.centerYAnchor)
         ])
 
         contentView.addSubview(effect)
@@ -182,6 +260,8 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
 
         self.textField = field
         self.surfaceView = effect
+        self.iconView = icon
+        self.historyControl = history
 
         return panel
     }

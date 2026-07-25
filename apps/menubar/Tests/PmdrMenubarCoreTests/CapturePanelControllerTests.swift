@@ -143,6 +143,170 @@ final class CapturePanelControllerTests: XCTestCase {
         XCTAssertEqual(controller.textFieldForTesting?.placeholderString, "Add a pmdr note…")
     }
 
+    func testShowFocusesAnEmptyInput() {
+        let controller = CapturePanelController(onSubmit: { _ in })
+
+        controller.show()
+
+        guard let panel = controller.panelForTesting,
+              let field = controller.textFieldForTesting
+        else {
+            XCTFail("Expected show() to present an input")
+            return
+        }
+        XCTAssertEqual(field.stringValue, "")
+        let responder = panel.firstResponder
+        XCTAssertTrue(
+            responder === field || (responder as? NSTextView)?.delegate === field,
+            "typing should land in the capture field without a click"
+        )
+    }
+
+    func testShowLeadsWithTheBrandMark() {
+        let mark = NSImage(size: NSSize(width: 18, height: 20))
+        let controller = CapturePanelController(onSubmit: { _ in }, iconProvider: { mark })
+
+        controller.show()
+
+        guard let icon = controller.iconViewForTesting,
+              let surfaceView = controller.surfaceViewForTesting
+        else {
+            XCTFail("Expected show() to present a brand mark")
+            return
+        }
+        surfaceView.layoutSubtreeIfNeeded()
+        XCTAssertEqual(icon.image, mark, "the row should identify itself as pmdr")
+        XCTAssertTrue(icon.isDescendant(of: surfaceView))
+        XCTAssertGreaterThan(icon.frame.width, 0)
+        XCTAssertLessThan(
+            icon.frame.minX,
+            controller.textFieldForTesting?.frame.minX ?? 0,
+            "the mark leads the input"
+        )
+    }
+
+    /// The default provider reads the app's asset catalog, which is only reachable
+    /// when the tests run inside the app host (`xcodebuild test`), not under the
+    /// bare `xctest` harness `scripts/menubar-test.sh` uses.
+    func testDefaultBrandMarkComesFromTheBundledTomatoAsset() throws {
+        try XCTSkipIf(
+            BrandIcon.templateImage(.filled) == nil,
+            "asset catalog unreachable from this test host"
+        )
+        let controller = CapturePanelController(onSubmit: { _ in })
+
+        controller.show()
+
+        XCTAssertNotNil(controller.iconViewForTesting?.image)
+    }
+
+    func testCaptureRowIsACompactFixedWidthSurface() {
+        let controller = CapturePanelController(onSubmit: { _ in })
+
+        controller.show()
+
+        XCTAssertEqual(controller.surfaceViewForTesting?.frame.width, 480)
+        XCTAssertEqual(
+            controller.panelForTesting?.frame.width,
+            OverlaySurface.standard.panelSize(forVisualSize: NSSize(width: 480, height: 46)).width
+        )
+    }
+
+    func testHistoryControlShowsTodaysNoteCount() async {
+        let notes = [
+            NoteRecord(text: "one", at: 1_700_000_000_000),
+            NoteRecord(text: "two", at: 1_700_000_060_000),
+            NoteRecord(text: "three", at: 1_700_000_120_000),
+        ]
+        let controller = CapturePanelController(onSubmit: { _ in }, notesProvider: { notes })
+
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        XCTAssertEqual(controller.historyControlForTesting?.title, "Today · 3")
+    }
+
+    func testHistoryControlReportsAnUnavailableCountWhenTheCliCannotBeRead() async {
+        let controller = CapturePanelController(onSubmit: { _ in }, notesProvider: { nil })
+
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        XCTAssertEqual(controller.historyControlForTesting?.title, "Today · —")
+        XCTAssertEqual(controller.historyControlForTesting?.isEnabled, false)
+    }
+
+    func testHistoryControlShowsZeroWhenNoNotesWereCapturedToday() async {
+        let controller = CapturePanelController(onSubmit: { _ in }, notesProvider: { [] })
+
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        XCTAssertEqual(controller.historyControlForTesting?.title, "Today · 0")
+        XCTAssertEqual(controller.historyControlForTesting?.isEnabled, true)
+    }
+
+    func testHistoryCountIsRefreshedOnEveryInvocation() async {
+        var stored = [NoteRecord(text: "one", at: 1_700_000_000_000)]
+        let controller = CapturePanelController(onSubmit: { _ in }, notesProvider: { stored })
+        controller.show()
+        await controller.historyLoadForTesting?.value
+        XCTAssertEqual(controller.historyControlForTesting?.title, "Today · 1")
+        controller.sendCommandForTesting(#selector(NSResponder.cancelOperation(_:)))
+
+        stored.append(NoteRecord(text: "two", at: 1_700_000_060_000))
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        XCTAssertEqual(controller.historyControlForTesting?.title, "Today · 2")
+    }
+
+    func testHistoryStartsCollapsedOnEveryInvocation() async {
+        let controller = CapturePanelController(
+            onSubmit: { _ in },
+            notesProvider: { [NoteRecord(text: "one", at: 1_700_000_000_000)] }
+        )
+        controller.show()
+        await controller.historyLoadForTesting?.value
+        XCTAssertFalse(controller.isHistoryExpandedForTesting)
+
+        controller.historyControlForTesting?.performClick(nil)
+        XCTAssertTrue(controller.isHistoryExpandedForTesting)
+        controller.sendCommandForTesting(#selector(NSResponder.cancelOperation(_:)))
+
+        controller.show()
+
+        XCTAssertFalse(controller.isHistoryExpandedForTesting)
+    }
+
+    func testActivatingHistoryKeepsThePanelUpAndTypingFocused() async {
+        var submitted: [String] = []
+        let controller = CapturePanelController(
+            onSubmit: { submitted.append($0) },
+            notesProvider: { [NoteRecord(text: "one", at: 1_700_000_000_000)] }
+        )
+        controller.show()
+        await controller.historyLoadForTesting?.value
+        controller.textFieldForTesting?.stringValue = "half-typed"
+
+        controller.historyControlForTesting?.performClick(nil)
+
+        guard let panel = controller.panelForTesting,
+              let field = controller.textFieldForTesting
+        else {
+            XCTFail("Expected a visible panel")
+            return
+        }
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertEqual(field.stringValue, "half-typed")
+        let responder = panel.firstResponder
+        XCTAssertTrue(
+            responder === field || (responder as? NSTextView)?.delegate === field,
+            "the history control must not steal the caret"
+        )
+        XCTAssertTrue(submitted.isEmpty)
+    }
+
     func testReturnSubmitsEmptyTextVerbatimForCliToNoOp() {
         var submitted: [String] = []
         let controller = CapturePanelController(onSubmit: { submitted.append($0) })

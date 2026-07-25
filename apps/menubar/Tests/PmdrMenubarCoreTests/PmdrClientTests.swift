@@ -56,6 +56,30 @@ final class PmdrClientDecodingTests: XCTestCase {
         ])
     }
 
+    func test_decodes_today_notes_in_payload_order() throws {
+        let json = Data(#"""
+        {"groups":[],"total":{"pomodoros":0,"totalMs":0},"notes":[{"text":"first","at":1700000000000,"sessionId":"s1","project":"deepwork","phase":"focus"},{"text":"second","at":1700000060000,"sessionId":"","project":"","phase":""}]}
+        """#.utf8)
+        XCTAssertEqual(try PmdrClient.decodeTodayNotes(from: json), [
+            NoteRecord(text: "first", at: 1700000000000, sessionId: "s1", project: "deepwork", phase: "focus"),
+            NoteRecord(text: "second", at: 1700000060000),
+        ])
+    }
+
+    func test_decodes_today_payload_without_notes_key_as_empty() throws {
+        let json = Data(#"{"groups":[],"total":{"pomodoros":0,"totalMs":0}}"#.utf8)
+        XCTAssertEqual(try PmdrClient.decodeTodayNotes(from: json), [])
+    }
+
+    func test_throws_decoding_failed_on_malformed_today_payload() {
+        let json = Data(#"{"notes":[{"at":1700000000000}]}"#.utf8)
+        XCTAssertThrowsError(try PmdrClient.decodeTodayNotes(from: json)) { error in
+            guard case PmdrClientError.decodingFailed = error else {
+                return XCTFail("expected decodingFailed, got \(error)")
+            }
+        }
+    }
+
     func test_decodes_full_effective_config() throws {
         let json = Data(#"""
         {"focusMinutes":50,"shortBreakMinutes":10,"longBreakMinutes":30,"longBreakEvery":2,"focusEndSound":"Ping","breakEndSound":"Pop"}
@@ -163,6 +187,12 @@ final class PmdrClientArgvTests: XCTestCase {
         let config = try await client.config()
         XCTAssertEqual(config.focusMinutes, 50)
         XCTAssertEqual(readArgv(argvLog), ["config", "--json"])
+    }
+
+    func test_todayNotes_invokes_today_json() async throws {
+        let (client, argvLog) = try makeArgvCapturingClient(stdout: #"{"groups":[],"total":{"pomodoros":0,"totalMs":0},"notes":[]}"#)
+        _ = try await client.todayNotes()
+        XCTAssertEqual(readArgv(argvLog), ["today", "--json"])
     }
 
     func test_setConfigValue_invokes_config_set() async throws {

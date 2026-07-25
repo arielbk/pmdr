@@ -53,6 +53,31 @@ public struct ProjectRecord: Equatable, Sendable {
     }
 }
 
+/// Mirror of `NoteRecord` from `apps/cli/src/state.ts`.
+public struct NoteRecord: Equatable, Sendable {
+    public let text: String
+    /// Capture time, epoch milliseconds.
+    public let at: Int
+    /// Live session at capture; empty when the timer was idle.
+    public let sessionId: String
+    public let project: String
+    public let phase: String
+
+    public init(
+        text: String,
+        at: Int,
+        sessionId: String = "",
+        project: String = "",
+        phase: String = ""
+    ) {
+        self.text = text
+        self.at = at
+        self.sessionId = sessionId
+        self.project = project
+        self.phase = phase
+    }
+}
+
 public struct PmdrConfig: Equatable, Sendable {
     public static let defaults = PmdrConfig()
 
@@ -134,6 +159,13 @@ public struct PmdrClient: Sendable {
         _ = try await run(arguments: ["note", text])
     }
 
+    /// Today's captured notes, from `pmdr today --json`. The CLI already filters
+    /// to the local calendar day and sorts ascending by time.
+    public func todayNotes() async throws -> [NoteRecord] {
+        let data = try await run(arguments: ["today", "--json"])
+        return try Self.decodeTodayNotes(from: data)
+    }
+
     public func setProject(_ name: String?) async throws {
         var args = ["project", "set"]
         if let name {
@@ -195,6 +227,20 @@ public struct PmdrClient: Sendable {
         let project: String?
     }
 
+    private struct RawToday: Decodable {
+        /// Absent in CLI versions that predate note capture — read as no notes
+        /// rather than as a decoding failure.
+        let notes: [RawNote]?
+    }
+
+    private struct RawNote: Decodable {
+        let text: String
+        let at: Int
+        let sessionId: String?
+        let project: String?
+        let phase: String?
+    }
+
     private struct RawProjects: Decodable {
         let projects: [RawProject]
     }
@@ -249,6 +295,23 @@ public struct PmdrClient: Sendable {
             return raw.state == "running" ? .running(active) : .paused(active)
         default:
             throw PmdrClientError.decodingFailed("unknown state: \(raw.state)")
+        }
+    }
+
+    static func decodeTodayNotes(from data: Data) throws -> [NoteRecord] {
+        do {
+            let raw = try JSONDecoder().decode(RawToday.self, from: data)
+            return (raw.notes ?? []).map {
+                NoteRecord(
+                    text: $0.text,
+                    at: $0.at,
+                    sessionId: $0.sessionId ?? "",
+                    project: $0.project ?? "",
+                    phase: $0.phase ?? ""
+                )
+            }
+        } catch {
+            throw PmdrClientError.decodingFailed("invalid today JSON: \(error)")
         }
     }
 
