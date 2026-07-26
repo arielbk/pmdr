@@ -81,14 +81,29 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertFalse(panel.isOpaque)
         XCTAssertEqual(panel.backgroundColor, .clear)
 
-        let effect = controller.visualEffectViewForTesting
-        XCTAssertNotNil(effect)
-        XCTAssertEqual(effect?.material, .hudWindow)
-        XCTAssertEqual(effect?.blendingMode, .behindWindow)
-        XCTAssertEqual(effect?.state, .active)
-        XCTAssertEqual(effect?.appearance?.name, NSAppearance.Name.vibrantDark)
-        XCTAssertEqual(effect?.layer?.cornerRadius, 14)
-        XCTAssertEqual(effect?.layer?.masksToBounds, true)
+        let surface = OverlaySurface.standard
+        guard let surfaceView = controller.surfaceViewForTesting else {
+            XCTFail("Expected the timer to present an overlay surface")
+            return
+        }
+        guard let effectView = surfaceView as? NSVisualEffectView else {
+            XCTFail("Expected the timer surface to provide native blur")
+            return
+        }
+        XCTAssertEqual(effectView.material, surface.material)
+        XCTAssertEqual(effectView.blendingMode, surface.blendingMode)
+        XCTAssertEqual(effectView.state, surface.effectState)
+        XCTAssertTrue(effectView.isEmphasized)
+        let tintView = surfaceView.subviews.first {
+            $0.identifier == OverlaySurface.tintViewIdentifier
+        }
+        XCTAssertEqual(tintView?.layer?.backgroundColor, surface.tintColor.cgColor)
+        XCTAssertEqual(surfaceView.layer?.borderColor, surface.borderColor.cgColor)
+        XCTAssertEqual(surfaceView.layer?.borderWidth, surface.borderWidth)
+        XCTAssertEqual(surfaceView.layer?.cornerRadius, surface.cornerRadius)
+        XCTAssertEqual(surfaceView.layer?.masksToBounds, true)
+        XCTAssertEqual(surfaceView.effectiveAppearance.name, surface.appearanceName)
+        XCTAssertTrue(panel.hasShadow)
 
         controller.toggle()
 

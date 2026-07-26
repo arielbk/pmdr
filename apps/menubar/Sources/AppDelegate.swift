@@ -49,9 +49,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
 
         self.statusItem = item
         floatingTimerPanelController = FloatingTimerPanelController(actions: self)
-        capturePanelController = CapturePanelController(onSubmit: { [weak self] text in
-            self?.writeNote(text)
-        })
+        capturePanelController = CapturePanelController(
+            onSubmit: { [weak self] text in
+                self?.writeNote(text)
+            },
+            // nil means "count unavailable" — a failed CLI read must not be shown
+            // as zero notes.
+            notesProvider: { try? await client.todayNotes() }
+        )
         rebuildMenu()
         registerHotkey()
 

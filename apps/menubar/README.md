@@ -43,8 +43,13 @@ apps/menubar/
 │   ├── main.swift               # app entry point, installs AppDelegate
 │   ├── AppDelegate.swift        # NSStatusItem + menu, drives the poller + tick timer
 │   ├── HotkeyManager.swift      # global Ctrl+Option+Command+P registration
+│   ├── CapturePanelController.swift    # quick-note capture overlay
+│   ├── NoteHistoryListView.swift # scrollable "Today · N" note history views
+│   ├── FloatingTimerPanelController.swift # floating timer overlay
 │   └── PmdrMenubarCore/         # framework consumed by the app + tests
 │       ├── LoginShellEnvironment.swift # resolves user login-shell PATH for CLI subprocesses
+│       ├── NoteHistory.swift     # newest-first ordering + localized capture times
+│       ├── OverlaySurface.swift # shared dark surface for both floating overlays
 │       ├── PhaseNotifier.swift  # maps poller events to native banners (focus end, break end)
 │       ├── PmdrClient.swift     # typed Swift client for the `pmdr` CLI
 │       ├── StatusPoller.swift   # actor that polls PmdrClient + emits change/phase events
@@ -61,6 +66,16 @@ Unit tests live under `Tests/PmdrMenubarCoreTests/` and run via the `pmdr-menuba
 
 ```sh
 xcodebuild -scheme pmdr-menubar -destination 'platform=macOS' test
+```
+
+`xcodebuild test` needs testmanagerd, which is unavailable in sandboxed or
+headless environments. There it fails with `Sandbox restriction` before running a
+single test — use the wrapper instead, which builds with `xcodebuild` and drives
+the bundle through `xctest` directly:
+
+```sh
+./scripts/menubar-test.sh                  # all tests
+./scripts/menubar-test.sh OverlaySurfaceTests   # one suite
 ```
 
 Integration tests that shell out to the real `pmdr` binary are gated behind `PMDR_INTEGRATION=1` and require `pmdr` on PATH:
