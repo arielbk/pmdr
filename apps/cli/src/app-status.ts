@@ -12,12 +12,21 @@ export interface AppStatusInputs {
   loginItem: boolean;
 }
 
-export interface AppStatus {
+/**
+ * How the installed app compares to the one this CLI carries. Answerable from
+ * the filesystem alone — deciding whether to offer an install needs only this,
+ * and must not pay for a `pgrep` to find out.
+ */
+export interface AppInstallState {
   install: "absent" | "current" | "stale" | "unknown";
   installedVersion: string | null;
   installedPath: string | null;
   bundledVersion: string | null;
   bundledReason: string | null;
+}
+
+/** The install state plus the runtime facts only `pmdr app status` needs. */
+export interface AppStatus extends AppInstallState {
   running: boolean;
   loginItem: boolean;
 }
@@ -39,10 +48,10 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-function deriveInstallState(
+function compareInstall(
   bundled: BundledApp,
   installed: InstalledApp,
-): AppStatus["install"] {
+): AppInstallState["install"] {
   if (!installed.present) return "absent";
   if (!bundled.present) return "unknown";
   return compareVersions(bundled.version, installed.version) > 0
@@ -50,21 +59,30 @@ function deriveInstallState(
     : "current";
 }
 
-export function deriveAppStatus(inputs: AppStatusInputs): AppStatus {
-  const { bundled, installed, running, loginItem } = inputs;
-
+export function deriveInstallState(
+  bundled: BundledApp,
+  installed: InstalledApp,
+): AppInstallState {
   return {
-    install: deriveInstallState(bundled, installed),
+    install: compareInstall(bundled, installed),
     installedVersion: installed.present ? installed.version : null,
     installedPath: installed.present ? installed.appPath : null,
     bundledVersion: bundled.present ? bundled.version : null,
     bundledReason: bundled.present ? null : bundled.reason,
+  };
+}
+
+export function deriveAppStatus(inputs: AppStatusInputs): AppStatus {
+  const { bundled, installed, running, loginItem } = inputs;
+
+  return {
+    ...deriveInstallState(bundled, installed),
     running,
     loginItem,
   };
 }
 
-function formatInstallLine(status: AppStatus): string {
+function formatInstallLine(status: AppInstallState): string {
   switch (status.install) {
     case "absent":
       return status.bundledVersion === null
@@ -85,4 +103,9 @@ export function formatAppStatus(status: AppStatus): string {
     `Running: ${status.running ? "yes" : "no"}`,
     `Launch at login: ${status.loginItem ? "on" : "off"}`,
   ].join("\n");
+}
+
+/** The one line `pmdr app status` prints, in whichever shape was asked for. */
+export function renderAppStatus(status: AppStatus, json: boolean): string {
+  return json ? JSON.stringify(status) : formatAppStatus(status);
 }

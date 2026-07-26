@@ -1,17 +1,8 @@
-import { homedir } from "node:os";
 import { defineCommand } from "citty";
-import {
-  installOptionsFromArgs,
-  runAppInstall,
-  runAppUninstall,
-} from "../app-install.js";
-import { createAppProbes } from "../app-probes.js";
-import { deriveAppStatus, formatAppStatus } from "../app-status.js";
-import type { InstalledApp } from "../app-status.js";
-import { createBundledAppModule } from "../bundled-app.js";
-import { loginActionFromArgs, runAppLogin } from "../login-item.js";
-import { createMenubarAppSystem } from "../menubar-app-system.js";
-import type { BundledApp } from "../bundled-app.js";
+import { renderAppStatus } from "../app-status.js";
+import { loginActionFromArgs } from "../login-item.js";
+import { createMenubarApp, reportOutcome } from "../menubar-app.js";
+import type { OutcomeReport } from "../menubar-app.js";
 
 export function nonMacosMessage(action: string): string {
   return `pmdr app: the menubar app is macOS only — nothing to ${action} on this platform`;
@@ -37,37 +28,18 @@ export function runOnMacos(deps: MacosGateDeps): number {
   return deps.run();
 }
 
-export interface AppStatusRunDeps {
-  json: boolean;
-  bundled: { locate(): BundledApp };
-  probes: {
-    probeInstalled(): InstalledApp;
-    probeRunning(): boolean;
-    probeLoginItem(): boolean;
-  };
-  stdout: (line: string) => void;
-}
-
-/** Returns the process exit code so the command stays testable end to end. */
-export function runAppStatus(deps: AppStatusRunDeps): number {
-  const status = deriveAppStatus({
-    bundled: deps.bundled.locate(),
-    installed: deps.probes.probeInstalled(),
-    running: deps.probes.probeRunning(),
-    loginItem: deps.probes.probeLoginItem(),
-  });
-
-  deps.stdout(deps.json ? JSON.stringify(status) : formatAppStatus(status));
-  return 0;
-}
-
 /** Binds the gate to the real process: refuse off macOS, otherwise run and exit. */
-function exitWith(action: string, run: () => number): void {
+function exitWith(action: string, run: () => OutcomeReport): void {
   const code = runOnMacos({
     platform: process.platform,
     action,
     stderr: (line) => console.error(line),
-    run,
+    run: () => {
+      const report = run();
+      for (const line of report.stdout) console.log(line);
+      for (const line of report.stderr) console.error(line);
+      return report.code;
+    },
   });
   if (code !== 0) process.exit(code);
 }
@@ -81,14 +53,11 @@ const statusCmd = defineCommand({
     },
   },
   run({ args }) {
-    exitWith("report", () =>
-      runAppStatus({
-        json: args.json === true,
-        bundled: createBundledAppModule(),
-        probes: createAppProbes(),
-        stdout: (line) => console.log(line),
-      }),
-    );
+    exitWith("report", () => ({
+      stdout: [renderAppStatus(createMenubarApp().status(), args.json === true)],
+      stderr: [],
+      code: 0,
+    }));
   },
 });
 
@@ -99,6 +68,11 @@ const installCmd = defineCommand({
       type: "boolean",
       description: "Reinstall even when the same version is already installed",
     },
+    /**
+     * citty parses `--no-launch` as a negation of a `launch` flag, not as an
+     * arg literally named `no-launch` — so the flag has to be declared as
+     * `launch`, or `--no-launch` silently does nothing.
+     */
     launch: {
       type: "boolean",
       default: true,
@@ -106,17 +80,13 @@ const installCmd = defineCommand({
     },
   },
   run({ args }) {
-    const home = homedir();
     exitWith("install", () =>
-      runAppInstall({
-        home,
-        ...installOptionsFromArgs(args),
-        bundled: createBundledAppModule(),
-        probes: createAppProbes(),
-        system: createMenubarAppSystem(home),
-        stdout: (line) => console.log(line),
-        stderr: (line) => console.error(line),
-      }),
+      reportOutcome(
+        createMenubarApp().install({
+          force: args.force === true,
+          launch: args.launch !== false,
+        }),
+      ),
     );
   },
 });
@@ -134,16 +104,8 @@ const loginCmd = defineCommand({
       process.exit(1);
     }
 
-    const home = homedir();
     exitWith("configure", () =>
-      runAppLogin({
-        home,
-        action: parsed.action,
-        probes: createAppProbes(),
-        system: createMenubarAppSystem(home),
-        stdout: (line) => console.log(line),
-        stderr: (line) => console.error(line),
-      }),
+      reportOutcome(createMenubarApp().setLoginItem(parsed.enabled)),
     );
   },
 });
@@ -151,16 +113,7 @@ const loginCmd = defineCommand({
 const uninstallCmd = defineCommand({
   meta: { description: "Remove the menubar app and any launch-at-login item" },
   run() {
-    const home = homedir();
-    exitWith("uninstall", () =>
-      runAppUninstall({
-        home,
-        probes: createAppProbes(),
-        system: createMenubarAppSystem(home),
-        stdout: (line) => console.log(line),
-        stderr: (line) => console.error(line),
-      }),
-    );
+    exitWith("uninstall", () => reportOutcome(createMenubarApp().uninstall()));
   },
 });
 

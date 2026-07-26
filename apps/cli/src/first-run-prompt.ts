@@ -1,13 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
-import { createAppProbes } from "./app-probes.js";
-import { runAppInstall } from "./app-install.js";
-import { createMenubarAppSystem } from "./menubar-app-system.js";
-import { deriveAppStatus } from "./app-status.js";
-import { createBundledAppModule } from "./bundled-app.js";
+import { createMenubarApp, reportOutcome } from "./menubar-app.js";
 import { defaultConfigDir } from "./config.js";
-import type { AppStatus } from "./app-status.js";
+import type { AppInstallState } from "./app-status.js";
 
 /** Where the decline is remembered, alongside `config.json` in the config dir. */
 export const FIRST_RUN_PROMPT_FILE = "app-prompt.json";
@@ -56,7 +51,7 @@ export interface FirstRunPromptInputs {
   isTty: boolean;
   rawArgs: string[];
   declined: boolean;
-  status: AppStatus;
+  status: AppInstallState;
 }
 
 function isJsonFlag(arg: string): boolean {
@@ -155,18 +150,11 @@ export async function maybeOfferBundledApp(
   rawArgs: string[],
 ): Promise<OfferOutcome> {
   try {
-    const home = homedir();
     const store = createFirstRunPromptStore();
-    const bundled = createBundledAppModule();
-    const probes = createAppProbes({ home });
+    const app = createMenubarApp();
     // Run state and the login item play no part in the decision, so they are
     // not probed here — that keeps a plain `pmdr` from shelling out to pgrep.
-    const status = deriveAppStatus({
-      bundled: bundled.locate(),
-      installed: probes.probeInstalled(),
-      running: false,
-      loginItem: false,
-    });
+    const status = app.installState();
 
     const decision = decideFirstRunPrompt({
       platform: process.platform,
@@ -185,15 +173,12 @@ export async function maybeOfferBundledApp(
       },
       // Unreachable off macOS: `decideFirstRunPrompt` refuses to prompt there,
       // and `offerAppInstall` only installs once someone has said yes.
-      install: () =>
-        runAppInstall({
-          home,
-          bundled,
-          probes,
-          system: createMenubarAppSystem(home),
-          stdout: (line) => console.log(line),
-          stderr: (line) => console.error(line),
-        }),
+      install: () => {
+        const report = reportOutcome(app.install());
+        for (const line of report.stdout) console.log(line);
+        for (const line of report.stderr) console.error(line);
+        return report.code;
+      },
       recordDecline: () => store.recordDecline(status.bundledVersion ?? "unknown"),
       stdout: (line) => console.log(line),
     });

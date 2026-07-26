@@ -32,7 +32,14 @@ export interface AppProbeDeps {
   processRunning?: (appPath: string) => boolean;
 }
 
-export function createAppProbes(deps: AppProbeDeps = {}) {
+/** What the menubar app module can ask about the machine it is running on. */
+export interface AppProbes {
+  probeInstalled(): InstalledApp;
+  probeRunning(): boolean;
+  probeLoginItem(): boolean;
+}
+
+export function createAppProbes(deps: AppProbeDeps = {}): AppProbes {
   const home = deps.home ?? homedir();
   const exists = deps.exists ?? existsSync;
   const readAppVersion = deps.readAppVersion ?? readAppVersionFromPlist;
