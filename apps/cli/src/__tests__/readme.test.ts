@@ -26,6 +26,15 @@ describe("README CLI documentation", () => {
     expect(runningCliSection).toContain("http://<machine-name>.local:<port>");
   });
 
+  it("documents that only bare `pmdr` needs a TTY, and what it does without one", () => {
+    const runningCliSection = readme.match(
+      /## Running the CLI([\s\S]*?)(?:\n## |\z)/,
+    )?.[1];
+
+    expect(runningCliSection).toContain("interactive terminal");
+    expect(runningCliSection).toContain("pmdr status --json");
+  });
+
   it("documents installing the bundled menubar app from the CLI", () => {
     const section = readme.match(
       /## The bundled menubar app([\s\S]*?)(?:\n## |\z)/,

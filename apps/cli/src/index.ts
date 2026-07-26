@@ -54,8 +54,22 @@ const main = defineCommand({
       return;
     }
 
-    // Only the plain-timer path reaches here, and the offer gates itself on an
-    // interactive TTY — so no agent or `--json` caller can ever be blocked.
+    // Only the plain-timer path reaches here. Refuse before Ink gets a chance
+    // to throw its raw-mode error, so a scripted `pmdr` gets one actionable
+    // line rather than a renderer stack trace.
+    const { checkTuiPrecondition } = await import("./tui-precondition.js");
+    const precondition = checkTuiPrecondition({
+      stdinIsTty: process.stdin.isTTY === true,
+      stdoutIsTty: process.stdout.isTTY === true,
+    });
+    if (!precondition.ok) {
+      console.error(precondition.message);
+      process.exitCode = 1;
+      return;
+    }
+
+    // The offer gates itself on an interactive TTY too — so no agent or
+    // `--json` caller can ever be blocked.
     const { maybeOfferBundledApp } = await import("./first-run-prompt.js");
     await maybeOfferBundledApp(rawArgs);
 

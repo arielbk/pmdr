@@ -78,6 +78,11 @@ pmdr serve          # serve the read-only status page on the LAN
 
 Open as many terminals as you want — they all read and write the same session.
 
+Bare `pmdr` is the only command that needs an interactive terminal. Run it where
+stdin or stdout is not a TTY — a pipe, a script, an agent — and it exits `1` with
+a single line pointing at `pmdr status --json` instead of trying to render.
+Every other command is safe to script.
+
 `pmdr serve` starts a long-running HTTP server on port `7777` by default. Use
 `pmdr serve --port <port>` to choose another port, then open
 `http://<machine-name>.local:<port>` from another device on the same local
