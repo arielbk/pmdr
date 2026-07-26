@@ -5,6 +5,17 @@ import { describe, expect, it } from "vitest";
 describe("README CLI documentation", () => {
   const readme = readFileSync(join(__dirname, "../../../../README.md"), "utf8");
 
+  it("documents how the release gets the CI-built app and refuses to ship without it", () => {
+    // Deliberately not `\z` — that is a literal "z" in JS regex, which would
+    // truncate this section at the first "pmdr-app.zip".
+    const section = readme.match(/### Releasing\n([\s\S]*?)\n## /)?.[1];
+
+    expect(section).toContain("gh run download --name pmdr-app");
+    expect(section).toContain("--app-artifact");
+    expect(section).toContain("--allow-missing-app");
+    expect(section).toContain(".github/workflows/menubar-app.yml");
+  });
+
   it("documents serving the LAN status page", () => {
     const runningCliSection = readme.match(
       /## Running the CLI([\s\S]*?)(?:\n## |\z)/,

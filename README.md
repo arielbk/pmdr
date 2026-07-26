@@ -50,11 +50,16 @@ pnpm build        # rebuild the CLI
 ### Releasing
 
 ```sh
-pnpm release:pmdr -- --dry-run --version X.Y.Z   # verify the tarball
-pnpm release:pmdr -- --version X.Y.Z             # stamp, build, publish to npm
+gh run download --name pmdr-app --dir apps/cli/bundled-app   # take the CI-built menubar app
+pnpm release:pmdr -- --dry-run --version X.Y.Z               # verify the tarball
+pnpm release:pmdr -- --version X.Y.Z                         # stamp, build, publish to npm
 ```
 
 The flow lives in `apps/cli/src/release.ts`; it stamps `apps/cli/package.json`, builds, `npm pack`s to `dist/releases/`, and publishes. Tagging and the GitHub release are manual.
+
+A published release must carry the menubar app: the release refuses to stamp or publish unless `apps/cli/bundled-app/pmdr-app.zip` and its version sidecar are in place, and after packing it checks that the tarball really contains them. Get the zip either from CI (the command above, or `--app-artifact <downloaded-dir>` to let the release stage it for you) or locally with `pnpm menubar:zip`. `--allow-missing-app` publishes a CLI-only release on purpose.
+
+`.github/workflows/menubar-app.yml` is where the app binary comes from: a macOS runner runs `xcodegen`, builds Release, checks the zip with `scripts/verify-menubar-zip.sh` (signature valid, every Mach-O universal), uploads it as the `pmdr-app` artifact, and then runs the JS tests, lint and typecheck with the zip present so the install integration test actually runs.
 
 ## Running the CLI
 

@@ -1,0 +1,54 @@
+name: menubar-app
+
+# Builds the macOS menubar app the npm package ships, verifies the zip is
+# releasable, and uploads it as the `pmdr-app` artifact that
+# `pnpm release:pmdr -- --app-artifact <dir>` consumes.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-app:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build the universal Release app zip
+        run: ./scripts/build-menubar-zip.sh
+
+      - name: Verify the zip is signed and universal
+        run: ./scripts/verify-menubar-zip.sh
+
+      - name: Upload the bundled app
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmdr-app
+          if-no-files-found: error
+          path: |
+            apps/cli/bundled-app/pmdr-app.zip
+            apps/cli/bundled-app/pmdr-app.json
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Runs after the zip exists on purpose: the app-install integration test
+      # skips itself unless apps/cli/bundled-app/pmdr-app.zip is there.
+      - name: Test the CLI against the freshly built app
+        run: pnpm --filter @arielbk/pmdr test
+
+      - name: Lint and typecheck
+        run: |
+          pnpm lint
+          pnpm check-types
