@@ -10,6 +10,7 @@ import { createAppProbes } from "../app-probes.js";
 import { deriveAppStatus, formatAppStatus } from "../app-status.js";
 import type { InstalledApp } from "../app-status.js";
 import { createBundledAppModule } from "../bundled-app.js";
+import { createLoginItemSystem, loginActionFromArgs, runAppLogin } from "../login-item.js";
 import type { BundledApp } from "../bundled-app.js";
 
 export const NON_MACOS_MESSAGE =
@@ -96,6 +97,33 @@ const installCmd = defineCommand({
   },
 });
 
+const loginCmd = defineCommand({
+  meta: { description: "Enable or disable launching the menubar app at login" },
+  args: {
+    enable: { type: "boolean", description: "Launch the app at login" },
+    disable: { type: "boolean", description: "Stop launching the app at login" },
+  },
+  run({ args }) {
+    const parsed = loginActionFromArgs(args);
+    if ("error" in parsed) {
+      console.error(parsed.error);
+      process.exit(1);
+    }
+
+    const home = homedir();
+    const code = runAppLogin({
+      platform: process.platform,
+      home,
+      action: parsed.action,
+      probes: createAppProbes(),
+      system: createLoginItemSystem(),
+      stdout: (line) => console.log(line),
+      stderr: (line) => console.error(line),
+    });
+    if (code !== 0) process.exit(code);
+  },
+});
+
 const uninstallCmd = defineCommand({
   meta: { description: "Remove the menubar app and any launch-at-login item" },
   run() {
@@ -117,6 +145,7 @@ export default defineCommand({
   subCommands: {
     status: statusCmd,
     install: installCmd,
+    login: loginCmd,
     uninstall: uninstallCmd,
   },
 });

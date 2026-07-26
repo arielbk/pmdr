@@ -25,4 +25,14 @@ describe("README CLI documentation", () => {
     expect(section).toContain("pmdr app uninstall");
     expect(section).toContain("~/Applications");
   });
+
+  it("documents launching the menubar app at login", () => {
+    const section = readme.match(
+      /## The bundled menubar app([\s\S]*?)(?:\n## |\z)/,
+    )?.[1];
+
+    expect(section).toContain("pmdr app login --enable");
+    expect(section).toContain("pmdr app login --disable");
+    expect(section).toContain("~/Library/LaunchAgents");
+  });
 });

@@ -1,0 +1,126 @@
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { APP_BUNDLE_ID, appBinaryPath, loginItemPlistPath } from "./app-probes.js";
+import type { InstalledApp } from "./app-status.js";
+
+/**
+ * A LaunchAgent that runs the installed app binary directly at login. We invoke
+ * the executable rather than `open -a` so launchd owns the process and the plist
+ * stays the single source of truth for the enabled state.
+ */
+export function loginItemPlist(binaryPath: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${APP_BUNDLE_ID}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${binaryPath}</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
+`;
+}
+
+export const NON_MACOS_LOGIN_MESSAGE =
+  "pmdr app: launch at login is macOS only — nothing to configure on this platform";
+
+/** The filesystem side effects the login item needs, injected so this is testable. */
+export interface LoginItemSystem {
+  exists(path: string): boolean;
+  mkdirp(dir: string): void;
+  writeFile(path: string, content: string): void;
+  remove(path: string): void;
+}
+
+export interface AppLoginRunDeps {
+  platform: string;
+  home: string;
+  action: "enable" | "disable";
+  probes: { probeInstalled(): InstalledApp };
+  system: LoginItemSystem;
+  stdout: (line: string) => void;
+  stderr: (line: string) => void;
+}
+
+/** Returns the process exit code so the command stays testable end to end. */
+export function runAppLogin(deps: AppLoginRunDeps): number {
+  if (deps.platform !== "darwin") {
+    deps.stderr(NON_MACOS_LOGIN_MESSAGE);
+    return 1;
+  }
+
+  const plistPath = loginItemPlistPath(deps.home);
+
+  if (deps.action === "disable") {
+    // Disabling must work even with the app already gone — otherwise an
+    // uninstall could strand an agent nobody can turn off.
+    try {
+      if (deps.system.exists(plistPath)) deps.system.remove(plistPath);
+    } catch (error) {
+      deps.stderr(`pmdr app login: ${messageOf(error)}`);
+      return 1;
+    }
+    deps.stdout("Launch at login: disabled");
+    return 0;
+  }
+
+  const installed = deps.probes.probeInstalled();
+
+  // The agent has to name a real binary, so there is nothing honest to write
+  // before the app exists on disk.
+  if (!installed.present) {
+    deps.stderr(
+      "pmdr app login: the menubar app is not installed — run `pmdr app install` first",
+    );
+    return 1;
+  }
+
+  try {
+    deps.system.mkdirp(dirname(plistPath));
+    deps.system.writeFile(plistPath, loginItemPlist(appBinaryPath(installed.appPath)));
+  } catch (error) {
+    deps.stderr(`pmdr app login: ${messageOf(error)}`);
+    return 1;
+  }
+
+  deps.stdout("Launch at login: enabled");
+  return 0;
+}
+
+export const LOGIN_ACTION_REQUIRED_MESSAGE =
+  "pmdr app login: pass exactly one of --enable or --disable";
+
+/** Neither flag and both flags are the same mistake: an ambiguous intent. */
+export function loginActionFromArgs(args: {
+  enable?: boolean;
+  disable?: boolean;
+}): { action: "enable" | "disable" } | { error: string } {
+  if (args.enable === true && args.disable !== true) return { action: "enable" };
+  if (args.disable === true && args.enable !== true) return { action: "disable" };
+  return { error: LOGIN_ACTION_REQUIRED_MESSAGE };
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** The real filesystem. Writes are per-user, so no privilege escalation ever. */
+export function createLoginItemSystem(): LoginItemSystem {
+  return {
+    exists: (path) => existsSync(path),
+    mkdirp: (dir) => {
+      mkdirSync(dir, { recursive: true });
+    },
+    writeFile: (path, content) => {
+      writeFileSync(path, content, "utf8");
+    },
+    remove: (path) => {
+      rmSync(path, { force: true });
+    },
+  };
+}

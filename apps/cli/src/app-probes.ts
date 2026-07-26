@@ -1,12 +1,19 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { InstalledApp } from "./app-status.js";
 
 /** Identity of the menubar app, shared by install, status and login-item code. */
 export const APP_BUNDLE_ID = "dev.pmdr.menubar";
 export const APP_BUNDLE_NAME = "pmdr.app";
+/** `PRODUCT_NAME` of the `pmdr-menubar` target in `apps/menubar/project.yml`. */
+export const APP_EXECUTABLE_NAME = "pmdr";
+
+/** The Mach-O the app bundle actually runs — what a LaunchAgent invokes. */
+export function appBinaryPath(appPath: string): string {
+  return join(appPath, "Contents", "MacOS", APP_EXECUTABLE_NAME);
+}
 
 /** Where `pmdr app install` puts the bundle — per-user, so no sudo is ever needed. */
 export function installedAppPath(home: string = homedir()): string {
@@ -71,7 +78,7 @@ export function readAppVersionFromPlist(appPath: string): string | null {
  * `pmdr.app`) have to be escaped or the match is looser than intended.
  */
 export function appProcessPattern(appPath: string): string {
-  return join(appPath, "Contents", "MacOS").replace(
+  return dirname(appBinaryPath(appPath)).replace(
     /[.*+?^${}()|[\]\\]/g,
     "\\$&",
   );
