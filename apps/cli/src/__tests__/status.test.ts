@@ -338,10 +338,17 @@ describe("pmdr status --json", () => {
   let tmpDir: string;
 
   beforeAll(() => {
-    execFileSync("pnpm", ["--filter", "cli", "build"], {
+    // Filter by package name, not directory: `--filter cli` matches nothing and
+    // pnpm still exits 0, so this silently built nothing and the tests only
+    // passed off a stale local dist. On a clean checkout (CI) the `pmdr`
+    // symlink then dangled and every spawn came back with a null status.
+    execFileSync("pnpm", ["--filter", "@arielbk/pmdr", "build"], {
       cwd: repoRoot,
       stdio: "pipe",
     });
+    if (!existsSync(cliDist)) {
+      throw new Error(`build produced no CLI entrypoint at ${cliDist}`);
+    }
   });
 
   beforeEach(() => {
