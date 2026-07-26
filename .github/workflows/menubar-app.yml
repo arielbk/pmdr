@@ -11,9 +11,22 @@ on:
 
 jobs:
   build-app:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      # XcodeGen writes objectVersion 77, which only Xcode 16+ can open. The
+      # runner image's *default* Xcode is not always its newest, so select the
+      # newest explicitly rather than inheriting whatever the image defaults to
+      # — otherwise a bumped xcodegen silently breaks the build with
+      # "future Xcode project file format".
+      - name: Select the newest available Xcode
+        run: |
+          newest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$newest" ]; then
+            sudo xcode-select -s "$newest"
+          fi
+          xcodebuild -version
 
       - name: Install XcodeGen
         run: brew install xcodegen
