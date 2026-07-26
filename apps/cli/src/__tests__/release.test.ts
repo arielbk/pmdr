@@ -111,6 +111,6 @@ describe("publishable CLI package", () => {
     expect(packageJson.private).not.toBe(true);
     expect(packageJson.bin?.pmdr).toBe("dist/index.js");
     expect(packageJson.publishConfig?.access).toBe("public");
-    expect(packageJson.files).toEqual(["dist"]);
+    expect(packageJson.files).toEqual(["dist", "bundled-app"]);
   });
 });

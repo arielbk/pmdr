@@ -22,6 +22,9 @@ coverage
 # Vercel
 .vercel
 
+# Bundled macOS app (built by scripts/build-menubar-zip.sh, shipped in the npm package)
+apps/cli/bundled-app/
+
 # Build Outputs
 .next/
 out/

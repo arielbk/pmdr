@@ -7,13 +7,15 @@
     "pmdr": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "bundled-app"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
     "build": "tsup",
+    "build:app": "../../scripts/build-menubar-zip.sh",
     "dev": "tsup --watch",
     "lint": "eslint src",
     "check-types": "tsc --noEmit",
