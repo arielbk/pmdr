@@ -30,7 +30,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let environment = LoginShellEnvironment.resolve()
-        let client = PmdrClient(environment: environment)
+        // Re-derive the login-shell PATH if `pmdr` ever stops resolving: version
+        // managers hand out per-shell shim directories that vanish when that
+        // shell exits, and the app can outlive the shell it inherited PATH from.
+        let client = PmdrClient(
+            environment: environment,
+            environmentRefresh: { LoginShellEnvironment.resolve() }
+        )
         self.client = client
         poller = StatusPoller(fetcher: client)
         let presenter = UserNotificationsPresenter()

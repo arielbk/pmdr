@@ -130,25 +130,67 @@ public enum PmdrClientError: Error, Equatable {
     case nonZeroExit(code: Int32, stderr: String)
 }
 
+/// Holds the environment behind a reference so a PATH recovered mid-session
+/// outlives the `PmdrClient` value that recovered it.
+final class EnvironmentStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [String: String]
+
+    init(_ environment: [String: String]) {
+        self.stored = environment
+    }
+
+    var value: [String: String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+
+    func replace(with environment: [String: String]) {
+        lock.lock()
+        stored = environment
+        lock.unlock()
+    }
+}
+
 public struct PmdrClient: Sendable {
     /// Either an absolute path to the `pmdr` binary, or a bare name to look up on PATH.
     public let binaryHint: String
     /// Environment passed to spawned processes — defaults to the parent's environment.
     /// PATH lookup uses the `PATH` entry from this dictionary.
-    public let environment: [String: String]
+    public var environment: [String: String] { environmentStore.value }
+
+    private let environmentStore: EnvironmentStore
+
+    /// Re-derives the environment when `binaryHint` stops resolving.
+    ///
+    /// The app captures the login-shell PATH once, at launch. Node version
+    /// managers (fnm, nvm, volta) hand out per-shell shim directories that go
+    /// away when that shell exits, so a PATH that worked at launch can name a
+    /// directory that no longer exists — and without this the menubar would
+    /// silently stop updating until someone relaunched the app.
+    private let environmentRefresh: (@Sendable () -> [String: String])?
 
     public init(
         binaryHint: String = "pmdr",
-        environment: [String: String]? = nil
+        environment: [String: String]? = nil,
+        environmentRefresh: (@Sendable () -> [String: String])? = nil
     ) {
         self.binaryHint = binaryHint
+        self.environmentStore = EnvironmentStore(Self.merged(environment))
+        self.environmentRefresh = environmentRefresh
+    }
+
+    /// Overlay caller-supplied entries onto the parent environment, so a refresh
+    /// that returns only `PATH` still spawns with a complete environment.
+    private static func merged(_ environment: [String: String]?) -> [String: String] {
         var mergedEnvironment = ProcessInfo.processInfo.environment
         if let environment {
             for (key, value) in environment {
                 mergedEnvironment[key] = value
             }
         }
-        self.environment = mergedEnvironment
+        return mergedEnvironment
     }
 
     public func status() async throws -> Status {
@@ -407,13 +449,36 @@ public struct PmdrClient: Sendable {
         return nil
     }
 
-    private func run(arguments: [String]) async throws -> Data {
-        guard let executable = Self.resolveBinary(
+    /// Resolve `binaryHint`, re-deriving the environment once if the cached PATH
+    /// has gone stale. The refresh is only paid for on failure — the polling
+    /// happy path never spawns a login shell.
+    private func resolveExecutable() throws -> String {
+        if let executable = Self.resolveBinary(
             hint: binaryHint,
             environment: environment
+        ) {
+            return executable
+        }
+
+        guard let environmentRefresh else {
+            throw PmdrClientError.binaryNotFound
+        }
+
+        let refreshed = Self.merged(environmentRefresh())
+        environmentStore.replace(with: refreshed)
+
+        guard let executable = Self.resolveBinary(
+            hint: binaryHint,
+            environment: refreshed
         ) else {
             throw PmdrClientError.binaryNotFound
         }
+        return executable
+    }
+
+    private func run(arguments: [String]) async throws -> Data {
+        let executable = try resolveExecutable()
+        let environment = self.environment
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
