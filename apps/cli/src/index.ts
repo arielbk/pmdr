@@ -54,6 +54,11 @@ const main = defineCommand({
       return;
     }
 
+    // Only the plain-timer path reaches here, and the offer gates itself on an
+    // interactive TTY — so no agent or `--json` caller can ever be blocked.
+    const { maybeOfferBundledApp } = await import("./first-run-prompt.js");
+    await maybeOfferBundledApp(rawArgs);
+
     const { render } = await import("ink");
     const { default: App } = await import("./tui/App.js");
     const React = await import("react");

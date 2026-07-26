@@ -35,4 +35,15 @@ describe("README CLI documentation", () => {
     expect(section).toContain("pmdr app login --disable");
     expect(section).toContain("~/Library/LaunchAgents");
   });
+
+  it("documents the first-run install offer and how it is gated", () => {
+    const section = readme.match(
+      /## The bundled menubar app([\s\S]*?)(?:\n## |\z)/,
+    )?.[1];
+
+    expect(section).toContain("interactive terminal");
+    expect(section).toContain("never asks again");
+    expect(section).toContain("--json");
+    expect(section).toContain("TTY");
+  });
 });

@@ -94,6 +94,8 @@ pmdr app uninstall     # remove the app and any launch-at-login item
 
 `pmdr app login --enable` writes a `dev.pmdr.menubar` LaunchAgent to `~/Library/LaunchAgents` that runs the installed app binary with `RunAtLoad`; `--disable` removes it. That plist is the single source of truth for the setting — `pmdr app status --json` reports it as `loginItem`, and the menubar app's own toggle goes through this same command. Enabling requires the app to be installed; disabling works regardless, so an uninstall can never strand an agent you cannot turn off. It takes effect at your next login rather than immediately.
 
+The first time you run plain `pmdr` in an interactive terminal with the app missing — or with an older one installed than the CLI ships — it offers to install and launch it for you. Decline once and it never asks again (the answer is remembered in `app-prompt.json` next to your config); `pmdr app install` is always there if you change your mind. The offer is suppressed whenever stdout or stdin is not a TTY and for any `--json` invocation, so scripts and agents are never blocked by it.
+
 `pmdr app install` is non-interactive and idempotent: reinstalling the version you already have is a no-op unless you pass `--force`. It quits a running app before replacing it, stages the extract next to the target inside `~/Applications`, then swaps it in — so a failed extract never leaves you without a working app. Everything is per-user, so no `sudo` is ever needed. These commands are macOS only and exit non-zero elsewhere.
 
 ## Running the menubar app
