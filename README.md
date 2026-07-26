@@ -78,6 +78,20 @@ Open as many terminals as you want — they all read and write the same session.
 `http://<machine-name>.local:<port>` from another device on the same local
 network to view the live status page.
 
+## The bundled menubar app
+
+The npm package ships the built menubar app, so a global CLI install carries both surfaces:
+
+```sh
+pmdr app status        # is the app installed, is it running, is it up to date
+pmdr app status --json # same, machine-readable
+pmdr app install       # extract the bundled app to ~/Applications and launch it
+pmdr app install --force --no-launch
+pmdr app uninstall     # remove the app and any launch-at-login item
+```
+
+`pmdr app install` is non-interactive and idempotent: reinstalling the version you already have is a no-op unless you pass `--force`. It quits a running app before replacing it, stages the extract next to the target inside `~/Applications`, then swaps it in — so a failed extract never leaves you without a working app. Everything is per-user, so no `sudo` is ever needed. These commands are macOS only and exit non-zero elsewhere.
+
 ## Running the menubar app
 
 ```sh

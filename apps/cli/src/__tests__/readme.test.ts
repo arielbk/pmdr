@@ -14,4 +14,15 @@ describe("README CLI documentation", () => {
     expect(runningCliSection).toContain("--port");
     expect(runningCliSection).toContain("http://<machine-name>.local:<port>");
   });
+
+  it("documents installing the bundled menubar app from the CLI", () => {
+    const section = readme.match(
+      /## The bundled menubar app([\s\S]*?)(?:\n## |\z)/,
+    )?.[1];
+
+    expect(section).toContain("pmdr app install");
+    expect(section).toContain("pmdr app status --json");
+    expect(section).toContain("pmdr app uninstall");
+    expect(section).toContain("~/Applications");
+  });
 });

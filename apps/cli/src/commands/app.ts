@@ -1,4 +1,11 @@
+import { homedir } from "node:os";
 import { defineCommand } from "citty";
+import {
+  createInstallSystem,
+  installOptionsFromArgs,
+  runAppInstall,
+  runAppUninstall,
+} from "../app-install.js";
 import { createAppProbes } from "../app-probes.js";
 import { deriveAppStatus, formatAppStatus } from "../app-status.js";
 import type { InstalledApp } from "../app-status.js";
@@ -60,9 +67,56 @@ const statusCmd = defineCommand({
   },
 });
 
+const installCmd = defineCommand({
+  meta: { description: "Install the bundled menubar app into ~/Applications" },
+  args: {
+    force: {
+      type: "boolean",
+      description: "Reinstall even when the same version is already installed",
+    },
+    launch: {
+      type: "boolean",
+      default: true,
+      description: "Launch the app after installing (use --no-launch to skip)",
+    },
+  },
+  run({ args }) {
+    const home = homedir();
+    const code = runAppInstall({
+      platform: process.platform,
+      home,
+      ...installOptionsFromArgs(args),
+      bundled: createBundledAppModule(),
+      probes: createAppProbes(),
+      system: createInstallSystem(home),
+      stdout: (line) => console.log(line),
+      stderr: (line) => console.error(line),
+    });
+    if (code !== 0) process.exit(code);
+  },
+});
+
+const uninstallCmd = defineCommand({
+  meta: { description: "Remove the menubar app and any launch-at-login item" },
+  run() {
+    const home = homedir();
+    const code = runAppUninstall({
+      platform: process.platform,
+      home,
+      probes: createAppProbes(),
+      system: createInstallSystem(home),
+      stdout: (line) => console.log(line),
+      stderr: (line) => console.error(line),
+    });
+    if (code !== 0) process.exit(code);
+  },
+});
+
 export default defineCommand({
   meta: { description: "Manage the macOS menubar app" },
   subCommands: {
     status: statusCmd,
+    install: installCmd,
+    uninstall: uninstallCmd,
   },
 });
