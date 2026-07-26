@@ -4,41 +4,45 @@ import {
   runAppInstall,
   runAppUninstall,
 } from "../app-install.js";
-import type { InstallSystem } from "../app-install.js";
+import type { MenubarAppSystem } from "../menubar-app-system.js";
 
 const HOME = "/Users/x";
 const APP = "/Users/x/Applications/pmdr.app";
 const ZIP = "/pkg/bundled-app/pmdr-app.zip";
-const STAGING = "/tmp/pmdr-install-1";
 
 interface FakeOptions {
   present?: string[];
-  failing?: keyof InstallSystem;
+  failing?: keyof MenubarAppSystem;
 }
 
-/** Records every side effect in order, so tests can assert on sequencing. */
+/**
+ * Records every side effect that actually happened, in order. A `removePath`
+ * on something that was never there is not a side effect, so it is not logged.
+ */
 function fakeSystem(options: FakeOptions = {}) {
   const calls: string[] = [];
   const present = new Set(options.present ?? []);
 
-  const record = <T>(name: keyof InstallSystem, detail: string, result: T): T => {
+  const record = (name: keyof MenubarAppSystem, detail: string): void => {
     calls.push(detail);
     if (options.failing === name) throw new Error(`${name} blew up`);
-    return result;
   };
 
-  const system: InstallSystem = {
-    exists: (path) => present.has(path),
-    mkdtemp: () => record("mkdtemp", "mkdtemp", STAGING),
-    mkdirp: (dir) => record("mkdirp", `mkdirp ${dir}`, undefined),
-    remove: (path) => record("remove", `remove ${path}`, undefined),
-    move: (from, to) => record("move", `move ${from} -> ${to}`, undefined),
-    extract: (zip, dest) => {
-      present.add(`${dest}/pmdr.app`);
-      return record("extract", `extract ${zip} -> ${dest}`, undefined);
+  const system: MenubarAppSystem = {
+    replaceBundle: ({ zipPath, appPath, beforeSwap }) => {
+      record("replaceBundle", `replace ${zipPath} -> ${appPath}`);
+      beforeSwap();
+      present.add(appPath);
     },
-    quitApp: () => record("quitApp", "quit", undefined),
-    launchApp: (path) => record("launchApp", `launch ${path}`, undefined),
+    removePath: (path) => {
+      if (!present.has(path)) return false;
+      record("removePath", `remove ${path}`);
+      present.delete(path);
+      return true;
+    },
+    quitApp: () => record("quitApp", "quit"),
+    launchApp: (path) => record("launchApp", `launch ${path}`),
+    writeLoginItem: (path) => record("writeLoginItem", `write ${path}`),
   };
 
   return { system, calls, present };
@@ -126,23 +130,14 @@ describe("pmdr app install", () => {
     expect(calls).not.toEqual([]);
   });
 
-  it("stages the extract, quits the running app, then swaps it into place", () => {
+  it("replaces the bundle, quitting the running app as part of the swap", () => {
     const { code, out, calls } = harness(
       { bundledVersion: "0.5.0", installedVersion: "0.4.1", running: true },
       fakeSystem({ present: [APP] }),
     );
 
     expect(code).toBe(0);
-    expect(calls).toEqual([
-      "mkdtemp",
-      `extract ${ZIP} -> ${STAGING}`,
-      "quit",
-      "mkdirp /Users/x/Applications",
-      `remove ${APP}`,
-      `move ${STAGING}/pmdr.app -> ${APP}`,
-      `remove ${STAGING}`,
-      `launch ${APP}`,
-    ]);
+    expect(calls).toEqual([`replace ${ZIP} -> ${APP}`, "quit", `launch ${APP}`]);
     expect(out.join("\n")).toContain("0.5.0");
   });
 
@@ -159,19 +154,16 @@ describe("pmdr app install", () => {
     expect(calls.some((call) => call.startsWith("launch"))).toBe(false);
   });
 
-  it("fails, cleans up staging and leaves the install alone when the extract fails", () => {
+  it("fails without killing the running app when the replacement cannot be put in place", () => {
     const { code, err, calls } = harness(
       { bundledVersion: "0.5.0", installedVersion: "0.4.1", running: true },
-      fakeSystem({ present: [APP], failing: "extract" }),
+      fakeSystem({ present: [APP], failing: "replaceBundle" }),
     );
 
     expect(code).toBe(1);
-    expect(err.join("\n")).toContain("extract blew up");
-    expect(calls).toEqual([
-      "mkdtemp",
-      `extract ${ZIP} -> ${STAGING}`,
-      `remove ${STAGING}`,
-    ]);
+    expect(err.join("\n")).toContain("replaceBundle blew up");
+    // The whole point of the beforeSwap hook: a failed replace never quits.
+    expect(calls).toEqual([`replace ${ZIP} -> ${APP}`]);
   });
 
   it("says the app installed but could not launch, without a stack trace", () => {
@@ -184,16 +176,6 @@ describe("pmdr app install", () => {
     expect(err.join("\n")).toContain("installed but could not be launched");
     expect(err.join("\n")).toContain("launchApp blew up");
     expect(code).toBe(1);
-  });
-
-  it("fails when the swap into Applications fails", () => {
-    const { code, err } = harness(
-      { bundledVersion: "0.5.0" },
-      fakeSystem({ failing: "move" }),
-    );
-
-    expect(code).toBe(1);
-    expect(err.join("\n")).toContain("move blew up");
   });
 });
 
@@ -256,11 +238,11 @@ describe("pmdr app uninstall", () => {
   it("fails loudly when the bundle cannot be removed", () => {
     const { code, err } = uninstallHarness(
       {},
-      fakeSystem({ present: [APP], failing: "remove" }),
+      fakeSystem({ present: [APP], failing: "removePath" }),
     );
 
     expect(code).toBe(1);
-    expect(err.join("\n")).toContain("remove blew up");
+    expect(err.join("\n")).toContain("removePath blew up");
   });
 });
 

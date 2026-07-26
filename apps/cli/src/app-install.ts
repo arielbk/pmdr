@@ -1,92 +1,16 @@
-import { execFileSync } from "node:child_process";
 import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  renameSync,
-  rmSync,
-} from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-import {
-  APP_BUNDLE_ID,
-  APP_BUNDLE_NAME,
-  appProcessPattern,
   installedAppPath,
   loginItemPlistPath,
 } from "./app-probes.js";
 import { compareVersions } from "./app-status.js";
 import type { InstalledApp } from "./app-status.js";
 import type { BundledApp } from "./bundled-app.js";
+import type { MenubarAppSystem } from "./menubar-app-system.js";
 
 export const NON_MACOS_MESSAGE =
   "pmdr app: the menubar app is macOS only — nothing to install on this platform";
 export const NON_MACOS_UNINSTALL_MESSAGE =
   "pmdr app: the menubar app is macOS only — nothing to uninstall on this platform";
-
-/** Every side effect installing the app needs, injected so orchestration is testable. */
-export interface InstallSystem {
-  exists(path: string): boolean;
-  mkdtemp(): string;
-  mkdirp(dir: string): void;
-  remove(path: string): void;
-  move(from: string, to: string): void;
-  extract(zipPath: string, destDir: string): void;
-  quitApp(): void;
-  launchApp(appPath: string): void;
-}
-
-/**
- * The real macOS side effects. Staging happens *inside* `~/Applications` rather
- * than `/tmp` so the swap is a same-volume `rename` — copying across volumes is
- * what breaks a bundle's symlinks, xattrs and therefore its code signature.
- */
-export function createInstallSystem(home: string = homedir()): InstallSystem {
-  const applications = dirname(installedAppPath(home));
-
-  return {
-    exists: (path) => existsSync(path),
-    mkdtemp() {
-      mkdirSync(applications, { recursive: true });
-      return mkdtempSync(join(applications, ".pmdr-install-"));
-    },
-    mkdirp: (dir) => {
-      mkdirSync(dir, { recursive: true });
-    },
-    remove: (path) => {
-      rmSync(path, { recursive: true, force: true });
-    },
-    move: (from, to) => {
-      renameSync(from, to);
-    },
-    extract: (zipPath, destDir) => {
-      execFileSync("/usr/bin/ditto", ["-x", "-k", zipPath, destDir], {
-        stdio: ["ignore", "ignore", "pipe"],
-      });
-    },
-    quitApp() {
-      try {
-        execFileSync(
-          "/usr/bin/osascript",
-          ["-e", `tell application id "${APP_BUNDLE_ID}" to quit`],
-          { stdio: "ignore" },
-        );
-      } catch {
-        // Not every build answers AppleScript; a signal is the honest fallback.
-        try {
-          execFileSync("/usr/bin/pkill", ["-f", appProcessPattern(installedAppPath(home))], {
-            stdio: "ignore",
-          });
-        } catch {
-          // pkill exits non-zero when nothing matched — already gone, fine.
-        }
-      }
-    },
-    launchApp: (appPath) => {
-      execFileSync("/usr/bin/open", ["-a", appPath], { stdio: "ignore" });
-    },
-  };
-}
 
 export interface AppInstallRunDeps {
   platform: string;
@@ -95,7 +19,7 @@ export interface AppInstallRunDeps {
   noLaunch?: boolean;
   bundled: { locate(): BundledApp };
   probes: { probeInstalled(): InstalledApp; probeRunning(): boolean };
-  system: InstallSystem;
+  system: MenubarAppSystem;
   stdout: (line: string) => void;
   stderr: (line: string) => void;
 }
@@ -125,27 +49,20 @@ export function runAppInstall(deps: AppInstallRunDeps): number {
     return 0;
   }
 
-  const staging = deps.system.mkdtemp();
   try {
-    deps.system.extract(bundled.zipPath, staging);
-    const staged = join(staging, APP_BUNDLE_NAME);
-    if (!deps.system.exists(staged)) {
-      throw new Error(`extracted archive contained no ${APP_BUNDLE_NAME}`);
-    }
-
-    // Quit only once we have a good replacement staged, so a failed extract
-    // never leaves the user with a killed app and nothing to launch.
-    if (deps.probes.probeRunning()) deps.system.quitApp();
-
-    deps.system.mkdirp(dirname(appPath));
-    if (deps.system.exists(appPath)) deps.system.remove(appPath);
-    deps.system.move(staged, appPath);
+    deps.system.replaceBundle({
+      zipPath: bundled.zipPath,
+      appPath,
+      // Quit only once a good replacement is staged, so a failed extract never
+      // leaves the user with a killed app and nothing to launch.
+      beforeSwap: () => {
+        if (deps.probes.probeRunning()) deps.system.quitApp();
+      },
+    });
   } catch (error) {
     deps.stderr(`pmdr app install: ${messageOf(error)}`);
-    tryRemove(deps.system, staging);
     return 1;
   }
-  tryRemove(deps.system, staging);
 
   deps.stdout(`App: ${bundled.version} installed at ${appPath}`);
 
@@ -180,7 +97,7 @@ export interface AppUninstallRunDeps {
   platform: string;
   home: string;
   probes: { probeRunning(): boolean };
-  system: InstallSystem;
+  system: MenubarAppSystem;
   stdout: (line: string) => void;
   stderr: (line: string) => void;
 }
@@ -198,16 +115,10 @@ export function runAppUninstall(deps: AppUninstallRunDeps): number {
 
   try {
     if (deps.probes.probeRunning()) deps.system.quitApp();
-    if (deps.system.exists(appPath)) {
-      deps.system.remove(appPath);
-      removed.push(appPath);
-    }
+    if (deps.system.removePath(appPath)) removed.push(appPath);
     // The login item points at the bundle we just removed, so it goes too —
     // otherwise login would keep trying to launch an app that isn't there.
-    if (deps.system.exists(plistPath)) {
-      deps.system.remove(plistPath);
-      removed.push(plistPath);
-    }
+    if (deps.system.removePath(plistPath)) removed.push(plistPath);
   } catch (error) {
     deps.stderr(`pmdr app uninstall: ${messageOf(error)}`);
     return 1;
@@ -223,13 +134,4 @@ export function runAppUninstall(deps: AppUninstallRunDeps): number {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/** Staging cleanup must never mask the real outcome of the install. */
-function tryRemove(system: InstallSystem, path: string): void {
-  try {
-    system.remove(path);
-  } catch {
-    // best effort — a leftover temp dir is not worth failing the install over
-  }
 }

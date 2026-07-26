@@ -9,13 +9,9 @@ import {
   installedAppPath,
   loginItemPlistPath,
 } from "../app-probes.js";
-import {
-  createLoginItemSystem,
-  loginActionFromArgs,
-  loginItemPlist,
-  runAppLogin,
-} from "../login-item.js";
-import type { LoginItemSystem } from "../login-item.js";
+import { loginActionFromArgs, loginItemPlist, runAppLogin } from "../login-item.js";
+import { createMenubarAppSystem } from "../menubar-app-system.js";
+import type { MenubarAppSystem } from "../menubar-app-system.js";
 
 const HOME = "/Users/x";
 const APP = "/Users/x/Applications/pmdr.app";
@@ -23,31 +19,37 @@ const PLIST = "/Users/x/Library/LaunchAgents/dev.pmdr.menubar.plist";
 
 interface FakeOptions {
   present?: string[];
-  failing?: keyof LoginItemSystem;
+  failing?: keyof MenubarAppSystem;
 }
 
-/** Records every side effect in order, so tests can assert on sequencing. */
+/**
+ * Records every side effect that actually happened, in order. A `removePath`
+ * on something that was never there is not a side effect, so it is not logged.
+ */
 function fakeSystem(options: FakeOptions = {}) {
   const calls: string[] = [];
   const written = new Map<string, string>();
   const present = new Set(options.present ?? []);
 
-  const record = (name: keyof LoginItemSystem, detail: string): void => {
+  const record = (name: keyof MenubarAppSystem, detail: string): void => {
     calls.push(detail);
     if (options.failing === name) throw new Error(`${name} blew up`);
   };
 
-  const system: LoginItemSystem = {
-    exists: (path) => present.has(path),
-    mkdirp: (dir) => record("mkdirp", `mkdirp ${dir}`),
-    writeFile: (path, content) => {
-      record("writeFile", `write ${path}`);
+  const system: MenubarAppSystem = {
+    replaceBundle: ({ appPath }) => record("replaceBundle", `replace ${appPath}`),
+    removePath: (path) => {
+      if (!present.has(path)) return false;
+      record("removePath", `remove ${path}`);
+      present.delete(path);
+      return true;
+    },
+    quitApp: () => record("quitApp", "quit"),
+    launchApp: (path) => record("launchApp", `launch ${path}`),
+    writeLoginItem: (path, content) => {
+      record("writeLoginItem", `write ${path}`);
       written.set(path, content);
       present.add(path);
-    },
-    remove: (path) => {
-      record("remove", `remove ${path}`);
-      present.delete(path);
     },
   };
 
@@ -123,7 +125,7 @@ describe("pmdr app login --enable", () => {
     const { code, out, calls, written } = harness();
 
     expect(code).toBe(0);
-    expect(calls).toEqual(["mkdirp /Users/x/Library/LaunchAgents", `write ${PLIST}`]);
+    expect(calls).toEqual([`write ${PLIST}`]);
     expect(written.get(PLIST)).toContain(`${APP}/Contents/MacOS/pmdr`);
     expect(out.join("\n")).toContain("Launch at login: enabled");
   });
@@ -198,20 +200,20 @@ describe("login flag parsing", () => {
 
 describe("pmdr app login failures", () => {
   it("fails loudly when the plist cannot be written", () => {
-    const { code, err } = harness({}, fakeSystem({ failing: "writeFile" }));
+    const { code, err } = harness({}, fakeSystem({ failing: "writeLoginItem" }));
 
     expect(code).toBe(1);
-    expect(err.join("\n")).toContain("writeFile blew up");
+    expect(err.join("\n")).toContain("writeLoginItem blew up");
   });
 
   it("fails loudly when the plist cannot be removed", () => {
     const { code, err } = harness(
       { action: "disable" },
-      fakeSystem({ present: [PLIST], failing: "remove" }),
+      fakeSystem({ present: [PLIST], failing: "removePath" }),
     );
 
     expect(code).toBe(1);
-    expect(err.join("\n")).toContain("remove blew up");
+    expect(err.join("\n")).toContain("removePath blew up");
   });
 });
 
@@ -231,7 +233,7 @@ describe("login item round-trip on a real filesystem", () => {
         home,
         action,
         probes,
-        system: createLoginItemSystem(),
+        system: createMenubarAppSystem(home),
         stdout: () => {},
         stderr: () => {},
       });

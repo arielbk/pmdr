@@ -3,7 +3,8 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createInstallSystem, runAppInstall } from "../app-install.js";
+import { runAppInstall } from "../app-install.js";
+import { createMenubarAppSystem } from "../menubar-app-system.js";
 import { createAppProbes, installedAppPath } from "../app-probes.js";
 import { bundledAppDir, createBundledAppModule } from "../bundled-app.js";
 
@@ -34,7 +35,7 @@ describe.skipIf(!runnable)("installing the real bundled app", () => {
       bundled: createBundledAppModule(),
       // Real filesystem probes against the fake home; never touches the real one.
       probes: createAppProbes({ home, processRunning: () => false }),
-      system: createInstallSystem(home),
+      system: createMenubarAppSystem(home),
       stdout: (line) => out.push(line),
       stderr: (line) => err.push(line),
     });
@@ -71,7 +72,7 @@ describe.skipIf(!runnable)("installing the real bundled app", () => {
         noLaunch: true,
         bundled: createBundledAppModule(),
         probes: createAppProbes({ home: home as string, processRunning: () => false }),
-        system: createInstallSystem(home as string),
+        system: createMenubarAppSystem(home as string),
         stdout: (line) => out.push(line),
         stderr: () => {},
       });

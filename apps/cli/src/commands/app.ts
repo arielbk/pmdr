@@ -1,7 +1,6 @@
 import { homedir } from "node:os";
 import { defineCommand } from "citty";
 import {
-  createInstallSystem,
   installOptionsFromArgs,
   runAppInstall,
   runAppUninstall,
@@ -10,7 +9,8 @@ import { createAppProbes } from "../app-probes.js";
 import { deriveAppStatus, formatAppStatus } from "../app-status.js";
 import type { InstalledApp } from "../app-status.js";
 import { createBundledAppModule } from "../bundled-app.js";
-import { createLoginItemSystem, loginActionFromArgs, runAppLogin } from "../login-item.js";
+import { loginActionFromArgs, runAppLogin } from "../login-item.js";
+import { createMenubarAppSystem } from "../menubar-app-system.js";
 import type { BundledApp } from "../bundled-app.js";
 
 export const NON_MACOS_MESSAGE =
@@ -89,7 +89,7 @@ const installCmd = defineCommand({
       ...installOptionsFromArgs(args),
       bundled: createBundledAppModule(),
       probes: createAppProbes(),
-      system: createInstallSystem(home),
+      system: createMenubarAppSystem(home),
       stdout: (line) => console.log(line),
       stderr: (line) => console.error(line),
     });
@@ -116,7 +116,7 @@ const loginCmd = defineCommand({
       home,
       action: parsed.action,
       probes: createAppProbes(),
-      system: createLoginItemSystem(),
+      system: createMenubarAppSystem(home),
       stdout: (line) => console.log(line),
       stderr: (line) => console.error(line),
     });
@@ -132,7 +132,7 @@ const uninstallCmd = defineCommand({
       platform: process.platform,
       home,
       probes: createAppProbes(),
-      system: createInstallSystem(home),
+      system: createMenubarAppSystem(home),
       stdout: (line) => console.log(line),
       stderr: (line) => console.error(line),
     });

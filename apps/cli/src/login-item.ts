@@ -1,7 +1,6 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
 import { APP_BUNDLE_ID, appBinaryPath, loginItemPlistPath } from "./app-probes.js";
 import type { InstalledApp } from "./app-status.js";
+import type { MenubarAppSystem } from "./menubar-app-system.js";
 
 /**
  * A LaunchAgent that runs the installed app binary directly at login. We invoke
@@ -29,20 +28,12 @@ export function loginItemPlist(binaryPath: string): string {
 export const NON_MACOS_LOGIN_MESSAGE =
   "pmdr app: launch at login is macOS only — nothing to configure on this platform";
 
-/** The filesystem side effects the login item needs, injected so this is testable. */
-export interface LoginItemSystem {
-  exists(path: string): boolean;
-  mkdirp(dir: string): void;
-  writeFile(path: string, content: string): void;
-  remove(path: string): void;
-}
-
 export interface AppLoginRunDeps {
   platform: string;
   home: string;
   action: "enable" | "disable";
   probes: { probeInstalled(): InstalledApp };
-  system: LoginItemSystem;
+  system: MenubarAppSystem;
   stdout: (line: string) => void;
   stderr: (line: string) => void;
 }
@@ -60,7 +51,7 @@ export function runAppLogin(deps: AppLoginRunDeps): number {
     // Disabling must work even with the app already gone — otherwise an
     // uninstall could strand an agent nobody can turn off.
     try {
-      if (deps.system.exists(plistPath)) deps.system.remove(plistPath);
+      deps.system.removePath(plistPath);
     } catch (error) {
       deps.stderr(`pmdr app login: ${messageOf(error)}`);
       return 1;
@@ -81,8 +72,10 @@ export function runAppLogin(deps: AppLoginRunDeps): number {
   }
 
   try {
-    deps.system.mkdirp(dirname(plistPath));
-    deps.system.writeFile(plistPath, loginItemPlist(appBinaryPath(installed.appPath)));
+    deps.system.writeLoginItem(
+      plistPath,
+      loginItemPlist(appBinaryPath(installed.appPath)),
+    );
   } catch (error) {
     deps.stderr(`pmdr app login: ${messageOf(error)}`);
     return 1;
@@ -107,20 +100,4 @@ export function loginActionFromArgs(args: {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/** The real filesystem. Writes are per-user, so no privilege escalation ever. */
-export function createLoginItemSystem(): LoginItemSystem {
-  return {
-    exists: (path) => existsSync(path),
-    mkdirp: (dir) => {
-      mkdirSync(dir, { recursive: true });
-    },
-    writeFile: (path, content) => {
-      writeFileSync(path, content, "utf8");
-    },
-    remove: (path) => {
-      rmSync(path, { force: true });
-    },
-  };
 }

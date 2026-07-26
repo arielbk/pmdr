@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createAppProbes } from "./app-probes.js";
-import { createInstallSystem, runAppInstall } from "./app-install.js";
+import { runAppInstall } from "./app-install.js";
+import { createMenubarAppSystem } from "./menubar-app-system.js";
 import { deriveAppStatus } from "./app-status.js";
 import { createBundledAppModule } from "./bundled-app.js";
 import { defaultConfigDir } from "./config.js";
@@ -188,7 +189,7 @@ export async function maybeOfferBundledApp(
           home,
           bundled,
           probes,
-          system: createInstallSystem(home),
+          system: createMenubarAppSystem(home),
           stdout: (line) => console.log(line),
           stderr: (line) => console.error(line),
         }),
