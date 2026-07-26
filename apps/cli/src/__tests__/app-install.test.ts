@@ -50,7 +50,6 @@ function fakeSystem(options: FakeOptions = {}) {
 
 function harness(
   overrides: {
-    platform?: string;
     force?: boolean;
     noLaunch?: boolean;
     bundledVersion?: string | null;
@@ -65,7 +64,6 @@ function harness(
   const installedVersion = overrides.installedVersion ?? null;
 
   const code = runAppInstall({
-    platform: overrides.platform ?? "darwin",
     home: HOME,
     force: overrides.force,
     noLaunch: overrides.noLaunch,
@@ -91,15 +89,6 @@ function harness(
 }
 
 describe("pmdr app install", () => {
-  it("fails with one clear line on a non-macOS machine", () => {
-    const { code, out, err } = harness({ platform: "linux" });
-
-    expect(code).toBe(1);
-    expect(out).toEqual([]);
-    expect(err).toHaveLength(1);
-    expect(err[0]).toContain("macOS");
-  });
-
   it("fails without touching the filesystem when this CLI carries no app", () => {
     const { code, err, calls } = harness({ bundledVersion: null });
 
@@ -182,14 +171,13 @@ describe("pmdr app install", () => {
 const PLIST = "/Users/x/Library/LaunchAgents/dev.pmdr.menubar.plist";
 
 function uninstallHarness(
-  overrides: { platform?: string; running?: boolean } = {},
+  overrides: { running?: boolean } = {},
   fake = fakeSystem(),
 ) {
   const out: string[] = [];
   const err: string[] = [];
 
   const code = runAppUninstall({
-    platform: overrides.platform ?? "darwin",
     home: HOME,
     probes: { probeRunning: () => overrides.running ?? false },
     system: fake.system,
@@ -201,14 +189,6 @@ function uninstallHarness(
 }
 
 describe("pmdr app uninstall", () => {
-  it("fails with one clear line on a non-macOS machine", () => {
-    const { code, err, calls } = uninstallHarness({ platform: "linux" });
-
-    expect(code).toBe(1);
-    expect(err[0]).toContain("macOS");
-    expect(calls).toEqual([]);
-  });
-
   it("quits the app, removes the bundle and removes the login item", () => {
     const { code, out, calls } = uninstallHarness(
       { running: true },

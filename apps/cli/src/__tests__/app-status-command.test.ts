@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { runAppStatus } from "../commands/app.js";
 
 function harness(overrides: {
-  platform?: string;
   json?: boolean;
   installedVersion?: string | null;
   bundledVersion?: string | null;
@@ -10,12 +9,10 @@ function harness(overrides: {
   loginItem?: boolean;
 }) {
   const out: string[] = [];
-  const err: string[] = [];
   const installedVersion = overrides.installedVersion ?? null;
   const bundledVersion = overrides.bundledVersion ?? null;
 
   const code = runAppStatus({
-    platform: overrides.platform ?? "darwin",
     json: overrides.json ?? false,
     bundled: {
       locate: () =>
@@ -40,24 +37,14 @@ function harness(overrides: {
       probeLoginItem: () => overrides.loginItem ?? false,
     },
     stdout: (line) => out.push(line),
-    stderr: (line) => err.push(line),
   });
 
-  return { code, out, err };
+  return { code, out };
 }
 
 describe("pmdr app status", () => {
-  it("fails with one clear line on a non-macOS machine", () => {
-    const { code, out, err } = harness({ platform: "linux" });
-
-    expect(code).toBe(1);
-    expect(out).toEqual([]);
-    expect(err).toHaveLength(1);
-    expect(err[0]).toContain("macOS");
-  });
-
   it("emits one line of machine-readable JSON with --json", () => {
-    const { code, out, err } = harness({
+    const { code, out } = harness({
       json: true,
       installedVersion: "0.4.1",
       bundledVersion: "0.5.0",
@@ -66,7 +53,6 @@ describe("pmdr app status", () => {
     });
 
     expect(code).toBe(0);
-    expect(err).toEqual([]);
     expect(out).toHaveLength(1);
     expect(JSON.parse(out[0]!)).toEqual({
       install: "stale",

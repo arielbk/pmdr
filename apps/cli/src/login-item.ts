@@ -25,11 +25,7 @@ export function loginItemPlist(binaryPath: string): string {
 `;
 }
 
-export const NON_MACOS_LOGIN_MESSAGE =
-  "pmdr app: launch at login is macOS only — nothing to configure on this platform";
-
 export interface AppLoginRunDeps {
-  platform: string;
   home: string;
   action: "enable" | "disable";
   probes: { probeInstalled(): InstalledApp };
@@ -40,11 +36,6 @@ export interface AppLoginRunDeps {
 
 /** Returns the process exit code so the command stays testable end to end. */
 export function runAppLogin(deps: AppLoginRunDeps): number {
-  if (deps.platform !== "darwin") {
-    deps.stderr(NON_MACOS_LOGIN_MESSAGE);
-    return 1;
-  }
-
   const plistPath = loginItemPlistPath(deps.home);
 
   if (deps.action === "disable") {

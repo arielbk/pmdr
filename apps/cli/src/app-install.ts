@@ -7,13 +7,7 @@ import type { InstalledApp } from "./app-status.js";
 import type { BundledApp } from "./bundled-app.js";
 import type { MenubarAppSystem } from "./menubar-app-system.js";
 
-export const NON_MACOS_MESSAGE =
-  "pmdr app: the menubar app is macOS only — nothing to install on this platform";
-export const NON_MACOS_UNINSTALL_MESSAGE =
-  "pmdr app: the menubar app is macOS only — nothing to uninstall on this platform";
-
 export interface AppInstallRunDeps {
-  platform: string;
   home: string;
   force?: boolean;
   noLaunch?: boolean;
@@ -26,11 +20,6 @@ export interface AppInstallRunDeps {
 
 /** Returns the process exit code so the command stays testable end to end. */
 export function runAppInstall(deps: AppInstallRunDeps): number {
-  if (deps.platform !== "darwin") {
-    deps.stderr(NON_MACOS_MESSAGE);
-    return 1;
-  }
-
   const bundled = deps.bundled.locate();
   if (!bundled.present) {
     deps.stderr(`pmdr app install: ${bundled.reason}`);
@@ -94,7 +83,6 @@ export function installOptionsFromArgs(args: {
 }
 
 export interface AppUninstallRunDeps {
-  platform: string;
   home: string;
   probes: { probeRunning(): boolean };
   system: MenubarAppSystem;
@@ -104,11 +92,6 @@ export interface AppUninstallRunDeps {
 
 /** Returns the process exit code so the command stays testable end to end. */
 export function runAppUninstall(deps: AppUninstallRunDeps): number {
-  if (deps.platform !== "darwin") {
-    deps.stderr(NON_MACOS_UNINSTALL_MESSAGE);
-    return 1;
-  }
-
   const appPath = installedAppPath(deps.home);
   const plistPath = loginItemPlistPath(deps.home);
   const removed: string[] = [];

@@ -183,9 +183,10 @@ export async function maybeOfferBundledApp(
         if (isCancel(answer)) return "cancelled";
         return answer ? "yes" : "no";
       },
+      // Unreachable off macOS: `decideFirstRunPrompt` refuses to prompt there,
+      // and `offerAppInstall` only installs once someone has said yes.
       install: () =>
         runAppInstall({
-          platform: process.platform,
           home,
           bundled,
           probes,

@@ -29,7 +29,6 @@ describe.skipIf(!runnable)("installing the real bundled app", () => {
     const err: string[] = [];
 
     const code = runAppInstall({
-      platform: "darwin",
       home,
       noLaunch: true,
       bundled: createBundledAppModule(),
@@ -67,8 +66,7 @@ describe.skipIf(!runnable)("installing the real bundled app", () => {
     const install = () => {
       const out: string[] = [];
       const code = runAppInstall({
-        platform: "darwin",
-        home: home as string,
+          home: home as string,
         noLaunch: true,
         bundled: createBundledAppModule(),
         probes: createAppProbes({ home: home as string, processRunning: () => false }),

@@ -58,7 +58,6 @@ function fakeSystem(options: FakeOptions = {}) {
 
 function harness(
   overrides: {
-    platform?: string;
     action?: "enable" | "disable";
     installedVersion?: string | null;
   } = {},
@@ -71,7 +70,6 @@ function harness(
     "installedVersion" in overrides ? (overrides.installedVersion ?? null) : "0.1.0";
 
   const code = runAppLogin({
-    platform: overrides.platform ?? "darwin",
     home: HOME,
     action: overrides.action ?? "enable",
     probes: {
@@ -138,16 +136,6 @@ describe("pmdr app login refusals", () => {
     expect(code).toBe(1);
     expect(calls).toEqual([]);
     expect(err.join("\n")).toContain("pmdr app install");
-  });
-
-  it("fails with one clear line on a non-macOS machine", () => {
-    const { code, out, err, calls } = harness({ platform: "linux" });
-
-    expect(code).toBe(1);
-    expect(out).toEqual([]);
-    expect(calls).toEqual([]);
-    expect(err).toHaveLength(1);
-    expect(err[0]).toContain("macOS");
   });
 });
 
@@ -229,7 +217,6 @@ describe("login item round-trip on a real filesystem", () => {
     mkdirSync(join(appPath, "Contents", "MacOS"), { recursive: true });
     const run = (action: "enable" | "disable") =>
       runAppLogin({
-        platform: "darwin",
         home,
         action,
         probes,
