@@ -9,6 +9,7 @@ import projectCmd from "./commands/project.js";
 import serveCmd from "./commands/serve.js";
 import configCmd from "./commands/config.js";
 import noteCmd from "./commands/note.js";
+import appCmd from "./commands/app.js";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
@@ -25,6 +26,7 @@ const subCommands = {
   serve: serveCmd,
   config: configCmd,
   note: noteCmd,
+  app: appCmd,
 };
 
 function isSubCommandInvocation(rawArgs: string[]): boolean {
