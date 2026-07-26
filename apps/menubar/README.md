@@ -43,10 +43,13 @@ apps/menubar/
 │   ├── main.swift               # app entry point, installs AppDelegate
 │   ├── AppDelegate.swift        # NSStatusItem + menu, drives the poller + tick timer
 │   ├── HotkeyManager.swift      # global Ctrl+Option+Command+P registration
+│   ├── LoginItemMenuItem.swift  # "Launch at login" menu item (checkmark mirrors the CLI)
+│   ├── NotificationWarningMenuItem.swift # menu item shown when notification permission is missing
 │   ├── CapturePanelController.swift    # quick-note capture overlay
 │   ├── NoteHistoryListView.swift # scrollable "Today · N" note history views
 │   ├── FloatingTimerPanelController.swift # floating timer overlay
 │   └── PmdrMenubarCore/         # framework consumed by the app + tests
+│       ├── LoginItemToggle.swift # cached launch-at-login state, toggled via `pmdr app login`
 │       ├── LoginShellEnvironment.swift # resolves user login-shell PATH for CLI subprocesses
 │       ├── NoteHistory.swift     # newest-first ordering + localized capture times
 │       ├── OverlaySurface.swift # shared dark surface for both floating overlays

@@ -5,6 +5,17 @@ import { describe, expect, it } from "vitest";
 describe("README CLI documentation", () => {
   const readme = readFileSync(join(__dirname, "../../../../README.md"), "utf8");
 
+  it("documents how the release gets the CI-built app and refuses to ship without it", () => {
+    // Deliberately not `\z` — that is a literal "z" in JS regex, which would
+    // truncate this section at the first "pmdr-app.zip".
+    const section = readme.match(/### Releasing\n([\s\S]*?)\n## /)?.[1];
+
+    expect(section).toContain("gh run download --name pmdr-app");
+    expect(section).toContain("--app-artifact");
+    expect(section).toContain("--allow-missing-app");
+    expect(section).toContain(".github/workflows/menubar-app.yml");
+  });
+
   it("documents serving the LAN status page", () => {
     const runningCliSection = readme.match(
       /## Running the CLI([\s\S]*?)(?:\n## |\z)/,
@@ -13,5 +24,37 @@ describe("README CLI documentation", () => {
     expect(runningCliSection).toContain("pmdr serve");
     expect(runningCliSection).toContain("--port");
     expect(runningCliSection).toContain("http://<machine-name>.local:<port>");
+  });
+
+  it("documents installing the bundled menubar app from the CLI", () => {
+    const section = readme.match(
+      /## The bundled menubar app([\s\S]*?)(?:\n## |\z)/,
+    )?.[1];
+
+    expect(section).toContain("pmdr app install");
+    expect(section).toContain("pmdr app status --json");
+    expect(section).toContain("pmdr app uninstall");
+    expect(section).toContain("~/Applications");
+  });
+
+  it("documents launching the menubar app at login", () => {
+    const section = readme.match(
+      /## The bundled menubar app([\s\S]*?)(?:\n## |\z)/,
+    )?.[1];
+
+    expect(section).toContain("pmdr app login --enable");
+    expect(section).toContain("pmdr app login --disable");
+    expect(section).toContain("~/Library/LaunchAgents");
+  });
+
+  it("documents the first-run install offer and how it is gated", () => {
+    const section = readme.match(
+      /## The bundled menubar app([\s\S]*?)(?:\n## |\z)/,
+    )?.[1];
+
+    expect(section).toContain("interactive terminal");
+    expect(section).toContain("never asks again");
+    expect(section).toContain("--json");
+    expect(section).toContain("TTY");
   });
 });

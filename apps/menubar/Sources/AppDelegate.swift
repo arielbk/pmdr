@@ -22,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     private var mutationChain: Task<Void, Never>?
     private var projects: [ProjectRecord] = []
     private var currentConfig: PmdrConfig = .defaults
+    private var loginItemToggle: LoginItemToggle?
+    private var notificationAuthorization: NotificationAuthorization = .granted
     private var didShowBinaryAlert = false
     private var didShowHotkeyAlert = false
     private let log = OSLog(subsystem: "dev.pmdr.menubar", category: "polling")
@@ -33,7 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         poller = StatusPoller(fetcher: client)
         let presenter = UserNotificationsPresenter()
         notifier = PhaseNotifier(presenter: presenter, soundPlayer: NSSoundPlayer())
-        Task { await presenter.requestAuthorization() }
+        loginItemToggle = LoginItemToggle(commands: client)
+        Task { [weak self] in
+            let outcome = await NotificationAuthorization.request(presenter)
+            await MainActor.run { self?.applyNotificationAuthorization(outcome) }
+        }
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
@@ -65,6 +71,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         Task { [weak self] in
             try? await self?.refreshFromCLI()
         }
+        Task { [weak self] in
+            await self?.refreshLoginItem()
+        }
+    }
+
+    /// Re-read the LaunchAgent state the CLI owns, then redraw the menu so the
+    /// checkmark reflects the plist rather than a stale local guess.
+    @MainActor
+    private func refreshLoginItem() async {
+        await loginItemToggle?.refresh()
+        rebuildMenu()
+    }
+
+    @MainActor
+    private func applyNotificationAuthorization(_ outcome: NotificationAuthorization) {
+        notificationAuthorization = outcome
+        if let message = outcome.problemMessage {
+            os_log("Notification authorization: %{public}@", log: log, type: .error, message)
+        }
+        rebuildMenu()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -175,6 +201,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         menu.addItem(.separator())
         menu.addItem(actionItem("Settings…", #selector(openSettings(_:)), keyEquivalent: ","))
         menu.addItem(actionItem("Manage projects…", #selector(openManageProjects(_:))))
+        // rebuildMenu only ever runs on the main thread; the toggle's cache is
+        // MainActor-isolated, so read it through the same assumption the
+        // optimistic-update path uses.
+        let loginEnabled = MainActor.assumeIsolated { loginItemToggle?.isEnabled ?? false }
+        menu.addItem(LoginItemMenuItem.make(
+            enabled: loginEnabled,
+            target: self,
+            action: #selector(toggleLoginItemFromMenu(_:))
+        ))
+        if let warning = NotificationWarningMenuItem.make(
+            for: notificationAuthorization,
+            target: self,
+            action: #selector(openNotificationSettings(_:))
+        ) {
+            menu.addItem(.separator())
+            menu.addItem(warning)
+        }
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: "Quit",
@@ -325,6 +368,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
                 self?.settingsController?.show(config: config)
             }
         }
+    }
+
+    @objc private func toggleLoginItemFromMenu(_ sender: NSMenuItem) {
+        Task { [weak self] in
+            await self?.performLoginItemToggle()
+        }
+    }
+
+    @MainActor
+    private func performLoginItemToggle() async {
+        guard let toggle = loginItemToggle else { return }
+        let outcome = await toggle.toggle()
+        if case .failed(let message) = outcome {
+            os_log("Failed to toggle launch at login: %{public}@", log: log, type: .error, message)
+            showLoginItemAlert(message)
+        }
+        rebuildMenu()
+    }
+
+    @objc private func openNotificationSettings(_ sender: NSMenuItem) {
+        let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")
+        guard let url else { return }
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func newProjectForChangeFromMenu(_ sender: NSMenuItem) {
@@ -553,6 +619,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         alert.runModal()
     }
 
+    /// The toggle shells out to `pmdr app login`, which fails loudly (for
+    /// instance when the app isn't installed in ~/Applications). Show its own
+    /// message rather than leaving a checkmark that silently didn't move.
+    private func showLoginItemAlert(_ message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Could not change launch at login"
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
     private func showHotkeyAlertIfNeeded() {
         guard !didShowHotkeyAlert else { return }
         didShowHotkeyAlert = true
@@ -602,6 +680,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         Task { await poller?.setMenuOpen(true) }
         Task { [weak self] in
             try? await self?.refreshFromCLI()
+        }
+        // The plist can change from outside the app (`pmdr app login`), so the
+        // checkmark is re-read every time the menu is shown.
+        Task { [weak self] in
+            await self?.refreshLoginItem()
         }
     }
 

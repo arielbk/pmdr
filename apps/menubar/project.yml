@@ -65,6 +65,8 @@ targets:
       - path: Sources/NoteHistoryListView.swift
       - path: Sources/BrandIcon.swift
       - path: Sources/MainMenu.swift
+      - path: Sources/LoginItemMenuItem.swift
+      - path: Sources/NotificationWarningMenuItem.swift
     dependencies:
       - target: PmdrMenubarCore
     settings:

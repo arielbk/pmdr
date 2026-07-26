@@ -14,6 +14,45 @@ public protocol SoundPlaying: Sendable {
     func play(named name: String)
 }
 
+/// Asks the user for permission to post banners. Abstracted so tests can drive
+/// the outcome without the real notification centre (which needs a signed,
+/// launched app bundle and cannot run under `xctest`).
+public protocol NotificationAuthorizing: Sendable {
+    /// `true` when the user allowed alerts.
+    func requestAuthorization() async throws -> Bool
+}
+
+/// The result of asking for notification permission.
+///
+/// The app's whole job is telling you when a block ends, so a request that was
+/// denied — or that failed outright — has to be surfaced rather than dropped.
+public enum NotificationAuthorization: Equatable {
+    case granted
+    case denied
+    case failed(String)
+
+    /// What to tell the user, or `nil` when there is nothing to say.
+    public var problemMessage: String? {
+        switch self {
+        case .granted:
+            return nil
+        case .denied:
+            return "pmdr can't post phase notifications. Turn them on in "
+                + "System Settings → Notifications → pmdr."
+        case .failed(let description):
+            return "pmdr could not ask for notification permission: \(description)"
+        }
+    }
+
+    public static func request(_ authorizer: NotificationAuthorizing) async -> NotificationAuthorization {
+        do {
+            return try await authorizer.requestAuthorization() ? .granted : .denied
+        } catch {
+            return .failed(String(describing: error))
+        }
+    }
+}
+
 /// Maps `StatusPoller.Event` sequences to phase-transition banners and sounds.
 ///
 /// Fires exactly two banners (and corresponding sounds), both at most once per
@@ -75,13 +114,6 @@ public struct UserNotificationsPresenter: NotificationPresenting {
         self.center = center
     }
 
-    /// Ask the user to allow alerts. Safe to call repeatedly — the system
-    /// only prompts once per install. The slice is "no settings, no sound
-    /// config" so we request only `.alert`.
-    public func requestAuthorization() async {
-        _ = try? await center.requestAuthorization(options: [.alert])
-    }
-
     public func present(title: String, body: String) async {
         let content = UNMutableNotificationContent()
         content.title = title
@@ -92,6 +124,16 @@ public struct UserNotificationsPresenter: NotificationPresenting {
             trigger: nil
         )
         try? await center.add(request)
+    }
+}
+
+extension UserNotificationsPresenter: NotificationAuthorizing {
+    /// Ask the user to allow alerts. Safe to call repeatedly — the system only
+    /// prompts once per install, and afterwards returns the standing answer.
+    /// The result is returned rather than discarded: an app that cannot notify
+    /// has to say so. We request only `.alert`.
+    public func requestAuthorization() async throws -> Bool {
+        try await center.requestAuthorization(options: [.alert])
     }
 }
 

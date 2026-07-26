@@ -108,6 +108,19 @@ public struct PmdrConfig: Equatable, Sendable {
     }
 }
 
+/// Mirror of the `pmdr app status --json` payload (`apps/cli/src/app-status.ts`).
+/// Only the fields the app actually acts on are modelled; the CLI never omits
+/// keys, it nulls them.
+public struct AppStatus: Equatable, Sendable {
+    /// Whether a `dev.pmdr.menubar` LaunchAgent plist is on disk. The plist's
+    /// presence *is* the login-item state — the CLI owns writing it.
+    public let loginItem: Bool
+
+    public init(loginItem: Bool) {
+        self.loginItem = loginItem
+    }
+}
+
 public enum PmdrClientError: Error, Equatable {
     /// `pmdr` could not be located on PATH (or at the provided absolute path).
     case binaryNotFound
@@ -206,6 +219,22 @@ public struct PmdrClient: Sendable {
         _ = try await run(arguments: ["config", "set", key, value])
     }
 
+    /// `pmdr app status --json` — the app's install/run/login-item state.
+    public func appStatus() async throws -> AppStatus {
+        let data = try await run(arguments: ["app", "status", "--json"])
+        return try Self.decodeAppStatus(from: data)
+    }
+
+    static func appLoginArguments(enable: Bool) -> [String] {
+        ["app", "login", enable ? "--enable" : "--disable"]
+    }
+
+    /// `pmdr app login --enable | --disable`. The CLI owns the LaunchAgent
+    /// plist; the app never writes it itself.
+    public func setAppLoginItem(enabled: Bool) async throws {
+        _ = try await run(arguments: Self.appLoginArguments(enable: enabled))
+    }
+
     public func archiveProject(_ name: String) async throws {
         _ = try await run(arguments: ["project", "archive", name])
     }
@@ -249,6 +278,10 @@ public struct PmdrClient: Sendable {
         let name: String
         let archived: Bool
         let createdAt: String
+    }
+
+    private struct RawAppStatus: Decodable {
+        let loginItem: Bool
     }
 
     private struct RawConfig: Decodable {
@@ -323,6 +356,15 @@ public struct PmdrClient: Sendable {
             }
         } catch {
             throw PmdrClientError.decodingFailed("invalid projects JSON: \(error)")
+        }
+    }
+
+    static func decodeAppStatus(from data: Data) throws -> AppStatus {
+        do {
+            let raw = try JSONDecoder().decode(RawAppStatus.self, from: data)
+            return AppStatus(loginItem: raw.loginItem)
+        } catch {
+            throw PmdrClientError.decodingFailed("invalid app status JSON: \(error)")
         }
     }
 

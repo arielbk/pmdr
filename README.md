@@ -50,11 +50,16 @@ pnpm build        # rebuild the CLI
 ### Releasing
 
 ```sh
-pnpm release:pmdr -- --dry-run --version X.Y.Z   # verify the tarball
-pnpm release:pmdr -- --version X.Y.Z             # stamp, build, publish to npm
+gh run download --name pmdr-app --dir apps/cli/bundled-app   # take the CI-built menubar app
+pnpm release:pmdr -- --dry-run --version X.Y.Z               # verify the tarball
+pnpm release:pmdr -- --version X.Y.Z                         # stamp, build, publish to npm
 ```
 
 The flow lives in `apps/cli/src/release.ts`; it stamps `apps/cli/package.json`, builds, `npm pack`s to `dist/releases/`, and publishes. Tagging and the GitHub release are manual.
+
+A published release must carry the menubar app: the release refuses to stamp or publish unless `apps/cli/bundled-app/pmdr-app.zip` and its version sidecar are in place, and after packing it checks that the tarball really contains them. Get the zip either from CI (the command above, or `--app-artifact <downloaded-dir>` to let the release stage it for you) or locally with `pnpm menubar:zip`. `--allow-missing-app` publishes a CLI-only release on purpose.
+
+`.github/workflows/menubar-app.yml` is where the app binary comes from: a macOS runner runs `xcodegen`, builds Release, checks the zip with `scripts/verify-menubar-zip.sh` (signature valid, every Mach-O universal), uploads it as the `pmdr-app` artifact, and then runs the JS tests, lint and typecheck with the zip present so the install integration test actually runs.
 
 ## Running the CLI
 
@@ -77,6 +82,26 @@ Open as many terminals as you want — they all read and write the same session.
 `pmdr serve --port <port>` to choose another port, then open
 `http://<machine-name>.local:<port>` from another device on the same local
 network to view the live status page.
+
+## The bundled menubar app
+
+The npm package ships the built menubar app, so a global CLI install carries both surfaces:
+
+```sh
+pmdr app status        # is the app installed, is it running, is it up to date
+pmdr app status --json # same, machine-readable
+pmdr app install       # extract the bundled app to ~/Applications and launch it
+pmdr app install --force --no-launch
+pmdr app login --enable   # launch the app automatically at login
+pmdr app login --disable  # stop launching it at login
+pmdr app uninstall     # remove the app and any launch-at-login item
+```
+
+`pmdr app login --enable` writes a `dev.pmdr.menubar` LaunchAgent to `~/Library/LaunchAgents` that runs the installed app binary with `RunAtLoad`; `--disable` removes it. That plist is the single source of truth for the setting — `pmdr app status --json` reports it as `loginItem`, and the menubar app's own toggle goes through this same command. Enabling requires the app to be installed; disabling works regardless, so an uninstall can never strand an agent you cannot turn off. It takes effect at your next login rather than immediately.
+
+The first time you run plain `pmdr` in an interactive terminal with the app missing — or with an older one installed than the CLI ships — it offers to install and launch it for you. Decline once and it never asks again (the answer is remembered in `app-prompt.json` next to your config); `pmdr app install` is always there if you change your mind. The offer is suppressed whenever stdout or stdin is not a TTY and for any `--json` invocation, so scripts and agents are never blocked by it.
+
+`pmdr app install` is non-interactive and idempotent: reinstalling the version you already have is a no-op unless you pass `--force`. It quits a running app before replacing it, stages the extract next to the target inside `~/Applications`, then swaps it in — so a failed extract never leaves you without a working app. Everything is per-user, so no `sudo` is ever needed. These commands are macOS only and exit non-zero elsewhere.
 
 ## Running the menubar app
 

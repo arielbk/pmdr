@@ -394,10 +394,38 @@ describe("ProjectPickerOverlay — show-archived toggle and unarchive", () => {
 });
 
 describe("App — project picker integration", () => {
-  it("pressing p opens the project picker overlay", async () => {
-    const { lastFrame, stdin } = render(
-      <App getProjects={() => [alpha]} />,
+  // App defaults every store hook to the real ~/.local/state/pmdr. Unstubbed,
+  // these tests both clobbered the developer's own timer state and let their
+  // own leftovers pick the picker's starting row — a leaked active "alpha"
+  // shifts every row by one and silently retargets each keystroke. Pin all of
+  // them at a throwaway dir so the block is hermetic in either direction.
+  let homeDir: string;
+
+  beforeEach(() => {
+    homeDir = mkdtempSync(join(tmpdir(), "pmdr-tui-home-"));
+  });
+
+  afterEach(() => {
+    rmSync(homeDir, { recursive: true, force: true });
+  });
+
+  const renderApp = (props: React.ComponentProps<typeof App> = {}) =>
+    render(
+      <App
+        store={createStateModule(homeDir)}
+        resolveLastActiveProjectFn={() => null}
+        writeLastProjectFn={() => {}}
+        upsertProjectFn={(name) => ({
+          name,
+          archived: false,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })}
+        {...props}
+      />,
     );
+
+  it("pressing p opens the project picker overlay", async () => {
+    const { lastFrame, stdin } = renderApp({ getProjects: () => [alpha] });
 
     stdin.write("p");
     await flush();
@@ -406,9 +434,7 @@ describe("App — project picker integration", () => {
   });
 
   it("selecting a project from the picker shows it in the countdown view", async () => {
-    const { lastFrame, stdin } = render(
-      <App getProjects={() => [alpha]} />,
-    );
+    const { lastFrame, stdin } = renderApp({ getProjects: () => [alpha] });
 
     stdin.write("p");
     await flush();
@@ -427,21 +453,19 @@ describe("App — project picker integration", () => {
     const store = createStateModule(tmpDir);
 
     try {
-      const { stdin } = render(
-        <App
-          getProjects={() => [alpha]}
-          store={store}
-          readEffectiveConfigFn={() => ({
-            focusMinutes: 50,
-            shortBreakMinutes: 5,
-            longBreakMinutes: 15,
-            longBreakEvery: 4,
-            dailyGoal: 8,
-            focusEndSound: "Glass",
-            breakEndSound: "Submarine",
-          })}
-        />,
-      );
+      const { stdin } = renderApp({
+        getProjects: () => [alpha],
+        store,
+        readEffectiveConfigFn: () => ({
+          focusMinutes: 50,
+          shortBreakMinutes: 5,
+          longBreakMinutes: 15,
+          longBreakEvery: 4,
+          dailyGoal: 8,
+          focusEndSound: "Glass",
+          breakEndSound: "Submarine",
+        }),
+      });
 
       stdin.write("\x1B[B"); // past None to alpha
       await flush();
@@ -459,9 +483,10 @@ describe("App — project picker integration", () => {
       includeArchived ? [alpha, gamma] : [alpha],
     );
 
-    const { lastFrame, stdin } = render(
-      <App getProjects={getProjects} readStateFn={() => null} />,
-    );
+    const { lastFrame, stdin } = renderApp({
+      getProjects,
+      readStateFn: () => null,
+    });
 
     stdin.write("p");
     await flush();
@@ -489,13 +514,11 @@ describe("App — project picker integration", () => {
       unarchivedNames.add(name);
     });
 
-    const { lastFrame, stdin } = render(
-      <App
-        getProjects={getProjects}
-        unarchiveProjectFn={unarchiveSpy}
-        readStateFn={() => null}
-      />,
-    );
+    const { lastFrame, stdin } = renderApp({
+      getProjects,
+      unarchiveProjectFn: unarchiveSpy,
+      readStateFn: () => null,
+    });
 
     stdin.write("p");
     await flush();
@@ -524,13 +547,11 @@ describe("App — project picker integration", () => {
       archived.add(name);
     });
 
-    const { lastFrame, stdin } = render(
-      <App
-        getProjects={getProjects}
-        archiveProjectFn={archiveSpy}
-        readStateFn={() => null}
-      />,
-    );
+    const { lastFrame, stdin } = renderApp({
+      getProjects,
+      archiveProjectFn: archiveSpy,
+      readStateFn: () => null,
+    });
 
     stdin.write("p");
     await flush();

@@ -11,7 +11,8 @@
     "release:pmdr": "node apps/cli/src/release.ts",
     "brand:assets": "node scripts/generate-brand-assets.mjs",
     "menubar": "./scripts/menubar-run.sh",
-    "menubar:gen": "./scripts/menubar-gen.sh"
+    "menubar:gen": "./scripts/menubar-gen.sh",
+    "menubar:zip": "./scripts/build-menubar-zip.sh"
   },
   "devDependencies": {
     "@arielbk/pmdr": "workspace:*",
