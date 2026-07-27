@@ -32,6 +32,20 @@ open apps/menubar/pmdr-menubar.xcodeproj
 
 The app is configured with `LSUIElement = true`, so it appears only in the menubar — no Dock icon, no main window. Click the `pmdr` item in the menubar and choose **Quit** (⌘Q) to terminate.
 
+## Keys
+
+| Key | Where | Does |
+| --- | --- | --- |
+| ⌃⌥⌘N | anywhere | Summon or dismiss the note capture panel |
+| ⌃⌥⌘P | anywhere | Summon or dismiss the floating timer |
+| ⌥⌘Return | anywhere | Start / pause / resume the timer |
+| ⌘/ | capture panel | Toggle today's note history open and closed |
+| Return | capture panel | Save the note (`pmdr note …`) and dismiss |
+| Escape | capture panel | Dismiss without saving |
+| ⌘Q | menubar menu | Quit |
+
+The global bindings live in `AppDelegate.registerHotkey()`; the panel-local ⌘/ is the disclosure control's key equivalent in `CapturePanelController`.
+
 ## Layout
 
 ```

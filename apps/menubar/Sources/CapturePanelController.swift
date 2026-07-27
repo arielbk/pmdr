@@ -186,6 +186,19 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         return "Today's notes: \(count)"
     }
 
+    /// The panel-local shortcut for the disclosure control.
+    ///
+    /// ⌘/ rather than a bare key: the input has focus the whole time the panel is
+    /// up, so any unmodified key belongs to whatever note is being typed. It is
+    /// set as the button's key equivalent, which means AppKit routes it through
+    /// the same action as a click — one path, one enabled check.
+    static let historyKeyEquivalent = "/"
+    static let historyKeyEquivalentModifiers: NSEvent.ModifierFlags = [.command]
+
+    /// The hint on the control, so the shortcut is discoverable from the panel
+    /// rather than only from the release notes.
+    static let historyToolTip = "Show today's notes (⌘/)"
+
     /// The disclosure control's chevron: down while collapsed, up once the
     /// history is open. The accessibility description carries the state, so
     /// VoiceOver announces the action and tests can assert it.
@@ -411,6 +424,9 @@ final class CapturePanelController: NSObject, NSTextFieldDelegate, NSWindowDeleg
         history.target = self
         history.action = #selector(toggleHistory)
         history.setButtonType(.momentaryChange)
+        history.keyEquivalent = Self.historyKeyEquivalent
+        history.keyEquivalentModifierMask = Self.historyKeyEquivalentModifiers
+        history.toolTip = Self.historyToolTip
         history.setAccessibilityLabel(Self.historyAccessibilityLabel(forCount: nil))
 
         let icon = CaptureDragHandleImageView(frame: .zero)
