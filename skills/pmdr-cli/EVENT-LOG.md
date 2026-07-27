@@ -26,7 +26,7 @@ Join on `id` to reconstruct a single timer's lifecycle.
 
 ## Event semantics
 
-- `start` — `pmdr start` wrote a new record. Project on the event = project at start time (may be `(unassigned)`; can be reassigned later via the TUI's `p` command).
+- `start` — `pmdr start` wrote a new record. Project on the event = project at start time (may be `(unassigned)`; can be reassigned later with `pmdr project set <name>`).
 - `pause` / `resume` — explicit user pause/resume during a running timer.
 - `stop` — `pmdr stop` was called before expiry (abandoned timer). **No completion row will exist for this id.**
 - **No `stop` event on normal expiry.** For finished timers the completion row is the record. So: `start` + matching completion = finished; `start` + `stop` and no completion = abandoned.
