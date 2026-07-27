@@ -22,8 +22,6 @@ export interface StateRecord {
   id?: string;
 }
 
-export const DEFAULT_FOCUS_GOAL = 8;
-
 /** A pending (born-paused) break left untouched longer than this is treated as abandoned. */
 export const STALE_BREAK_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
 

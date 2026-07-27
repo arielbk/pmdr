@@ -12,7 +12,7 @@ The CLI owns the session state. The menubar app is a thin native shell over the 
 
 ```
 apps/
-  cli/        # `pmdr` binary — Node/TypeScript, citty + Ink TUI. Owns session state.
+  cli/        # `pmdr` binary — Node/TypeScript, citty. Owns session state.
   menubar/    # Native macOS menubar app (Swift / Xcode). Thin client over the CLI.
 packages/
   ui/                # Shared React component stubs

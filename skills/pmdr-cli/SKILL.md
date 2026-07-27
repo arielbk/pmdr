@@ -12,7 +12,7 @@ A pomodoro timer CLI. Binary is `pmdr` (installed globally from npm: `npm instal
 - Read commands (`status`, `today`, `project list`) accept `--json`. **Always prefer `--json`** when consuming output programmatically — the human format may change.
 - `pmdr start` is interactive by default (prompts for project via `@clack/prompts`). To run from an agent, **always** pass `--project <name>` AND `--no-interactive`. The project will be auto-created if it doesn't exist.
 - Errors → exit 1 with message on stderr. Success → exit 0.
-- `pmdr` with no subcommand launches an Ink TUI — **never invoke this from an agent**; it requires a TTY and blocks.
+- `pmdr` with no subcommand is a router: it runs `pmdr setup` on a fresh install *if* stdin and stdout are a TTY, attaches to a session already running, or otherwise starts one. From an agent it never onboards and never blocks — but prefer the explicit subcommands, so what you asked for does not depend on the machine's state.
 
 ## Commands
 
@@ -38,7 +38,7 @@ A pomodoro timer CLI. Binary is `pmdr` (installed globally from npm: `npm instal
 
 ## Important gotchas
 
-- **`pmdr start` blocks**: after initializing the timer, the foreground process runs a countdown loop that only resolves when the timer completes, is stopped externally, or the state file is cleared. From an agent, run it with `run_in_background: true` (Bash) — or call only the state-setup logic by invoking `start` then immediately backgrounding. Don't `await` it in a foreground tool call.
+- **`pmdr start` only blocks on a terminal**: the foreground countdown loop is skipped when stdout is not a TTY — an agent's `start` initializes the timer, prints one line pointing at `pmdr status --json`, and exits 0. Pass `--detach` to get the same behaviour silently, and on a real terminal.
 - **Only one timer at a time**: `start` errors if running or paused. Check `pmdr status --json` first; call `pmdr stop` if you need to reset.
 - **Reserved name**: `"(unassigned)"` cannot be used as a project name.
 - **State files** under `~/.local/state/pmdr/` (safe to read; don't write — use the CLI):
