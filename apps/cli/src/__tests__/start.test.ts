@@ -229,6 +229,8 @@ describe("countdownCompleteMessage", () => {
     expect(message).toContain("Break ready");
     expect(message).toContain("pmdr resume");
     expect(message).not.toMatch(/break started/i);
+    // There is no interactive timer to press space in any more.
+    expect(message).not.toMatch(/TUI/);
   });
 
   it("stays a plain completion when no pending break follows", () => {

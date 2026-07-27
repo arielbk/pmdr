@@ -156,7 +156,7 @@ export async function pickProject(options: {
 
 export function countdownCompleteMessage(file: StateRecord | null): string {
   if (file?.phase === "break" && file.pausedAt !== null) {
-    return "Pomodoro complete! Break ready — press space in the TUI or run `pmdr resume` to start it.";
+    return "Pomodoro complete! Break ready — run `pmdr resume` to start it.";
   }
   return "Pomodoro complete!";
 }
