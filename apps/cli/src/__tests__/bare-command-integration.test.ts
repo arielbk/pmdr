@@ -1,16 +1,10 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
-import { execFileSync, spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  symlinkSync,
-} from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { decideCountdown, SCRIPTED_TIMER_NOTE } from "../commands/start.js";
+import { ensureCliBuilt } from "./helpers/built-cli.js";
 
 describe("decideCountdown", () => {
   it("renders the live countdown on a terminal", () => {
@@ -52,21 +46,13 @@ describe("decideCountdown", () => {
  * of holding the pipe open for the whole pomodoro.
  */
 describe("plain `pmdr` with non-interactive streams", () => {
-  const testDir = dirname(fileURLToPath(import.meta.url));
-  const repoRoot = resolve(testDir, "../../../..");
-  const cliDist = join(repoRoot, "apps/cli/dist/index.js");
+  let cliDist: string;
   let tmpDir: string;
   let homeDir: string;
   let binDir: string;
 
   beforeAll(() => {
-    execFileSync("pnpm", ["--filter", "@arielbk/pmdr", "build"], {
-      cwd: repoRoot,
-      stdio: "pipe",
-    });
-    if (!existsSync(cliDist)) {
-      throw new Error(`build produced no CLI entrypoint at ${cliDist}`);
-    }
+    cliDist = ensureCliBuilt();
   });
 
   beforeEach(() => {

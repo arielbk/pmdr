@@ -8,11 +8,11 @@ import {
   symlinkSync,
   mkdirSync,
 } from "node:fs";
-import { spawnSync, execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { createStateModule } from "../state.js";
+import { ensureCliBuilt } from "./helpers/built-cli.js";
 import { getStatus, formatStatus } from "../commands/status.js";
 import type { StatusResult } from "../commands/status.js";
 
@@ -332,23 +332,14 @@ describe("formatStatus", () => {
 // ─── CLI integration ─────────────────────────────────────────────────────────
 
 describe("pmdr status --json", () => {
-  const testDir = dirname(fileURLToPath(import.meta.url));
-  const repoRoot = resolve(testDir, "../../../..");
-  const cliDist = join(repoRoot, "apps/cli/dist/index.js");
+  let cliDist: string;
   let tmpDir: string;
 
   beforeAll(() => {
-    // Filter by package name, not directory: `--filter cli` matches nothing and
-    // pnpm still exits 0, so this silently built nothing and the tests only
-    // passed off a stale local dist. On a clean checkout (CI) the `pmdr`
-    // symlink then dangled and every spawn came back with a null status.
-    execFileSync("pnpm", ["--filter", "@arielbk/pmdr", "build"], {
-      cwd: repoRoot,
-      stdio: "pipe",
-    });
-    if (!existsSync(cliDist)) {
-      throw new Error(`build produced no CLI entrypoint at ${cliDist}`);
-    }
+    // Shared with the other integration file, and locked: two concurrent
+    // `pnpm build` runs would have one delete `dist` from under the other's
+    // `pmdr` symlink. See `helpers/built-cli.ts`.
+    cliDist = ensureCliBuilt();
   });
 
   beforeEach(() => {
