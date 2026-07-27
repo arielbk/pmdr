@@ -1,20 +1,12 @@
 import { defineCommand } from "citty";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { createProjectsModule, type ProjectRecord } from "../projects.js";
 import { createMenubarApp, reportOutcome } from "../menubar-app.js";
 import { createSetupMarkerStore } from "../setup-state.js";
 import { createFirstRunPromptStore } from "../first-run-prompt.js";
 import type { AppInstallState } from "../app-status.js";
 import { cliVersion } from "../version.js";
 
-const STATE_DIR = join(homedir(), ".local", "state", "pmdr");
-const UNASSIGNED_PROJECT = "(unassigned)";
-const SKIP_VALUE = "__skip__";
-const NEW_PROJECT_VALUE = "__new__";
-
 export const NOT_A_TTY_MESSAGE =
-  "pmdr setup: onboarding needs an interactive terminal — set durations with `pmdr config set <key> <value>`, projects with `pmdr project add <name>`, and the menubar app with `pmdr app install`.";
+  "pmdr setup: onboarding needs an interactive terminal — install the menubar app with `pmdr app install`, and launch it at login with `pmdr app login --enable`.";
 
 export const CANCELLED_MESSAGE =
   "Setup cancelled. Run `pmdr setup` when you're ready.";
@@ -33,16 +25,6 @@ export interface SetupDeps {
   platform: string;
   version: string;
   confirm(message: string): Promise<Answer>;
-  /** A free-text answer, or null when the prompt was cancelled. */
-  askText(message: string): Promise<string | null>;
-  /** A chosen option value, or null when the prompt was cancelled. */
-  askSelect(
-    message: string,
-    options: Array<{ value: string; label: string; hint?: string }>,
-  ): Promise<string | null>;
-  listProjects(): ProjectRecord[];
-  upsertProject(name: string): ProjectRecord;
-  writeLastProject(name: string): void;
   appInstallState(): AppInstallState;
   installApp(): { stdout: string[]; stderr: string[]; code: number };
   setLoginItem(enabled: boolean): {
@@ -64,28 +46,23 @@ export type SetupResult =
   | { status: "cancelled" }
   | {
       status: "completed";
-      project: string | null;
       app: AppStepOutcome;
       loginItem: boolean;
     };
 
 /**
  * The onboarding `pmdr setup` runs, and that bare `pmdr` routes to on a fresh
- * install. Two steps only — a project to attribute sessions to, and the menubar
- * app — because everything else already has a good default and a one-liner
- * (`pmdr config set …`) for changing it. Asking about seven config keys up front
- * is how onboarding becomes something people quit halfway through.
+ * install. It has exactly one job: get the menubar app installed. The CLI
+ * itself needs no onboarding — every setting has a good default and a one-liner
+ * (`pmdr config set …`, `pmdr project add …`) for changing it, so asking about
+ * any of it up front would only be a question standing between someone and
+ * their first pomodoro.
  *
  * Every prompt can be cancelled, and a cancelled setup writes no marker: the
  * next bare `pmdr` should offer to onboard again rather than silently deciding
  * the job was done.
  */
 export async function runSetup(deps: SetupDeps): Promise<SetupResult> {
-  deps.stdout("Setting up pmdr. Two questions, both skippable.\n");
-
-  const project = await setupProject(deps);
-  if (project === "cancelled") return { status: "cancelled" };
-
   const app = await setupApp(deps);
   if (app === "cancelled") return { status: "cancelled" };
 
@@ -95,88 +72,35 @@ export async function runSetup(deps: SetupDeps): Promise<SetupResult> {
   deps.recordMarker();
 
   for (const line of summaryLines({
-    project,
     app: app.outcome,
     loginItem: app.loginItem,
   })) {
     deps.stdout(line);
   }
 
-  return {
-    status: "completed",
-    project,
-    app: app.outcome,
-    loginItem: app.loginItem,
-  };
-}
-
-/**
- * Picks the project new sessions get attributed to. Existing projects are
- * offered as a list — a fresh install has none, so that path goes straight to
- * asking for a name instead of showing a list with only "new…" in it.
- */
-async function setupProject(
-  deps: SetupDeps,
-): Promise<string | null | "cancelled"> {
-  const existing = deps.listProjects();
-
-  let name: string | null;
-  if (existing.length > 0) {
-    const selected = await deps.askSelect(
-      "Which project are your sessions for?",
-      [
-        ...existing.map((p) => ({ value: p.name, label: p.name })),
-        { value: NEW_PROJECT_VALUE, label: "new…" },
-        {
-          value: SKIP_VALUE,
-          label: "skip",
-          hint: "sessions land in (unassigned)",
-        },
-      ],
-    );
-    if (selected === null) return "cancelled";
-    if (selected === SKIP_VALUE) return null;
-    name =
-      selected === NEW_PROJECT_VALUE
-        ? await deps.askText("Project name:")
-        : selected;
-  } else {
-    name = await deps.askText(
-      "Which project are your sessions for? (blank to skip)",
-    );
-  }
-
-  if (name === null) return "cancelled";
-
-  const trimmed = name.trim();
-  if (!trimmed) return null;
-  if (trimmed.toLowerCase() === UNASSIGNED_PROJECT) {
-    deps.stderr(
-      `"${UNASSIGNED_PROJECT}" is reserved — skipping the project step.`,
-    );
-    return null;
-  }
-
-  const record = deps.upsertProject(trimmed);
-  // Written so the very next `pmdr start` picks it up without --project.
-  deps.writeLastProject(record.name);
-  return record.name;
+  return { status: "completed", app: app.outcome, loginItem: app.loginItem };
 }
 
 type AppStep = "cancelled" | { outcome: AppStepOutcome; loginItem: boolean };
 
 /**
- * Offers the bundled menubar app, then launch-at-login. Silent wherever the app
- * cannot exist — off macOS, or in a linked dev build with no bundled zip — so
- * setup never asks a question whose answer it could not act on.
+ * Offers the bundled menubar app, then launch-at-login. Asks nothing wherever
+ * the app cannot exist — off macOS, or in a linked dev build with no bundled
+ * zip — so setup never poses a question whose answer it could not act on.
  */
 async function setupApp(deps: SetupDeps): Promise<AppStep> {
   if (deps.platform !== "darwin") {
+    deps.stdout(
+      "The pmdr menubar app is macOS only — the CLI is all there is here.",
+    );
     return { outcome: "unavailable", loginItem: false };
   }
 
   const state = deps.appInstallState();
   if (state.bundledVersion === null) {
+    deps.stdout(
+      `This build has no menubar app bundled (${state.bundledReason ?? "reason unknown"}) — the CLI is ready to use.`,
+    );
     return { outcome: "unavailable", loginItem: false };
   }
 
@@ -218,21 +142,20 @@ async function setupApp(deps: SetupDeps): Promise<AppStep> {
   return { outcome, loginItem: report.code === 0 };
 }
 
-/** The closing summary: what setup did, and the two commands worth knowing. */
+/** The closing summary: the handful of commands worth knowing on day one. */
 export function summaryLines(result: {
-  project: string | null;
   app: AppStepOutcome;
   loginItem: boolean;
 }): string[] {
-  const lines = ["", "Set up. From here:"];
-  lines.push(
-    result.project
-      ? `  pmdr           start a pomodoro for ${result.project}`
-      : "  pmdr           start a pomodoro",
-  );
-  lines.push("  pmdr status    where the current session is at");
-  lines.push("  pmdr today     what you got done today");
-  lines.push("  pmdr config    durations, daily goal, sounds");
+  const lines = [
+    "",
+    "Set up. From here:",
+    "  pmdr           start a pomodoro",
+    "  pmdr status    where the current session is at",
+    "  pmdr today     what you got done today",
+    "  pmdr project   attribute sessions to a project",
+    "  pmdr config    durations, daily goal, sounds",
+  ];
   if (result.app === "failed") {
     lines.push(
       "",
@@ -244,7 +167,7 @@ export function summaryLines(result: {
 
 export default defineCommand({
   meta: {
-    description: "Set up pmdr: pick a project and install the menubar app",
+    description: "Set up pmdr: install the menubar app",
   },
   async run() {
     if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {
@@ -261,10 +184,9 @@ export default defineCommand({
   },
 });
 
-/** Binds `runSetup` to clack prompts, the real state dir and the real app. */
+/** Binds `runSetup` to clack prompts and the real bundled app. */
 export async function realSetupDeps(): Promise<SetupDeps> {
-  const { confirm, isCancel, select, text } = await import("@clack/prompts");
-  const projects = createProjectsModule(STATE_DIR);
+  const { confirm, isCancel } = await import("@clack/prompts");
   const app = createMenubarApp();
   const marker = createSetupMarkerStore();
   const version = cliVersion();
@@ -277,19 +199,6 @@ export async function realSetupDeps(): Promise<SetupDeps> {
       if (isCancel(answer)) return "cancelled";
       return answer ? "yes" : "no";
     },
-    async askText(message) {
-      const answer = await text({ message, placeholder: "" });
-      if (isCancel(answer)) return null;
-      return typeof answer === "string" ? answer : "";
-    },
-    async askSelect(message, options) {
-      const answer = await select({ message, options });
-      if (isCancel(answer)) return null;
-      return String(answer);
-    },
-    listProjects: () => projects.listProjects({ includeArchived: false }),
-    upsertProject: (name) => projects.upsertProject(name),
-    writeLastProject: (name) => projects.writeLastProject(name),
     appInstallState: () => app.installState(),
     installApp: () => reportOutcome(app.install()),
     setLoginItem: (enabled) => reportOutcome(app.setLoginItem(enabled)),

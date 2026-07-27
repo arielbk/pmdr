@@ -6,7 +6,6 @@ import {
   type SetupDeps,
 } from "../commands/setup.js";
 import type { AppInstallState } from "../app-status.js";
-import type { ProjectRecord } from "../projects.js";
 
 const APP_ABSENT: AppInstallState = {
   install: "absent",
@@ -32,10 +31,6 @@ const NO_BUNDLED_APP: AppInstallState = {
   bundledReason: "no bundled app in this build",
 };
 
-function project(name: string): ProjectRecord {
-  return { name, archived: false, createdAt: "2026-07-01T00:00:00.000Z" };
-}
-
 interface Harness {
   deps: SetupDeps;
   out: string[];
@@ -45,28 +40,19 @@ interface Harness {
   loginItems: boolean[];
   markers: number;
   appDeclines: number;
-  upserted: string[];
-  lastProjects: string[];
 }
 
 function harness(
   overrides: Partial<SetupDeps> & {
     confirmAnswers?: Answer[];
-    textAnswers?: Array<string | null>;
-    selectAnswers?: Array<string | null>;
-    projects?: ProjectRecord[];
     installCode?: number;
   } = {},
 ): Harness {
   const out: string[] = [];
   const err: string[] = [];
   const asked: string[] = [];
-  const upserted: string[] = [];
-  const lastProjects: string[] = [];
   const loginItems: boolean[] = [];
   const confirmAnswers = [...(overrides.confirmAnswers ?? [])];
-  const textAnswers = [...(overrides.textAnswers ?? [])];
-  const selectAnswers = [...(overrides.selectAnswers ?? [])];
   const state = {
     installs: 0,
     markers: 0,
@@ -80,24 +66,6 @@ function harness(
       asked.push(message);
       return confirmAnswers.shift() ?? "no";
     },
-    async askText(message) {
-      asked.push(message);
-      return textAnswers.length > 0
-        ? (textAnswers.shift() as string | null)
-        : "";
-    },
-    async askSelect(message) {
-      asked.push(message);
-      return selectAnswers.length > 0
-        ? (selectAnswers.shift() as string | null)
-        : null;
-    },
-    listProjects: () => overrides.projects ?? [],
-    upsertProject: (name) => {
-      upserted.push(name);
-      return project(name);
-    },
-    writeLastProject: (name) => lastProjects.push(name),
     appInstallState: () => APP_ABSENT,
     installApp: () => {
       state.installs += 1;
@@ -134,8 +102,6 @@ function harness(
     out,
     err,
     asked,
-    upserted,
-    lastProjects,
     loginItems,
     get installs() {
       return state.installs;
@@ -154,104 +120,41 @@ function stripHarnessKeys(
   overrides: Record<string, unknown>,
 ): Partial<SetupDeps> {
   const copy = { ...overrides };
-  for (const key of [
-    "confirmAnswers",
-    "textAnswers",
-    "selectAnswers",
-    "projects",
-    "installCode",
-  ]) {
+  for (const key of ["confirmAnswers", "installCode"]) {
     delete copy[key];
   }
   return copy as Partial<SetupDeps>;
 }
 
 describe("pmdr setup", () => {
-  it("creates the named project and makes it the one the next start uses", async () => {
-    const h = harness({
-      textAnswers: ["pmdr"],
-      confirmAnswers: ["yes", "yes"],
-    });
+  it("installs the app and enables the login item when both are accepted", async () => {
+    const h = harness({ confirmAnswers: ["yes", "yes"] });
 
     const result = await runSetup(h.deps);
 
     expect(result).toEqual({
       status: "completed",
-      project: "pmdr",
       app: "installed",
       loginItem: true,
     });
-    expect(h.upserted).toEqual(["pmdr"]);
-    expect(h.lastProjects).toEqual(["pmdr"]);
-  });
-
-  it("asks for a name directly when there are no projects yet", async () => {
-    const h = harness({ textAnswers: ["pmdr"], confirmAnswers: ["no"] });
-
-    await runSetup(h.deps);
-
-    // No list to choose from, so the select is never shown.
-    expect(h.asked[0]).toContain("blank to skip");
-  });
-
-  it("offers existing projects as a list", async () => {
-    const h = harness({
-      projects: [project("pmdr"), project("infinum")],
-      selectAnswers: ["infinum"],
-      confirmAnswers: ["no"],
-    });
-
-    const result = await runSetup(h.deps);
-
-    expect(result).toMatchObject({ project: "infinum" });
-    expect(h.upserted).toEqual(["infinum"]);
-  });
-
-  it("asks for a name after picking new… from the list", async () => {
-    const h = harness({
-      projects: [project("pmdr")],
-      selectAnswers: ["__new__"],
-      textAnswers: ["side-quest"],
-      confirmAnswers: ["no"],
-    });
-
-    expect(await runSetup(h.deps)).toMatchObject({ project: "side-quest" });
-  });
-
-  it("leaves sessions unassigned when the project step is skipped", async () => {
-    const h = harness({ textAnswers: ["  "], confirmAnswers: ["no"] });
-
-    const result = await runSetup(h.deps);
-
-    expect(result).toMatchObject({ project: null });
-    expect(h.upserted).toEqual([]);
-    expect(h.lastProjects).toEqual([]);
-  });
-
-  it("refuses the reserved project name instead of creating it", async () => {
-    const h = harness({
-      textAnswers: ["(unassigned)"],
-      confirmAnswers: ["no"],
-    });
-
-    const result = await runSetup(h.deps);
-
-    expect(result).toMatchObject({ project: null });
-    expect(h.upserted).toEqual([]);
-    expect(h.err.join("\n")).toContain("reserved");
-  });
-
-  it("installs the app and enables the login item when both are accepted", async () => {
-    const h = harness({ textAnswers: [""], confirmAnswers: ["yes", "yes"] });
-
-    await runSetup(h.deps);
-
     expect(h.installs).toBe(1);
     expect(h.loginItems).toEqual([true]);
   });
 
+  it("asks about nothing but the app", async () => {
+    const h = harness({ confirmAnswers: ["yes", "yes"] });
+
+    await runSetup(h.deps);
+
+    // The whole command is the menubar app: nothing else gets a question.
+    expect(h.asked).toEqual([
+      "Install the pmdr menubar app (0.3.0) and launch it?",
+      "Launch the menubar app at login?",
+    ]);
+  });
+
   it("remembers a declined app so the next bare `pmdr` does not re-ask", async () => {
-    const h = harness({ textAnswers: [""], confirmAnswers: ["no"] });
+    const h = harness({ confirmAnswers: ["no"] });
 
     const result = await runSetup(h.deps);
 
@@ -263,7 +166,6 @@ describe("pmdr setup", () => {
 
   it("does not offer to install an app that is already current", async () => {
     const h = harness({
-      textAnswers: [""],
       confirmAnswers: ["yes"],
       appInstallState: () => APP_CURRENT,
     });
@@ -279,7 +181,6 @@ describe("pmdr setup", () => {
 
   it("offers an update when the installed app is older than the bundled one", async () => {
     const h = harness({
-      textAnswers: [""],
       confirmAnswers: ["yes", "no"],
       appInstallState: () => ({
         ...APP_CURRENT,
@@ -296,34 +197,27 @@ describe("pmdr setup", () => {
     expect(h.installs).toBe(1);
   });
 
-  it("says nothing about the app off macOS", async () => {
-    const h = harness({ textAnswers: [""], platform: "linux" });
+  it("asks nothing off macOS, and says why", async () => {
+    const h = harness({ platform: "linux" });
 
     const result = await runSetup(h.deps);
 
     expect(result).toMatchObject({ app: "unavailable" });
-    expect(h.asked.some((q) => q.toLowerCase().includes("app"))).toBe(false);
+    expect(h.asked).toEqual([]);
     expect(h.installs).toBe(0);
+    expect(h.out.join("\n")).toContain("macOS only");
   });
 
-  it("says nothing about the app when this build has none bundled", async () => {
-    const h = harness({
-      textAnswers: [""],
-      appInstallState: () => NO_BUNDLED_APP,
-    });
+  it("asks nothing when this build has none bundled, and says why", async () => {
+    const h = harness({ appInstallState: () => NO_BUNDLED_APP });
 
     expect(await runSetup(h.deps)).toMatchObject({ app: "unavailable" });
-    expect(h.asked.some((q) => q.toLowerCase().includes("install"))).toBe(
-      false,
-    );
+    expect(h.asked).toEqual([]);
+    expect(h.out.join("\n")).toContain("no bundled app in this build");
   });
 
   it("still records setup when the install fails, and says what to retry", async () => {
-    const h = harness({
-      textAnswers: ["pmdr"],
-      confirmAnswers: ["yes"],
-      installCode: 1,
-    });
+    const h = harness({ confirmAnswers: ["yes"], installCode: 1 });
 
     const result = await runSetup(h.deps);
 
@@ -336,7 +230,17 @@ describe("pmdr setup", () => {
   });
 
   it("records the marker exactly once on a completed run", async () => {
-    const h = harness({ textAnswers: ["pmdr"], confirmAnswers: ["yes", "no"] });
+    const h = harness({ confirmAnswers: ["yes", "no"] });
+
+    await runSetup(h.deps);
+
+    expect(h.markers).toBe(1);
+  });
+
+  it("records the marker even where the app cannot be installed at all", async () => {
+    // Nothing was asked, but onboarding did happen — bare `pmdr` must not route
+    // an off-macOS install back into setup on every single run.
+    const h = harness({ platform: "linux" });
 
     await runSetup(h.deps);
 
@@ -344,52 +248,34 @@ describe("pmdr setup", () => {
   });
 
   it.each([
-    ["the project name", { textAnswers: [null] as Array<string | null> }],
-    [
-      "the project list",
-      {
-        projects: [project("pmdr")],
-        selectAnswers: [null] as Array<string | null>,
-      },
-    ],
-    [
-      "the install offer",
-      { textAnswers: [""], confirmAnswers: ["cancelled"] as Answer[] },
-    ],
-    [
-      "the login offer",
-      { textAnswers: [""], confirmAnswers: ["yes", "cancelled"] as Answer[] },
-    ],
-  ])("writes no marker when cancelled at %s", async (_label, overrides) => {
-    const h = harness(overrides);
+    ["the install offer", ["cancelled"] as Answer[]],
+    ["the login offer", ["yes", "cancelled"] as Answer[]],
+  ])(
+    "writes no marker when cancelled at %s",
+    async (_label, confirmAnswers) => {
+      const h = harness({ confirmAnswers });
 
-    expect(await runSetup(h.deps)).toEqual({ status: "cancelled" });
-    expect(h.markers).toBe(0);
-  });
+      expect(await runSetup(h.deps)).toEqual({ status: "cancelled" });
+      expect(h.markers).toBe(0);
+    },
+  );
 });
 
 describe("setup summary", () => {
-  it("names the project it set up", () => {
-    expect(
-      summaryLines({ project: "pmdr", app: "installed", loginItem: true }),
-    ).toContain("  pmdr           start a pomodoro for pmdr");
-  });
-
-  it("drops the project from the summary when none was chosen", () => {
-    expect(
-      summaryLines({ project: null, app: "declined", loginItem: false }),
-    ).toContain("  pmdr           start a pomodoro");
-  });
-
-  it("points at the other commands worth knowing", () => {
-    const lines = summaryLines({
-      project: "pmdr",
-      app: "installed",
-      loginItem: true,
-    }).join("\n");
+  it("points at the commands worth knowing", () => {
+    const lines = summaryLines({ app: "installed", loginItem: true }).join(
+      "\n",
+    );
 
     expect(lines).toContain("pmdr status");
     expect(lines).toContain("pmdr today");
+    expect(lines).toContain("pmdr project");
     expect(lines).toContain("pmdr config");
+  });
+
+  it("names the retry when the install failed", () => {
+    const lines = summaryLines({ app: "failed", loginItem: false }).join("\n");
+
+    expect(lines).toContain("pmdr app install");
   });
 });
