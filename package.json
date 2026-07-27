@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@arielbk/pmdr": "workspace:*",
+    "@resvg/resvg-js": "^2.6.2",
     "ccusage": "18.0.11",
     "prettier": "^3.7.4",
     "turbo": "^2.9.14",

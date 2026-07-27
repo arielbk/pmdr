@@ -39,6 +39,12 @@ plist_version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "
 codesign --verify --deep --strict "$app" ||
   fail "codesign --verify --deep --strict failed on the extracted app"
 
+# The icon is compiled from the asset catalog, so it goes missing silently — the
+# build still succeeds and the app just wears the generic blank-page icon
+# everywhere it is seen: Finder, Login Items, notification banners.
+[ -f "$app/Contents/Resources/AppIcon.icns" ] ||
+  fail "the app has no compiled AppIcon.icns"
+
 # Every Mach-O in the bundle must carry both architectures, not just the main
 # binary — a thin embedded framework would break the app on the other arch.
 while IFS= read -r binary; do
