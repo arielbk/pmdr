@@ -685,6 +685,94 @@ final class CapturePanelControllerTests: XCTestCase {
         XCTAssertEqual(controller.historyControlForTesting?.accessibilityValue() as? String, "collapsed")
     }
 
+    // MARK: - ⌘/ disclosure shortcut
+
+    func testCommandSlashTogglesTheHistoryWhileThePanelIsOpen() async {
+        let controller = makeExpandableController(notes: 3)
+        controller.show()
+        await controller.historyLoadForTesting?.value
+        XCTAssertFalse(controller.isHistoryExpandedForTesting)
+
+        XCTAssertTrue(sendCommandSlash(to: controller), "⌘/ should be consumed by the panel")
+        XCTAssertTrue(controller.isHistoryExpandedForTesting)
+
+        XCTAssertTrue(sendCommandSlash(to: controller))
+        XCTAssertFalse(controller.isHistoryExpandedForTesting)
+    }
+
+    /// The shortcut has to reach the panel while the input owns the keyboard —
+    /// which is always — so what matters is that the note survives it untouched
+    /// and the caret stays where it was.
+    func testCommandSlashLeavesTheHalfTypedNoteAndItsFocusAlone() async {
+        let controller = makeExpandableController(notes: 2)
+        controller.show()
+        await controller.historyLoadForTesting?.value
+        controller.textFieldForTesting?.stringValue = "half-typed"
+
+        _ = sendCommandSlash(to: controller)
+
+        guard let panel = controller.panelForTesting,
+              let field = controller.textFieldForTesting
+        else {
+            XCTFail("Expected a visible panel")
+            return
+        }
+        XCTAssertTrue(controller.isHistoryExpandedForTesting)
+        XCTAssertEqual(field.stringValue, "half-typed", "⌘/ must not type a slash")
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertTrue(
+            panel.firstResponder === field || panel.firstResponder === field.currentEditor(),
+            "focus should stay in the input"
+        )
+    }
+
+    /// Same gate as the click: with the count unreadable there is nothing to
+    /// disclose, so the shortcut is inert rather than opening an empty drawer.
+    func testCommandSlashDoesNothingWhenTodaysNotesCouldNotBeRead() async {
+        let controller = CapturePanelController(onSubmit: { _ in }, notesProvider: { nil })
+        controller.show()
+        await controller.historyLoadForTesting?.value
+
+        XCTAssertFalse(sendCommandSlash(to: controller))
+        XCTAssertFalse(controller.isHistoryExpandedForTesting)
+    }
+
+    func testTheDisclosureControlAdvertisesItsShortcut() {
+        let controller = makeExpandableController(notes: 1)
+        controller.show()
+
+        XCTAssertEqual(controller.historyControlForTesting?.keyEquivalent, "/")
+        XCTAssertEqual(
+            controller.historyControlForTesting?.keyEquivalentModifierMask,
+            [.command]
+        )
+        XCTAssertEqual(controller.historyControlForTesting?.toolTip, "Show today's notes (⌘/)")
+    }
+
+    /// Dispatches ⌘/ the way AppKit does for a key window — through
+    /// `performKeyEquivalent`, not by calling the action directly — so the test
+    /// fails if the shortcut stops being wired to the panel at all.
+    private func sendCommandSlash(to controller: CapturePanelController) -> Bool {
+        guard let panel = controller.panelForTesting,
+              let event = NSEvent.keyEvent(
+                  with: .keyDown,
+                  location: .zero,
+                  modifierFlags: [.command],
+                  timestamp: 0,
+                  windowNumber: panel.windowNumber,
+                  context: nil,
+                  characters: "/",
+                  charactersIgnoringModifiers: "/",
+                  isARepeat: false,
+                  keyCode: 44
+              )
+        else {
+            XCTFail("Expected a panel and a synthesizable ⌘/ event")
+            return false
+        }
+        return panel.performKeyEquivalent(with: event)
+    }
+
     func testTheDisclosureTransitionIsRestrained() {
         XCTAssertEqual(CapturePanelController.historyTransitionDuration, 0.18, accuracy: 0.001)
     }
