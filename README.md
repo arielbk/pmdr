@@ -64,7 +64,8 @@ A published release must carry the menubar app: the release refuses to stamp or 
 ## Running the CLI
 
 ```sh
-pmdr                # opens the interactive TUI
+pmdr                # setup, attach, or start — see below
+pmdr setup          # pick a project, install the menubar app
 pmdr start          # start a focus session
 pmdr status         # current session, human-readable
 pmdr status --json  # current session, for scripts / the menubar / agents
@@ -73,15 +74,35 @@ pmdr resume
 pmdr stop
 pmdr today          # today's sessions
 pmdr project ...    # assign sessions to projects
+pmdr config ...     # durations, daily goal, sounds
 pmdr serve          # serve the read-only status page on the LAN
 ```
 
 Open as many terminals as you want — they all read and write the same session.
 
-Bare `pmdr` is the only command that needs an interactive terminal. Run it where
-stdin or stdout is not a TTY — a pipe, a script, an agent — and it exits `1` with
-a single line pointing at `pmdr status --json` instead of trying to render.
-Every other command is safe to script.
+Bare `pmdr` is a router over the three things it could reasonably mean, in this
+order:
+
+| Situation                              | What `pmdr` does                         |
+| -------------------------------------- | ---------------------------------------- |
+| Nothing set up yet, on a terminal      | Runs `pmdr setup`                        |
+| A session is already running or paused | Attaches to it and renders the countdown |
+| Anything else                          | Starts a pomodoro, like `pmdr start`     |
+
+"Set up" means any of a completed `pmdr setup`, a `config.json`, a project, or a
+session you have run before — so an upgrade never drops an existing install back
+into onboarding.
+
+`pmdr setup` is the only command that needs an interactive terminal: without one
+it exits `1` with a single line naming the commands (`pmdr config set`, `pmdr
+project add`, `pmdr app install`) that do the same work non-interactively. Bare
+`pmdr` never onboards without a TTY — it goes straight to the timer, because a
+prompt would hang the script that ran it.
+
+Every command is safe to script. Where stdout is not a TTY, `pmdr` and `pmdr
+start` still start the session but skip the repainting countdown — they print one
+line pointing at `pmdr status --json` and exit, rather than holding the pipe open
+for the whole pomodoro. `pmdr start --detach` does the same thing silently.
 
 `pmdr serve` starts a long-running HTTP server on port `7777` by default. Use
 `pmdr serve --port <port>` to choose another port, then open
@@ -104,7 +125,7 @@ pmdr app uninstall     # remove the app and any launch-at-login item
 
 `pmdr app login --enable` writes a `dev.pmdr.menubar` LaunchAgent to `~/Library/LaunchAgents` that runs the installed app binary with `RunAtLoad`; `--disable` removes it. That plist is the single source of truth for the setting — `pmdr app status --json` reports it as `loginItem`, and the menubar app's own toggle goes through this same command. Enabling requires the app to be installed; disabling works regardless, so an uninstall can never strand an agent you cannot turn off. It takes effect at your next login rather than immediately.
 
-The first time you run plain `pmdr` in an interactive terminal with the app missing — or with an older one installed than the CLI ships — it offers to install and launch it for you. Decline once and it never asks again (the answer is remembered in `app-prompt.json` next to your config); `pmdr app install` is always there if you change your mind. The offer is suppressed whenever stdout or stdin is not a TTY and for any `--json` invocation, so scripts and agents are never blocked by it.
+`pmdr setup` offers the app as its second step. For installs that predate it, the offer also stays where it always was: the first time you run plain `pmdr` in an interactive terminal with the app missing — or with an older one installed than the CLI ships — it offers to install and launch it for you. Decline once and it never asks again (the answer is remembered in `app-prompt.json` next to your config, which `pmdr setup` writes to as well, so declining in either place settles it); `pmdr app install` is always there if you change your mind. The offer is suppressed whenever stdout or stdin is not a TTY and for any `--json` invocation, so scripts and agents are never blocked by it.
 
 `pmdr app install` is non-interactive and idempotent: reinstalling the version you already have is a no-op unless you pass `--force`. It quits a running app before replacing it, stages the extract next to the target inside `~/Applications`, then swaps it in — so a failed extract never leaves you without a working app. Everything is per-user, so no `sudo` is ever needed. These commands are macOS only and exit non-zero elsewhere.
 

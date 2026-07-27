@@ -10,10 +10,8 @@ import serveCmd from "./commands/serve.js";
 import configCmd from "./commands/config.js";
 import noteCmd from "./commands/note.js";
 import appCmd from "./commands/app.js";
-import { createRequire } from "module";
-
-const require = createRequire(import.meta.url);
-const pkg = require("../package.json") as { version: string };
+import setupCmd from "./commands/setup.js";
+import { cliVersion } from "./version.js";
 
 const subCommands = {
   start: startCmd,
@@ -27,6 +25,7 @@ const subCommands = {
   config: configCmd,
   note: noteCmd,
   app: appCmd,
+  setup: setupCmd,
 };
 
 function isSubCommandInvocation(rawArgs: string[]): boolean {
@@ -45,7 +44,7 @@ function isSubCommandInvocation(rawArgs: string[]): boolean {
 const main = defineCommand({
   meta: {
     name: "pmdr",
-    version: pkg.version,
+    version: cliVersion(),
     description: "Pomodoro timer for the terminal",
   },
   subCommands,
@@ -54,30 +53,10 @@ const main = defineCommand({
       return;
     }
 
-    // Only the plain-timer path reaches here. Refuse before Ink gets a chance
-    // to throw its raw-mode error, so a scripted `pmdr` gets one actionable
-    // line rather than a renderer stack trace.
-    const { checkTuiPrecondition } = await import("./tui-precondition.js");
-    const precondition = checkTuiPrecondition({
-      stdinIsTty: process.stdin.isTTY === true,
-      stdoutIsTty: process.stdout.isTTY === true,
-    });
-    if (!precondition.ok) {
-      console.error(precondition.message);
-      process.exitCode = 1;
-      return;
-    }
-
-    // The offer gates itself on an interactive TTY too — so no agent or
-    // `--json` caller can ever be blocked.
-    const { maybeOfferBundledApp } = await import("./first-run-prompt.js");
-    await maybeOfferBundledApp(rawArgs);
-
-    const { render } = await import("ink");
-    const { default: App } = await import("./tui/App.js");
-    const React = await import("react");
-    const { waitUntilExit } = render(React.default.createElement(App));
-    await waitUntilExit();
+    // Bare `pmdr` is a router, not a surface of its own: onboard, attach to the
+    // session that is already running, or start one. See `bare-command.ts`.
+    const { runBareCommand } = await import("./bare-command.js");
+    await runBareCommand();
   },
 });
 

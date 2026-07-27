@@ -26,13 +26,25 @@ describe("README CLI documentation", () => {
     expect(runningCliSection).toContain("http://<machine-name>.local:<port>");
   });
 
-  it("documents that only bare `pmdr` needs a TTY, and what it does without one", () => {
+  it("documents that only `pmdr setup` needs a TTY, and what it does without one", () => {
     const runningCliSection = readme.match(
       /## Running the CLI([\s\S]*?)(?:\n## |\z)/,
     )?.[1];
 
     expect(runningCliSection).toContain("interactive terminal");
     expect(runningCliSection).toContain("pmdr status --json");
+    expect(runningCliSection).toContain("pmdr app install");
+  });
+
+  it("documents what bare `pmdr` routes to", () => {
+    const runningCliSection = readme.match(
+      /## Running the CLI([\s\S]*?)(?:\n## |\z)/,
+    )?.[1];
+
+    expect(runningCliSection).toContain("pmdr setup");
+    expect(runningCliSection).toContain("Attaches to it");
+    // The rule that keeps an upgrade from re-onboarding an existing install.
+    expect(runningCliSection).toContain("never drops an existing install back");
   });
 
   it("documents installing the bundled menubar app from the CLI", () => {
