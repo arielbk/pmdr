@@ -66,6 +66,51 @@ export function checkBundledApp(repoRoot: string): BundledAppCheck {
 export const APP_ARTIFACT_NAME = "pmdr-app";
 
 /**
+ * The version `apps/menubar` currently builds to — `MARKETING_VERSION` becomes
+ * the bundle's `CFBundleShortVersionString`, which is the only number the CLI
+ * compares an installed app against. Returns null when the sources are not
+ * there to read, so this stays usable from a scratch repo.
+ */
+export function readMenubarSourceVersion(repoRoot: string): string | null {
+  try {
+    const project = readFileSync(
+      resolve(repoRoot, "apps/menubar/project.yml"),
+      "utf8",
+    );
+    const match = /MARKETING_VERSION:\s*"?([^"\s]+)"?/.exec(project);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A zip built from older sources is worse than no zip: `pmdr app install`
+ * compares versions, so shipping one leaves every user's app pinned to the
+ * stale version with no command that can move them off it — the CLI reports
+ * "up to date" about an app it knows nothing newer than. So a version that
+ * disagrees with the sources fails the release, in either direction.
+ */
+export function assertBundledAppMatchesSources(options: {
+  repoRoot: string;
+  bundledVersion: string;
+}): void {
+  const sourceVersion = readMenubarSourceVersion(options.repoRoot);
+  if (sourceVersion === null || sourceVersion === options.bundledVersion) {
+    return;
+  }
+
+  throw new Error(
+    [
+      `Refusing to publish ${packageName} with a stale bundled menubar app.`,
+      `  apps/cli/bundled-app carries ${options.bundledVersion}, but apps/menubar builds ${sourceVersion}`,
+      "  Rebuild it locally:  pnpm menubar:zip",
+      `  Or take the CI-built one:  gh run download --name ${APP_ARTIFACT_NAME} --dir apps/cli/bundled-app`,
+    ].join("\n"),
+  );
+}
+
+/**
  * The publish gate: a release that should carry the menubar app must actually
  * carry it. `--allow-missing-app` is the deliberate escape hatch for a
  * CLI-only release; without it, a missing zip fails loudly before anything is
@@ -77,7 +122,17 @@ export function assertBundledApp(options: {
 }): BundledAppCheck {
   const check = checkBundledApp(options.repoRoot);
 
-  if (check.ok || options.allowMissingApp) {
+  if (check.ok) {
+    // Checked even under --allow-missing-app: that flag permits shipping *no*
+    // app, never shipping the wrong one.
+    assertBundledAppMatchesSources({
+      repoRoot: options.repoRoot,
+      bundledVersion: check.version,
+    });
+    return check;
+  }
+
+  if (options.allowMissingApp) {
     return check;
   }
 

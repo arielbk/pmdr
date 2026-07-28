@@ -5,10 +5,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   assertBundledApp,
+  assertBundledAppMatchesSources,
   assertTarballCarriesApp,
   checkBundledApp,
   listTarballEntries,
   parseReleaseArgs,
+  readMenubarSourceVersion,
   stageBundledApp,
 } from "../release.js";
 
@@ -16,6 +18,23 @@ function makeRepo(): string {
   const repoRoot = mkdtempSync(join(tmpdir(), "pmdr-release-app-"));
   mkdirSync(join(repoRoot, "apps/cli"), { recursive: true });
   return repoRoot;
+}
+
+/** A minimal `apps/menubar/project.yml` — only MARKETING_VERSION is read. */
+function writeMenubarSources(repoRoot: string, version: string): void {
+  mkdirSync(join(repoRoot, "apps/menubar"), { recursive: true });
+  writeFileSync(
+    join(repoRoot, "apps/menubar/project.yml"),
+    [
+      "targets:",
+      "  pmdr-menubar:",
+      "    settings:",
+      "      base:",
+      `        MARKETING_VERSION: "${version}"`,
+      '        CURRENT_PROJECT_VERSION: "1"',
+      "",
+    ].join("\n"),
+  );
 }
 
 function writeBundledApp(
@@ -101,6 +120,72 @@ describe("assertBundledApp", () => {
     const check = assertBundledApp({ repoRoot, allowMissingApp: false });
 
     expect(check.ok === true && check.version).toBe("0.3.1");
+  });
+
+  it("refuses a zip built from older menubar sources", () => {
+    const repoRoot = makeRepo();
+    writeBundledApp(repoRoot, { zip: "PK", metadata: '{"version":"0.1.1"}' });
+    writeMenubarSources(repoRoot, "0.1.2");
+
+    expect(() => assertBundledApp({ repoRoot, allowMissingApp: false })).toThrow(
+      /carries 0\.1\.1, but apps\/menubar builds 0\.1\.2/,
+    );
+  });
+
+  it("still refuses a stale zip under --allow-missing-app", () => {
+    // That flag permits shipping no app at all, not shipping the wrong one.
+    const repoRoot = makeRepo();
+    writeBundledApp(repoRoot, { zip: "PK", metadata: '{"version":"0.1.1"}' });
+    writeMenubarSources(repoRoot, "0.1.2");
+
+    expect(() => assertBundledApp({ repoRoot, allowMissingApp: true })).toThrow(
+      /stale bundled menubar app/,
+    );
+  });
+
+  it("passes a zip whose version matches the menubar sources", () => {
+    const repoRoot = makeRepo();
+    writeBundledApp(repoRoot, { zip: "PK", metadata: '{"version":"0.1.2"}' });
+    writeMenubarSources(repoRoot, "0.1.2");
+
+    expect(
+      assertBundledApp({ repoRoot, allowMissingApp: false }).ok,
+    ).toBe(true);
+  });
+});
+
+describe("assertBundledAppMatchesSources", () => {
+  it("names the rebuild commands when the versions disagree", () => {
+    const repoRoot = makeRepo();
+    writeMenubarSources(repoRoot, "0.2.0");
+
+    let message = "";
+    try {
+      assertBundledAppMatchesSources({ repoRoot, bundledVersion: "0.1.9" });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toContain("pnpm menubar:zip");
+    expect(message).toContain("gh run download --name pmdr-app");
+  });
+
+  it("cannot judge a repo with no menubar sources, so it allows the release", () => {
+    const repoRoot = makeRepo();
+
+    expect(() =>
+      assertBundledAppMatchesSources({ repoRoot, bundledVersion: "9.9.9" }),
+    ).not.toThrow();
+  });
+});
+
+describe("readMenubarSourceVersion", () => {
+  it("reads MARKETING_VERSION from this repo's own menubar project", () => {
+    // Guards the coupling itself: renaming that key would silently disable the
+    // staleness gate rather than fail anything.
+    const version = readMenubarSourceVersion(join(__dirname, "../../../.."));
+
+    expect(version).toMatch(/^[0-9]+\.[0-9]+\.[0-9]+$/);
   });
 });
 
