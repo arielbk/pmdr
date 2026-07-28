@@ -16,6 +16,13 @@ describe("README CLI documentation", () => {
     expect(section).toContain(".github/workflows/menubar-app.yml");
   });
 
+  it("documents that the release refuses a zip older than the menubar sources", () => {
+    const section = readme.match(/### Releasing\n([\s\S]*?)\n## /)?.[1];
+
+    expect(section).toContain("MARKETING_VERSION");
+    expect(section).toContain("apps/menubar/project.yml");
+  });
+
   it("documents serving the LAN status page", () => {
     const runningCliSection = readme.match(
       /## Running the CLI([\s\S]*?)(?:\n## |\z)/,
