@@ -33,7 +33,23 @@ describe("getStatus", () => {
   });
 
   it("returns idle when no state file exists", () => {
-    expect(getStatus({ store, now: NOW })).toEqual({ state: "idle" });
+    expect(getStatus({ store, now: NOW })).toEqual({
+      state: "idle",
+      todayFocusBlocks: 0,
+    });
+  });
+
+  it("returns today's completed focus blocks while idle", () => {
+    store.appendCompletion({
+      completedAt: NOW - 1_000,
+      durationMs: 25 * 60_000,
+      project: "Writing",
+    });
+
+    expect(getStatus({ store, now: NOW })).toEqual({
+      state: "idle",
+      todayFocusBlocks: 1,
+    });
   });
 
   it("returns running with remainingMs, duration, startedAt, phase, completedFocusBlocks", () => {
@@ -208,7 +224,7 @@ describe("getStatus", () => {
 
 describe("formatStatus", () => {
   it("formats idle", () => {
-    const r: StatusResult = { state: "idle" };
+    const r: StatusResult = { state: "idle", todayFocusBlocks: 0 };
     expect(formatStatus(r)).toBe("idle");
   });
 
@@ -369,7 +385,10 @@ describe("pmdr status --json", () => {
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(() => JSON.parse(result.stdout)).not.toThrow();
-    expect(JSON.parse(result.stdout)).toEqual({ state: "idle" });
+    expect(JSON.parse(result.stdout)).toEqual({
+      state: "idle",
+      todayFocusBlocks: 0,
+    });
   });
 
   it("pmdr start --detach starts and exits immediately without rendering the countdown", () => {
