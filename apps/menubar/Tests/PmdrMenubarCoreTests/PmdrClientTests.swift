@@ -164,6 +164,12 @@ final class PmdrClientArgvTests: XCTestCase {
         XCTAssertEqual(readArgv(argvLog), ["project", "list", "--json"])
     }
 
+    func test_setProject_invokes_project_set_withName() async throws {
+        let (client, argvLog) = try makeArgvCapturingClient(stdout: "")
+        try await client.setProject("Deep Work")
+        XCTAssertEqual(readArgv(argvLog), ["project", "set", "Deep Work"])
+    }
+
     func test_note_invokes_note_with_text() async throws {
         let (client, argvLog) = try makeArgvCapturingClient(stdout: "")
         try await client.note("remember to check the X bug")
