@@ -55,7 +55,7 @@ final class InsightsWindowControllerTests: XCTestCase {
             controller.lastRequestedRangeForTesting,
             InsightsDateRange(from: "2026-08-02", to: "2026-08-08")
         )
-        XCTAssertEqual(controller.summaryTextForTesting, ["1h 40m", "4 sessions", "2 active days"])
+        XCTAssertEqual(controller.summaryTextForTesting, ["1h 40m", "4", "2"])
         XCTAssertEqual(controller.projectTitlesForTesting, ["All projects", "Deep Work", "Admin"])
         XCTAssertEqual(controller.chartProjectStacksForTesting, [
             [], [], [], [], [], ["Deep Work", "Admin"], ["Deep Work"],
@@ -64,15 +64,19 @@ final class InsightsWindowControllerTests: XCTestCase {
             "Deep Work|1h 15m|75%",
             "Admin|25m|25%",
         ])
+        XCTAssertEqual(controller.projectMixScopeForTesting, "All projects in selected range")
 
         controller.selectProjectForTesting("Deep Work")
 
-        XCTAssertEqual(controller.summaryTextForTesting, ["1h 15m", "3 sessions", "2 active days"])
+        XCTAssertEqual(controller.summaryTextForTesting, ["1h 15m", "3", "2"])
         XCTAssertEqual(controller.projectTitlesForTesting, ["All projects", "Deep Work", "Admin"])
         XCTAssertEqual(controller.chartProjectStacksForTesting, [
             [], [], [], [], [], ["Deep Work"], ["Deep Work"],
         ])
-        XCTAssertEqual(controller.allocationRowsForTesting, ["Deep Work|1h 15m|100%"])
+        XCTAssertEqual(controller.allocationRowsForTesting, [
+            "Deep Work|1h 15m|75%",
+            "Admin|25m|25%",
+        ])
     }
 
     func test_switchingPreset_requestsThirtyDayRange() async throws {
@@ -94,6 +98,47 @@ final class InsightsWindowControllerTests: XCTestCase {
             InsightsDateRange(from: "2026-07-10", to: "2026-08-08")
         )
         XCTAssertTrue(controller.customRangeControlsAreHiddenForTesting)
+    }
+
+    func test_projectMix_exposesTheWholeCompositionAsOneAccessibleGraphic() async {
+        let log = LogResult(
+            from: "2026-08-02",
+            to: "2026-08-08",
+            days: [
+                LogDay(
+                    date: "2026-08-08",
+                    groups: [
+                        LogGroup(project: "Deep Work", pomodoros: 3, totalMs: 4_500_000),
+                        LogGroup(project: "Admin", pomodoros: 1, totalMs: 1_500_000),
+                    ],
+                    total: LogTotal(pomodoros: 4, totalMs: 6_000_000)
+                ),
+            ],
+            total: LogTotal(pomodoros: 4, totalMs: 6_000_000)
+        )
+        let controller = InsightsWindowController(loadLog: { _ in log })
+
+        await controller.reloadForTesting()
+
+        XCTAssertEqual(
+            controller.projectMixAccessibilityForTesting,
+            "Deep Work 75%, Admin 25%"
+        )
+    }
+
+    func test_summaryCards_pairConciseValuesWithDescriptiveLabels() async {
+        let range = InsightsDateRange(from: "2026-08-02", to: "2026-08-08")
+        let controller = InsightsWindowController(loadLog: { _ in
+            makeLog(range: range, pomodoros: 2)
+        })
+
+        await controller.reloadForTesting()
+
+        XCTAssertEqual(controller.summaryTextForTesting, ["50m", "2", "1"])
+        XCTAssertEqual(
+            controller.summaryCaptionsForTesting,
+            ["Focus time", "Sessions", "Active days"]
+        )
     }
 
     func test_customRange_requestsTheSelectedInclusiveDates() async throws {
@@ -120,7 +165,7 @@ final class InsightsWindowControllerTests: XCTestCase {
         await controller.reloadForTesting()
 
         XCTAssertEqual(controller.statusMessageForTesting, "No focus sessions in this range")
-        XCTAssertEqual(controller.summaryTextForTesting, ["0m", "0 sessions", "0 active days"])
+        XCTAssertEqual(controller.summaryTextForTesting, ["0m", "0", "0"])
     }
 
     func test_loaderFailure_surfacesAnErrorState() async {
@@ -175,7 +220,7 @@ final class InsightsWindowControllerTests: XCTestCase {
         await controller.selectRangeForTesting(segment: 1)
         await initialReload.value
 
-        XCTAssertEqual(controller.summaryTextForTesting, ["50m", "2 sessions", "1 active day"])
+        XCTAssertEqual(controller.summaryTextForTesting, ["50m", "2", "1"])
     }
 
 }

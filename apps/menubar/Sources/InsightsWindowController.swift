@@ -29,9 +29,15 @@ final class InsightsWindowController: NSWindowController {
     private let focusSummary = NSTextField(labelWithString: "—")
     private let sessionSummary = NSTextField(labelWithString: "—")
     private let activeDaySummary = NSTextField(labelWithString: "—")
+    private let focusCaption = NSTextField(labelWithString: "Focus time")
+    private let sessionCaption = NSTextField(labelWithString: "Sessions")
+    private let activeDayCaption = NSTextField(labelWithString: "Active days")
     private let projectPopup = NSPopUpButton()
     private let chartView = InsightsChartView()
     private let statusLabel = NSTextField(labelWithString: "")
+    private let projectMixCard = NSView()
+    private let projectMixChart = InsightsDonutChartView()
+    private let projectMixScopeLabel = NSTextField(labelWithString: "All projects in selected range")
     private let allocationStack = NSStackView()
     private let allocationScrollView = NSScrollView()
     private var allocationRows: [String] = []
@@ -48,12 +54,13 @@ final class InsightsWindowController: NSWindowController {
         self.now = now
         self.calendar = calendar
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 640),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Insights"
+        window.minSize = NSSize(width: 680, height: 600)
         window.isReleasedWhenClosed = false
         super.init(window: window)
         buildContentView()
@@ -103,9 +110,9 @@ final class InsightsWindowController: NSWindowController {
         content.addSubview(customRangeControls)
 
         let summary = NSStackView(views: [
-            summaryCard(value: focusSummary, caption: "focus"),
-            summaryCard(value: sessionSummary, caption: "completed"),
-            summaryCard(value: activeDaySummary, caption: "with focus"),
+            summaryCard(value: focusSummary, caption: focusCaption),
+            summaryCard(value: sessionSummary, caption: sessionCaption),
+            summaryCard(value: activeDaySummary, caption: activeDayCaption),
         ])
         summary.orientation = .horizontal
         summary.distribution = .fillEqually
@@ -132,13 +139,27 @@ final class InsightsWindowController: NSWindowController {
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(statusLabel)
 
-        let projectsTitle = sectionTitle("Projects")
+        let projectsTitle = sectionTitle("Project mix")
         projectsTitle.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(projectsTitle)
 
+        projectMixScopeLabel.font = .systemFont(ofSize: 11)
+        projectMixScopeLabel.textColor = .secondaryLabelColor
+        projectMixScopeLabel.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(projectMixScopeLabel)
+
+        projectMixCard.wantsLayer = true
+        projectMixCard.layer?.cornerRadius = 12
+        projectMixCard.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        projectMixCard.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(projectMixCard)
+
+        projectMixChart.translatesAutoresizingMaskIntoConstraints = false
+        projectMixCard.addSubview(projectMixChart)
+
         allocationStack.orientation = .vertical
         allocationStack.alignment = .width
-        allocationStack.spacing = 10
+        allocationStack.spacing = 9
         allocationStack.translatesAutoresizingMaskIntoConstraints = false
         let allocationDocument = FlippedView()
         allocationDocument.translatesAutoresizingMaskIntoConstraints = false
@@ -148,7 +169,7 @@ final class InsightsWindowController: NSWindowController {
         allocationScrollView.hasVerticalScroller = true
         allocationScrollView.autohidesScrollers = true
         allocationScrollView.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(allocationScrollView)
+        projectMixCard.addSubview(allocationScrollView)
 
         NSLayoutConstraint.activate([
             rangeControl.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
@@ -171,10 +192,20 @@ final class InsightsWindowController: NSWindowController {
             statusLabel.centerYAnchor.constraint(equalTo: chartView.centerYAnchor),
             projectsTitle.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
             projectsTitle.topAnchor.constraint(equalTo: chartView.bottomAnchor, constant: 18),
-            allocationScrollView.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
-            allocationScrollView.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
-            allocationScrollView.topAnchor.constraint(equalTo: projectsTitle.bottomAnchor, constant: 10),
-            allocationScrollView.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -18),
+            projectMixScopeLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
+            projectMixScopeLabel.centerYAnchor.constraint(equalTo: projectsTitle.centerYAnchor),
+            projectMixCard.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
+            projectMixCard.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
+            projectMixCard.topAnchor.constraint(equalTo: projectsTitle.bottomAnchor, constant: 10),
+            projectMixCard.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -18),
+            projectMixChart.leadingAnchor.constraint(equalTo: projectMixCard.leadingAnchor, constant: 24),
+            projectMixChart.centerYAnchor.constraint(equalTo: projectMixCard.centerYAnchor),
+            projectMixChart.widthAnchor.constraint(equalToConstant: 150),
+            projectMixChart.heightAnchor.constraint(equalToConstant: 150),
+            allocationScrollView.leadingAnchor.constraint(equalTo: projectMixChart.trailingAnchor, constant: 28),
+            allocationScrollView.trailingAnchor.constraint(equalTo: projectMixCard.trailingAnchor, constant: -20),
+            allocationScrollView.topAnchor.constraint(equalTo: projectMixCard.topAnchor, constant: 18),
+            allocationScrollView.bottomAnchor.constraint(equalTo: projectMixCard.bottomAnchor, constant: -18),
             allocationDocument.leadingAnchor.constraint(equalTo: allocationScrollView.contentView.leadingAnchor),
             allocationDocument.trailingAnchor.constraint(equalTo: allocationScrollView.contentView.trailingAnchor),
             allocationDocument.topAnchor.constraint(equalTo: allocationScrollView.contentView.topAnchor),
@@ -188,11 +219,10 @@ final class InsightsWindowController: NSWindowController {
         window.contentView = content
     }
 
-    private func summaryCard(value: NSTextField, caption: String) -> NSView {
-        value.font = .systemFont(ofSize: 22, weight: .semibold)
-        let captionLabel = NSTextField(labelWithString: caption)
-        captionLabel.textColor = .secondaryLabelColor
-        let stack = NSStackView(views: [value, captionLabel])
+    private func summaryCard(value: NSTextField, caption: NSTextField) -> NSView {
+        value.font = .monospacedDigitSystemFont(ofSize: 22, weight: .semibold)
+        caption.textColor = .secondaryLabelColor
+        let stack = NSStackView(views: [value, caption])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 2
@@ -269,15 +299,15 @@ final class InsightsWindowController: NSWindowController {
         projectPopup.removeAllItems()
         projectPopup.addItem(withTitle: "All projects")
         projectPopup.addItems(withTitles: allProjects.projects.map(\.project))
+        renderAllocations(allProjects.projects)
         render(InsightsReport(log: log, selectedProject: nil))
     }
 
     private func render(_ report: InsightsReport) {
         focusSummary.stringValue = Self.duration(report.totalFocusMs)
-        sessionSummary.stringValue = "\(report.sessionCount) \(report.sessionCount == 1 ? "session" : "sessions")"
-        activeDaySummary.stringValue = "\(report.activeDayCount) active \(report.activeDayCount == 1 ? "day" : "days")"
+        sessionSummary.stringValue = "\(report.sessionCount)"
+        activeDaySummary.stringValue = "\(report.activeDayCount)"
         chartView.report = report
-        renderAllocations(report.projects)
         setStatusMessage(report.sessionCount == 0 ? "No focus sessions in this range" : nil)
     }
 
@@ -302,8 +332,11 @@ final class InsightsWindowController: NSWindowController {
         allocationRows = projects.map {
             "\($0.project)|\(Self.duration($0.totalMs))|\(Int(($0.share * 100).rounded()))%"
         }
+        projectMixChart.projects = projects
+        projectMixChart.totalText = Self.duration(projects.reduce(0) { $0 + $1.totalMs })
         for (index, project) in projects.enumerated() {
             let name = NSTextField(labelWithString: project.project)
+            name.font = .systemFont(ofSize: 13, weight: .medium)
             name.lineBreakMode = .byTruncatingTail
             let duration = NSTextField(labelWithString: Self.duration(project.totalMs))
             duration.textColor = .secondaryLabelColor
@@ -313,25 +346,19 @@ final class InsightsWindowController: NSWindowController {
                 labelWithString: "\(Int((project.share * 100).rounded()))%"
             )
             percentage.textColor = .secondaryLabelColor
+            percentage.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
             percentage.alignment = .right
             percentage.widthAnchor.constraint(equalToConstant: 44).isActive = true
+            let color = ProjectColorSwatch(color: InsightsColors.color(at: index))
+            color.widthAnchor.constraint(equalToConstant: 10).isActive = true
+            color.heightAnchor.constraint(equalToConstant: 10).isActive = true
             let spacer = NSView()
             spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-            let labels = NSStackView(views: [name, spacer, duration, percentage])
+            let labels = NSStackView(views: [color, name, spacer, duration, percentage])
             labels.orientation = .horizontal
             labels.alignment = .centerY
-            labels.spacing = 8
-
-            let progress = InsightsProgressBar()
-            progress.value = project.share
-            progress.tintColor = InsightsColors.color(at: index)
-            progress.heightAnchor.constraint(equalToConstant: 5).isActive = true
-
-            let row = NSStackView(views: [labels, progress])
-            row.orientation = .vertical
-            row.alignment = .width
-            row.spacing = 4
-            allocationStack.addArrangedSubview(row)
+            labels.spacing = 9
+            allocationStack.addArrangedSubview(labels)
         }
     }
 
@@ -351,11 +378,18 @@ final class InsightsWindowController: NSWindowController {
     var summaryTextForTesting: [String] {
         [focusSummary.stringValue, sessionSummary.stringValue, activeDaySummary.stringValue]
     }
+    var summaryCaptionsForTesting: [String] {
+        [focusCaption.stringValue, sessionCaption.stringValue, activeDayCaption.stringValue]
+    }
     var projectTitlesForTesting: [String] { projectPopup.itemTitles }
     var chartProjectStacksForTesting: [[String]] {
         chartView.report?.days.map { $0.groups.map(\.project) } ?? []
     }
     var allocationRowsForTesting: [String] { allocationRows }
+    var projectMixAccessibilityForTesting: String? {
+        projectMixChart.accessibilityValue() as? String
+    }
+    var projectMixScopeForTesting: String { projectMixScopeLabel.stringValue }
     var statusMessageForTesting: String? { statusLabel.isHidden ? nil : statusLabel.stringValue }
     func reloadForTesting() async { await reload() }
     func selectRangeForTesting(segment: Int) async {
@@ -378,4 +412,18 @@ final class InsightsWindowController: NSWindowController {
 
 private final class FlippedView: NSView {
     override var isFlipped: Bool { true }
+}
+
+private final class ProjectColorSwatch: NSView {
+    init(color: NSColor) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = color.cgColor
+        layer?.cornerRadius = 5
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
 }

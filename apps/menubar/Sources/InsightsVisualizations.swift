@@ -4,8 +4,8 @@ import PmdrMenubarCore
 
 enum InsightsColors {
     private static let palette: [NSColor] = [
-        .systemRed, .systemBlue, .systemGreen, .systemOrange,
-        .systemPurple, .systemTeal, .systemPink, .systemIndigo,
+        .systemBlue, .systemPurple, .systemTeal, .systemOrange,
+        .systemPink, .systemIndigo, .systemGreen, .systemRed,
     ]
 
     static func color(at index: Int) -> NSColor {
@@ -13,23 +13,23 @@ enum InsightsColors {
     }
 }
 
-final class InsightsProgressBar: NSView {
-    var value: Double = 0 {
+final class InsightsDonutChartView: NSView {
+    var projects: [InsightsProjectSummary] = [] {
         didSet {
-            setAccessibilityValue(value)
+            setAccessibilityValue(accessibilitySummary)
             needsDisplay = true
         }
     }
-    var tintColor: NSColor = .controlAccentColor {
+    var totalText = "0m" {
         didSet { needsDisplay = true }
     }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setAccessibilityElement(true)
-        setAccessibilityRole(.progressIndicator)
-        setAccessibilityMinValue(0)
-        setAccessibilityMaxValue(1)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("Project mix")
+        setAccessibilityValue("No project data")
     }
 
     @available(*, unavailable)
@@ -37,18 +37,66 @@ final class InsightsProgressBar: NSView {
         fatalError("init(coder:) is not supported")
     }
 
+    private var accessibilitySummary: String {
+        guard !projects.isEmpty else { return "No project data" }
+        return projects.map {
+            "\($0.project) \(Int(($0.share * 100).rounded()))%"
+        }.joined(separator: ", ")
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        NSColor.quaternaryLabelColor.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
-        let width = bounds.width * CGFloat(min(1, max(0, value)))
-        guard width > 0 else { return }
-        tintColor.setFill()
-        NSBezierPath(
-            roundedRect: NSRect(x: bounds.minX, y: bounds.minY, width: width, height: bounds.height),
-            xRadius: bounds.height / 2,
-            yRadius: bounds.height / 2
-        ).fill()
+        let diameter = min(bounds.width, bounds.height) - 20
+        guard diameter > 0 else { return }
+        let center = NSPoint(x: bounds.midX, y: bounds.midY)
+        let radius = diameter / 2
+        let lineWidth = max(18, diameter * 0.18)
+
+        let track = NSBezierPath()
+        track.appendArc(
+            withCenter: center,
+            radius: radius - lineWidth / 2,
+            startAngle: 0,
+            endAngle: 360
+        )
+        track.lineWidth = lineWidth
+        NSColor.quaternaryLabelColor.setStroke()
+        track.stroke()
+
+        var startAngle: CGFloat = 90
+        for (index, project) in projects.enumerated() {
+            let sweep = 360 * CGFloat(project.share)
+            guard sweep > 0 else { continue }
+            let gap = projects.count > 1 ? min(1.5, sweep * 0.12) : 0
+            let segment = NSBezierPath()
+            segment.appendArc(
+                withCenter: center,
+                radius: radius - lineWidth / 2,
+                startAngle: startAngle - sweep + gap,
+                endAngle: startAngle - gap,
+                clockwise: false
+            )
+            segment.lineWidth = lineWidth
+            segment.lineCapStyle = .round
+            InsightsColors.color(at: index).setStroke()
+            segment.stroke()
+            startAngle -= sweep
+        }
+
+        drawCentered(totalText, offsetY: 4, font: .systemFont(ofSize: 18, weight: .semibold), color: .labelColor)
+        drawCentered("total focus", offsetY: -16, font: .systemFont(ofSize: 11), color: .secondaryLabelColor)
+    }
+
+    private func drawCentered(_ text: String, offsetY: CGFloat, font: NSFont, color: NSColor) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color,
+        ]
+        let size = text.size(withAttributes: attributes)
+        text.draw(
+            at: NSPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2 + offsetY),
+            withAttributes: attributes
+        )
     }
 }
 
