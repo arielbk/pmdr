@@ -7,7 +7,7 @@ import { createConfigModule } from "../config.js";
 const STATE_DIR = join(homedir(), ".local", "state", "pmdr");
 
 export type StatusResult =
-  | { state: "idle" }
+  | { state: "idle"; todayFocusBlocks: number }
   | {
       state: "running" | "paused";
       remainingMs: number;
@@ -32,12 +32,12 @@ export function getStatus(opts: {
 
   const file = store.readState();
   const derived = deriveState({ file, now });
+  const todayFocusBlocks = store.countTodayFocusBlocks(now);
 
   if (derived.kind === "idle" || derived.kind === "expired") {
-    return { state: "idle" };
+    return { state: "idle", todayFocusBlocks };
   }
 
-  const todayFocusBlocks = store.countTodayFocusBlocks(now);
   const { longBreakEvery } = config.readEffectiveConfig();
 
   const base = {

@@ -46,7 +46,10 @@ describe("pmdr serve /api/status", () => {
   }
 
   it("returns idle status JSON from a temp-dir state module", () => {
-    expect(getStatusJson()).toEqual({ state: "idle" });
+    expect(getStatusJson()).toEqual({
+      state: "idle",
+      todayFocusBlocks: 0,
+    });
   });
 
   it("returns running status JSON from a temp-dir state module", () => {
