@@ -117,9 +117,16 @@ function formatMs(ms: number): string {
 }
 
 export function formatLog(result: LogResult): string {
+  // An empty result must read as an empty result, not as a blank line or a bare
+  // zero total — the range is restated so a reader can see what was asked for.
+  if (result.days.length === 0) {
+    return `Nothing recorded from ${result.from} to ${result.to}`;
+  }
+
   const lines: string[] = [];
 
   for (const day of result.days) {
+    if (lines.length > 0) lines.push("");
     lines.push(day.date);
     for (const group of day.groups) {
       const label = group.pomodoros === 1 ? "pomodoro" : "pomodoros";
@@ -136,8 +143,13 @@ export function formatLog(result: LogResult): string {
     }
   }
 
-  const label = result.total.pomodoros === 1 ? "pomodoro" : "pomodoros";
-  lines.push(`Total: ${result.total.pomodoros} ${label}, ${formatMs(result.total.totalMs)}`);
+  // A single-day range already shows its own per-day figures, so a grand total
+  // would just restate them.
+  if (result.from !== result.to) {
+    if (lines.length > 0) lines.push("");
+    const label = result.total.pomodoros === 1 ? "pomodoro" : "pomodoros";
+    lines.push(`Total: ${result.total.pomodoros} ${label}, ${formatMs(result.total.totalMs)}`);
+  }
 
   return lines.join("\n");
 }

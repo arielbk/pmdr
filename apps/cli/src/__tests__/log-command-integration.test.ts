@@ -117,6 +117,39 @@ describe("pmdr log", () => {
     expect(payload.total.pomodoros).toBe(1);
   });
 
+  it("prints day blocks and a grand total without --json", () => {
+    writeFileSync(
+      join(stateDir, "completions.jsonl"),
+      [
+        JSON.stringify({
+          completedAt: new Date("2026-08-05T09:00:00").getTime(),
+          durationMs: 1500_000,
+          project: "pmdr",
+        }),
+        JSON.stringify({
+          completedAt: new Date("2026-08-06T14:30:00").getTime(),
+          durationMs: 1500_000,
+          project: "pmdr",
+        }),
+      ].join("\n") + "\n",
+    );
+
+    const result = runPmdr(["log", "--from", "2026-08-05", "--to", "2026-08-06"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trimEnd().split("\n")).toEqual([
+      "2026-08-05",
+      "  pmdr: 1 pomodoro, 25m",
+      "    9:00",
+      "",
+      "2026-08-06",
+      "  pmdr: 1 pomodoro, 25m",
+      "    14:30",
+      "",
+      "Total: 2 pomodoros, 50m",
+    ]);
+  });
+
   it("spans the earliest record through today when given no endpoints", () => {
     const earliest = new Date(Date.now() - 30 * 86_400_000);
     earliest.setHours(9, 0, 0, 0);
