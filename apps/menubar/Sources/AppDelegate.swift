@@ -299,7 +299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     }
 
     @objc private func stopFromMenu(_ sender: NSMenuItem) {
-        performClientAction { try await $0.stop() }
+        performClientAction(optimistic: optimisticStop()) { try await $0.stop() }
     }
 
     @objc private func startProjectFromMenu(_ sender: NSMenuItem) {
@@ -468,24 +468,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     }
 
     private func optimisticPause() -> Status? {
-        guard case .running(let active) = lastStatus else { return nil }
         let elapsedMs = Int(Date().timeIntervalSince(lastPollAt) * 1000)
-        let remaining = max(0, active.remainingMs - elapsedMs)
-        let paused = Status.Active(
-            remainingMs: remaining,
-            durationMs: active.durationMs,
-            startedAt: active.startedAt,
-            phase: active.phase,
-            completedFocusBlocks: active.completedFocusBlocks,
-            todayFocusBlocks: active.todayFocusBlocks,
-            project: active.project
-        )
-        return .paused(paused)
+        return OptimisticTimerStatus.pausing(lastStatus, elapsedMs: elapsedMs)
     }
 
     private func optimisticResume() -> Status? {
         guard case .paused(let active) = lastStatus else { return nil }
         return .running(active)
+    }
+
+    private func optimisticStop() -> Status? {
+        OptimisticTimerStatus.stopping(lastStatus)
     }
 
     private func optimisticStart(project: String?) -> Status {
@@ -669,7 +662,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     }
 
     func stop() {
-        performClientAction { try await $0.stop() }
+        performClientAction(optimistic: optimisticStop()) { try await $0.stop() }
     }
 
     func setProject(_ project: String?) {
