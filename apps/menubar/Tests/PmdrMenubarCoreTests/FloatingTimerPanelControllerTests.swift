@@ -477,8 +477,20 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
 
         controller.show()
 
-        XCTAssertEqual(controller.projectPopupItemTitlesForTesting, ["Deep Work", "Admin"])
+        XCTAssertEqual(controller.projectPopupItemTitlesForTesting, ["Deep Work", "Admin", "New Project…"])
         XCTAssertEqual(sink.calls, [.listProjects])
+    }
+
+    func testProjectPopupIncludesNewProjectAction() {
+        let sink = RecordingActionSink()
+        sink.stubbedProjects = [
+            ProjectRecord(name: "Deep Work", archived: false, createdAt: "2026-01-01"),
+        ]
+        let controller = FloatingTimerPanelController(actions: sink)
+
+        controller.show()
+
+        XCTAssertTrue(controller.projectPopupItemTitlesForTesting.contains("New Project…"))
     }
 
     func testProjectPopupPreselectsCurrentActiveProject() {
@@ -528,6 +540,37 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertEqual(sink.calls, [.setProject("Admin")])
     }
 
+    func testSelectingNewProjectPromptsAddsAndSelectsIt() {
+        let sink = RecordingActionSink()
+        sink.stubbedProjects = [
+            ProjectRecord(name: "Writing", archived: false, createdAt: "2026-01-01"),
+        ]
+        var promptCount = 0
+        let controller = FloatingTimerPanelController(
+            actions: sink,
+            requestNewProjectName: {
+                promptCount += 1
+                return "  Research  "
+            }
+        )
+        controller.show()
+        sink.calls.removeAll()
+
+        controller.selectProjectPopupItemForTesting(title: "New Project…")
+
+        XCTAssertEqual(promptCount, 1)
+        XCTAssertEqual(sink.calls, [.addProject("Research")])
+        XCTAssertEqual(controller.selectedProjectPopupTitleForTesting, "Research")
+    }
+
+    func testNewProjectPromptUsesLogPrimaryAction() {
+        let alert = FloatingTimerPanelController.makeNewProjectAlert()
+
+        XCTAssertEqual(alert.messageText, "New project")
+        XCTAssertEqual(alert.buttons.map(\.title), ["Log", "Cancel"])
+        XCTAssertTrue(alert.accessoryView is NSTextField)
+    }
+
     func testStartUsesSelectedProjectPopupItemWhenIdle() {
         let sink = RecordingActionSink()
         sink.stubbedProjects = [
@@ -564,7 +607,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         controller.openProjectPopupForTesting()
         controller.openProjectPopupForTesting()
 
-        XCTAssertEqual(controller.projectPopupItemTitlesForTesting, ["Deep Work", "Admin"])
+        XCTAssertEqual(controller.projectPopupItemTitlesForTesting, ["Deep Work", "Admin", "New Project…"])
         XCTAssertEqual(sink.calls, [.listProjects])
 
         controller.setHoveredForTesting(false)
@@ -688,6 +731,7 @@ private final class RecordingActionSink: FloatingTimerActions {
         case resume
         case stop
         case setProject(String?)
+        case addProject(String)
         case listProjects
     }
 
@@ -699,6 +743,7 @@ private final class RecordingActionSink: FloatingTimerActions {
     func resume() { calls.append(.resume) }
     func stop() { calls.append(.stop) }
     func setProject(_ project: String?) { calls.append(.setProject(project)) }
+    func addProject(_ name: String) { calls.append(.addProject(name)) }
     func listProjects() -> [ProjectRecord] {
         calls.append(.listProjects)
         return stubbedProjects

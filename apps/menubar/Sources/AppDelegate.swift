@@ -676,6 +676,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         performClientAction { try await $0.setProject(project) }
     }
 
+    func addProject(_ name: String) {
+        performClientAction { try await $0.setProject(name) }
+    }
+
     func listProjects() -> [ProjectRecord] {
         projects.filter { !$0.archived }
     }
