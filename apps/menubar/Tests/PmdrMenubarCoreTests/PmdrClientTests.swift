@@ -66,9 +66,44 @@ final class PmdrClientDecodingTests: XCTestCase {
         ])
     }
 
+    func test_decodes_today_notes_from_date_range_payload() throws {
+        let json = Data(#"""
+        {"from":"2026-08-08","to":"2026-08-08","days":[{"date":"2026-08-08","groups":[],"total":{"pomodoros":0,"totalMs":0},"notes":[{"text":"nested note","at":1786204800000,"sessionId":"s1","project":"deepwork","phase":"focus"}]}],"total":{"pomodoros":0,"totalMs":0}}
+        """#.utf8)
+
+        XCTAssertEqual(try PmdrClient.decodeTodayNotes(from: json), [
+            NoteRecord(
+                text: "nested note",
+                at: 1_786_204_800_000,
+                sessionId: "s1",
+                project: "deepwork",
+                phase: "focus"
+            ),
+        ])
+    }
+
     func test_decodes_today_payload_without_notes_key_as_empty() throws {
         let json = Data(#"{"groups":[],"total":{"pomodoros":0,"totalMs":0}}"#.utf8)
         XCTAssertEqual(try PmdrClient.decodeTodayNotes(from: json), [])
+    }
+
+    func test_decodes_log_days_and_project_groups() throws {
+        let json = Data(#"""
+        {"from":"2026-08-01","to":"2026-08-07","days":[{"date":"2026-08-03","groups":[{"project":"Deep Work","pomodoros":2,"totalMs":3000000,"entries":[]}],"total":{"pomodoros":2,"totalMs":3000000},"notes":[]}],"total":{"pomodoros":2,"totalMs":3000000}}
+        """#.utf8)
+
+        let log = try PmdrClient.decodeLog(from: json)
+
+        XCTAssertEqual(log.from, "2026-08-01")
+        XCTAssertEqual(log.to, "2026-08-07")
+        XCTAssertEqual(log.total, LogTotal(pomodoros: 2, totalMs: 3_000_000))
+        XCTAssertEqual(log.days, [
+            LogDay(
+                date: "2026-08-03",
+                groups: [LogGroup(project: "Deep Work", pomodoros: 2, totalMs: 3_000_000)],
+                total: LogTotal(pomodoros: 2, totalMs: 3_000_000)
+            ),
+        ])
     }
 
     func test_throws_decoding_failed_on_malformed_today_payload() {
@@ -193,6 +228,17 @@ final class PmdrClientArgvTests: XCTestCase {
         let (client, argvLog) = try makeArgvCapturingClient(stdout: #"{"groups":[],"total":{"pomodoros":0,"totalMs":0},"notes":[]}"#)
         _ = try await client.todayNotes()
         XCTAssertEqual(readArgv(argvLog), ["today", "--json"])
+    }
+
+    func test_log_invokes_inclusive_date_range_json() async throws {
+        let stdout = #"{"from":"2026-08-01","to":"2026-08-07","days":[],"total":{"pomodoros":0,"totalMs":0}}"#
+        let (client, argvLog) = try makeArgvCapturingClient(stdout: stdout)
+
+        _ = try await client.log(from: "2026-08-01", to: "2026-08-07")
+
+        XCTAssertEqual(readArgv(argvLog), [
+            "log", "--json", "--from", "2026-08-01", "--to", "2026-08-07",
+        ])
     }
 
     func test_setConfigValue_invokes_config_set() async throws {

@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     private var floatingTimerPanelController: FloatingTimerPanelController?
     private var capturePanelController: CapturePanelController?
     private var manageProjectsController: ManageProjectsWindowController?
+    private var insightsController: InsightsWindowController?
     private var settingsController: SettingsWindowController?
     private var pollTask: Task<Void, Never>?
     private var redrawTimer: Timer?
@@ -205,6 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         }
 
         menu.addItem(.separator())
+        menu.addItem(InsightsMenuItem.make(target: self, action: #selector(openInsights(_:))))
         menu.addItem(actionItem("Settings…", #selector(openSettings(_:)), keyEquivalent: ","))
         menu.addItem(actionItem("Manage projects…", #selector(openManageProjects(_:))))
         // rebuildMenu only ever runs on the main thread; the toggle's cache is
@@ -342,6 +344,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
             }
         }
         manageProjectsController?.show()
+    }
+
+    @objc @MainActor private func openInsights(_ sender: NSMenuItem) {
+        guard let client else { return }
+        if insightsController == nil {
+            insightsController = InsightsWindowController { range in
+                try await client.log(from: range.from, to: range.to)
+            }
+        }
+        insightsController?.show()
     }
 
     private func writeNote(_ text: String) {
