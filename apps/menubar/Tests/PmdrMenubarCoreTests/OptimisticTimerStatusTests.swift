@@ -2,12 +2,12 @@ import XCTest
 @testable import PmdrMenubarCore
 
 final class OptimisticTimerStatusTests: XCTestCase {
-    func test_pausingRunningBreakImmediatelyBecomesIdle() {
+    func test_pausingRunningBreakImmediatelyBecomesIdleWithoutClearingTodaysProgress() {
         let status = Status.running(active(phase: .break))
 
         XCTAssertEqual(
             OptimisticTimerStatus.pausing(status, elapsedMs: 2_000),
-            .idle
+            .idle(todayFocusBlocks: 3)
         )
     }
 
@@ -28,10 +28,10 @@ final class OptimisticTimerStatusTests: XCTestCase {
         )
     }
 
-    func test_stoppingActiveTimerImmediatelyBecomesIdle() {
+    func test_stoppingActiveTimerImmediatelyBecomesIdleWithoutClearingTodaysProgress() {
         XCTAssertEqual(
             OptimisticTimerStatus.stopping(.running(active(phase: .focus))),
-            .idle
+            .idle(todayFocusBlocks: 3)
         )
     }
 
