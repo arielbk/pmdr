@@ -2,170 +2,22 @@ import { defineCommand } from "citty";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createStateModule } from "../state.js";
-import type { CompletionRecord, NoteRecord } from "../state.js";
+import { toLocalDateKey } from "../date-range.js";
+import { buildLog, formatLog, type LogResult } from "./log.js";
 
 const STATE_DIR = join(homedir(), ".local", "state", "pmdr");
 
-// ─── Legacy flat API (preserved for backward compatibility) ───────────────────
-
-export interface TodayResult {
-  count: number;
-  completions: CompletionRecord[];
-}
-
-export function filterToday(
-  completions: CompletionRecord[],
-  now: number,
-): CompletionRecord[] {
-  const nowD = new Date(now);
-  return completions.filter((c) => {
-    const d = new Date(c.completedAt);
-    return (
-      d.getFullYear() === nowD.getFullYear() &&
-      d.getMonth() === nowD.getMonth() &&
-      d.getDate() === nowD.getDate()
-    );
-  });
-}
-
-export function getToday(opts: {
-  store: ReturnType<typeof createStateModule>;
-  now: number;
-}): TodayResult {
-  const { store, now } = opts;
-  store.advancePhaseIfExpired(now);
-  const all = store.readCompletions();
-  const completions = filterToday(all, now);
-  return { count: completions.length, completions };
-}
-
-// ─── Grouped API ──────────────────────────────────────────────────────────────
-
-export interface TodayGroup {
-  project: string;
-  pomodoros: number;
-  totalMs: number;
-  entries: CompletionRecord[];
-}
-
-export interface TodayGroupedResult {
-  groups: TodayGroup[];
-  total: { pomodoros: number; totalMs: number };
-}
-
-export function getTodayGrouped(opts: {
-  store: ReturnType<typeof createStateModule>;
-  now: number;
-  project?: string;
-}): TodayGroupedResult {
-  const { store, now, project } = opts;
-  const grouped = store.readToday(now);
-
-  let entries = Object.entries(grouped);
-  if (project !== undefined) {
-    entries = entries.filter(([key]) => key === project);
-  }
-
-  const groups: TodayGroup[] = entries.map(([proj, records]) => ({
-    project: proj,
-    pomodoros: records.length,
-    totalMs: records.reduce((sum, e) => sum + e.durationMs, 0),
-    entries: records,
-  }));
-
-  const total = {
-    pomodoros: groups.reduce((sum, g) => sum + g.pomodoros, 0),
-    totalMs: groups.reduce((sum, g) => sum + g.totalMs, 0),
-  };
-
-  return { groups, total };
-}
-
-// ─── Notes ──────────────────────────────────────────────────────────────────
-
 /**
- * Today's captured notes, filtered to the local calendar day of `now` and
- * returned in ascending time order.
+ * `today` is an alias for `log` over the single local day containing `now` —
+ * it delegates rather than re-implementing, so the two can never drift.
  */
-export function readTodayNotes(opts: {
-  store: ReturnType<typeof createStateModule>;
-  now: number;
-}): NoteRecord[] {
-  const { store, now } = opts;
-  const nowD = new Date(now);
-  return store
-    .readNotes()
-    .filter((n) => {
-      const d = new Date(n.at);
-      return (
-        d.getFullYear() === nowD.getFullYear() &&
-        d.getMonth() === nowD.getMonth() &&
-        d.getDate() === nowD.getDate()
-      );
-    })
-    .sort((a, b) => a.at - b.at);
-}
-
-export interface TodayJsonResult extends TodayGroupedResult {
-  notes: NoteRecord[];
-}
-
-/** Assemble the full JSON payload for `pmdr today --json`: groups + notes. */
-export function buildTodayJson(opts: {
+export function buildToday(opts: {
   store: ReturnType<typeof createStateModule>;
   now: number;
   project?: string;
-}): TodayJsonResult {
-  const grouped = getTodayGrouped(opts);
-  const notes = readTodayNotes({ store: opts.store, now: opts.now });
-  return { ...grouped, notes };
-}
-
-function formatTime(ts: number): string {
-  const d = new Date(ts);
-  const h = d.getHours();
-  const m = String(d.getMinutes()).padStart(2, "0");
-  return `${h}:${m}`;
-}
-
-function formatMs(ms: number): string {
-  const totalMin = Math.round(ms / 60_000);
-  return `${totalMin}m`;
-}
-
-export function formatTodayGrouped(
-  result: TodayGroupedResult,
-  notes: NoteRecord[] = [],
-): string {
-  const lines: string[] = [];
-
-  for (const group of result.groups) {
-    const label = group.pomodoros === 1 ? "pomodoro" : "pomodoros";
-    lines.push(`${group.project}: ${group.pomodoros} ${label}, ${formatMs(group.totalMs)}`);
-    for (const entry of group.entries) {
-      lines.push(`  ${formatTime(entry.completedAt)}`);
-    }
-  }
-
-  const totalLabel = result.total.pomodoros === 1 ? "pomodoro" : "pomodoros";
-  lines.push(`Total: ${result.total.pomodoros} ${totalLabel}, ${formatMs(result.total.totalMs)}`);
-
-  if (notes.length > 0) {
-    lines.push("Notes:");
-    for (const n of notes) {
-      lines.push(`  ${formatTime(n.at)}  ${n.text}`);
-    }
-  }
-
-  return lines.join("\n");
-}
-
-export function formatToday(result: TodayResult): string {
-  const label = result.count === 1 ? "pomodoro" : "pomodoros";
-  const header = `${result.count} ${label} today`;
-  if (result.completions.length === 0) return header;
-  const lines = result.completions.map((c) => `  ${formatTime(c.completedAt)}`);
-  return [header, ...lines].join("\n");
+}): LogResult {
+  const date = toLocalDateKey(opts.now);
+  return buildLog({ ...opts, from: date, to: date });
 }
 
 export default defineCommand({
@@ -184,14 +36,12 @@ export default defineCommand({
   },
   run({ args }) {
     const store = createStateModule(STATE_DIR);
-    const now = Date.now();
-    const result = getTodayGrouped({ store, now, project: args.project });
-    const notes = readTodayNotes({ store, now });
+    const result = buildToday({ store, now: Date.now(), project: args.project });
 
     if (args.json) {
-      console.log(JSON.stringify({ ...result, notes }));
+      console.log(JSON.stringify(result));
     } else {
-      console.log(formatTodayGrouped(result, notes));
+      console.log(formatLog(result));
     }
   },
 });
