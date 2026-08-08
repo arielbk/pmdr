@@ -44,24 +44,25 @@ export interface LogResult {
 export function buildLog(opts: {
   store: ReturnType<typeof createStateModule>;
   now: number;
-  from: string;
-  to: string;
+  from?: string;
+  to?: string;
   project?: string;
 }): LogResult {
   const { store, now, project } = opts;
   store.advancePhaseIfExpired(now);
 
-  const window = resolveRange({ from: opts.from, to: opts.to });
+  const allCompletions = store.readCompletions();
+  const allNotes = store.readNotes();
+  const stamps = [...allCompletions.map((c) => c.completedAt), ...allNotes.map((n) => n.at)];
+  const earliest = stamps.length > 0 ? Math.min(...stamps) : null;
+
+  const window = resolveRange({ from: opts.from, to: opts.to, now, earliest });
   const inWindow = (at: number) => at >= window.startMs && at <= window.endMs;
 
-  const completions = store
-    .readCompletions()
+  const completions = allCompletions
     .filter((c) => inWindow(c.completedAt))
     .filter((c) => project === undefined || (c.project ?? "(unassigned)") === project);
-  const notes = store
-    .readNotes()
-    .filter((n) => inWindow(n.at))
-    .sort((a, b) => a.at - b.at);
+  const notes = allNotes.filter((n) => inWindow(n.at)).sort((a, b) => a.at - b.at);
 
   const dates = new Set<string>();
   for (const c of completions) dates.add(toLocalDateKey(c.completedAt));
@@ -164,20 +165,14 @@ export default defineCommand({
     },
   },
   run({ args }) {
-    // Unbounded endpoints are not resolved yet — until they are, both ends must
-    // be given rather than silently standing in for a window nobody asked for.
-    if (!args.from || !args.to) {
-      console.error("pmdr log currently requires both --from and --to (YYYY-MM-DD)");
-      process.exitCode = 1;
-      return;
-    }
-
     const store = createStateModule(STATE_DIR);
     const result = buildLog({
       store,
       now: Date.now(),
-      from: args.from,
-      to: args.to,
+      // An omitted endpoint is unbounded, so leave it undefined for the resolver
+      // rather than substituting a default here.
+      from: args.from || undefined,
+      to: args.to || undefined,
       project: args.project,
     });
 

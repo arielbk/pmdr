@@ -5,6 +5,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { ensureCliBuilt } from "./helpers/built-cli.js";
 
+function localDateKey(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 describe("pmdr log", () => {
   let cliDist: string;
   let tmpDir: string;
@@ -110,5 +115,24 @@ describe("pmdr log", () => {
     const payload = JSON.parse(result.stdout);
     expect(payload.days.map((d: { date: string }) => d.date)).toEqual(["2026-08-05"]);
     expect(payload.total.pomodoros).toBe(1);
+  });
+
+  it("spans the earliest record through today when given no endpoints", () => {
+    const earliest = new Date(Date.now() - 30 * 86_400_000);
+    earliest.setHours(9, 0, 0, 0);
+    writeFileSync(
+      join(stateDir, "completions.jsonl"),
+      JSON.stringify({ completedAt: earliest.getTime(), durationMs: 60_000, project: "a" }) + "\n",
+    );
+
+    const result = runPmdr(["log", "--json"]);
+
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.from).toBe(localDateKey(earliest.getTime()));
+    expect(payload.to).toBe(localDateKey(Date.now()));
+    expect(payload.days.map((d: { date: string }) => d.date)).toEqual([
+      localDateKey(earliest.getTime()),
+    ]);
   });
 });

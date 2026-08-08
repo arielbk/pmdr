@@ -50,18 +50,32 @@ export interface DateWindow {
 }
 
 /**
- * Resolve an explicit `from`/`to` pair into an inclusive local-time window
- * spanning midnight on `from` through the last millisecond of `to`.
+ * Resolve a `from`/`to` pair into an inclusive local-time window spanning
+ * midnight on `from` through the last millisecond of `to`.
+ *
+ * An omitted endpoint is unbounded, with no exceptions: no `to` runs through
+ * today, and no `from` runs from the earliest record on file. The window is
+ * echoed back as resolved `from`/`to` keys so a caller can restate the range it
+ * actually got.
  */
-export function resolveRange(opts: { from: string; to: string }): DateWindow {
-  const startMs = parseLocalDate(opts.from);
-  const endDay = parseLocalDate(opts.to);
+export function resolveRange(opts: {
+  from?: string;
+  to?: string;
+  now: number;
+  earliest?: number | null;
+}): DateWindow {
+  const to = opts.to ?? toLocalDateKey(opts.now);
+  // With nothing on file the history is empty, so an unbounded start collapses
+  // onto today rather than reaching back to an arbitrary epoch.
+  const from = opts.from ?? toLocalDateKey(opts.earliest ?? opts.now);
+  const startMs = parseLocalDate(from);
+  const endDay = parseLocalDate(to);
   if (startMs === null || endDay === null) {
     throw new Error("invalid date");
   }
   return {
-    from: opts.from,
-    to: opts.to,
+    from,
+    to,
     startMs,
     endMs: endOfLocalDay(endDay),
   };
