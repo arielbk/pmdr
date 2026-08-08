@@ -1,0 +1,190 @@
+import { defineCommand } from "citty";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { createStateModule } from "../state.js";
+import type { CompletionRecord, NoteRecord } from "../state.js";
+import { resolveRange, toLocalDateKey } from "../date-range.js";
+
+const STATE_DIR = join(homedir(), ".local", "state", "pmdr");
+
+export interface LogGroup {
+  project: string;
+  pomodoros: number;
+  totalMs: number;
+  entries: CompletionRecord[];
+}
+
+export interface LogTotal {
+  pomodoros: number;
+  totalMs: number;
+}
+
+export interface LogDay {
+  date: string;
+  groups: LogGroup[];
+  total: LogTotal;
+  notes: NoteRecord[];
+}
+
+export interface LogResult {
+  from: string;
+  to: string;
+  days: LogDay[];
+  total: LogTotal;
+}
+
+/**
+ * Select completions and notes inside an inclusive local date range and return
+ * them grouped by day, then by project.
+ *
+ * Settling an expired timer before the read is part of the contract: this used
+ * to live in `state.readToday`, and moving the grouping out of the state layer
+ * must not lose it.
+ */
+export function buildLog(opts: {
+  store: ReturnType<typeof createStateModule>;
+  now: number;
+  from: string;
+  to: string;
+  project?: string;
+}): LogResult {
+  const { store, now, project } = opts;
+  store.advancePhaseIfExpired(now);
+
+  const window = resolveRange({ from: opts.from, to: opts.to });
+  const inWindow = (at: number) => at >= window.startMs && at <= window.endMs;
+
+  const completions = store
+    .readCompletions()
+    .filter((c) => inWindow(c.completedAt))
+    .filter((c) => project === undefined || (c.project ?? "(unassigned)") === project);
+  const notes = store
+    .readNotes()
+    .filter((n) => inWindow(n.at))
+    .sort((a, b) => a.at - b.at);
+
+  const dates = new Set<string>();
+  for (const c of completions) dates.add(toLocalDateKey(c.completedAt));
+  for (const n of notes) dates.add(toLocalDateKey(n.at));
+
+  const days: LogDay[] = [...dates]
+    .sort()
+    .map((date) => {
+      const dayEntries = completions.filter((c) => toLocalDateKey(c.completedAt) === date);
+      const byProject = new Map<string, CompletionRecord[]>();
+      for (const entry of dayEntries) {
+        const key = entry.project ?? "(unassigned)";
+        const bucket = byProject.get(key);
+        if (bucket) bucket.push(entry);
+        else byProject.set(key, [entry]);
+      }
+      const groups: LogGroup[] = [...byProject].map(([proj, entries]) => ({
+        project: proj,
+        pomodoros: entries.length,
+        totalMs: entries.reduce((sum, e) => sum + e.durationMs, 0),
+        entries,
+      }));
+      return {
+        date,
+        groups,
+        total: {
+          pomodoros: groups.reduce((sum, g) => sum + g.pomodoros, 0),
+          totalMs: groups.reduce((sum, g) => sum + g.totalMs, 0),
+        },
+        notes: notes.filter((n) => toLocalDateKey(n.at) === date),
+      };
+    });
+
+  return {
+    from: window.from,
+    to: window.to,
+    days,
+    total: {
+      pomodoros: days.reduce((sum, d) => sum + d.total.pomodoros, 0),
+      totalMs: days.reduce((sum, d) => sum + d.total.totalMs, 0),
+    },
+  };
+}
+
+function formatTime(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function formatMs(ms: number): string {
+  return `${Math.round(ms / 60_000)}m`;
+}
+
+export function formatLog(result: LogResult): string {
+  const lines: string[] = [];
+
+  for (const day of result.days) {
+    lines.push(day.date);
+    for (const group of day.groups) {
+      const label = group.pomodoros === 1 ? "pomodoro" : "pomodoros";
+      lines.push(`  ${group.project}: ${group.pomodoros} ${label}, ${formatMs(group.totalMs)}`);
+      for (const entry of group.entries) {
+        lines.push(`    ${formatTime(entry.completedAt)}`);
+      }
+    }
+    if (day.notes.length > 0) {
+      lines.push("  Notes:");
+      for (const n of day.notes) {
+        lines.push(`    ${formatTime(n.at)}  ${n.text}`);
+      }
+    }
+  }
+
+  const label = result.total.pomodoros === 1 ? "pomodoro" : "pomodoros";
+  lines.push(`Total: ${result.total.pomodoros} ${label}, ${formatMs(result.total.totalMs)}`);
+
+  return lines.join("\n");
+}
+
+export default defineCommand({
+  meta: {
+    description: "Show completed pomodoros and notes over a date range",
+  },
+  args: {
+    from: {
+      type: "string",
+      description: "Inclusive start date, YYYY-MM-DD",
+    },
+    to: {
+      type: "string",
+      description: "Inclusive end date, YYYY-MM-DD",
+    },
+    json: {
+      type: "boolean",
+      description: "Output as JSON",
+    },
+    project: {
+      type: "string",
+      description: "Filter to a single project",
+    },
+  },
+  run({ args }) {
+    // Unbounded endpoints are not resolved yet — until they are, both ends must
+    // be given rather than silently standing in for a window nobody asked for.
+    if (!args.from || !args.to) {
+      console.error("pmdr log currently requires both --from and --to (YYYY-MM-DD)");
+      process.exitCode = 1;
+      return;
+    }
+
+    const store = createStateModule(STATE_DIR);
+    const result = buildLog({
+      store,
+      now: Date.now(),
+      from: args.from,
+      to: args.to,
+      project: args.project,
+    });
+
+    if (args.json) {
+      console.log(JSON.stringify(result));
+    } else {
+      console.log(formatLog(result));
+    }
+  },
+});

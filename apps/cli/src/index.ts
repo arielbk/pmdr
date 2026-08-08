@@ -5,6 +5,7 @@ import resumeCmd from "./commands/resume.js";
 import stopCmd from "./commands/stop.js";
 import statusCmd from "./commands/status.js";
 import todayCmd from "./commands/today.js";
+import logCmd from "./commands/log.js";
 import projectCmd from "./commands/project.js";
 import serveCmd from "./commands/serve.js";
 import configCmd from "./commands/config.js";
@@ -20,6 +21,7 @@ const subCommands = {
   stop: stopCmd,
   status: statusCmd,
   today: todayCmd,
+  log: logCmd,
   project: projectCmd,
   serve: serveCmd,
   config: configCmd,
