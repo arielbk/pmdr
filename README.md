@@ -75,6 +75,7 @@ pmdr pause
 pmdr resume
 pmdr stop
 pmdr today          # today's sessions
+pmdr log            # sessions and notes over a date range (--from/--to, inclusive)
 pmdr project ...    # assign sessions to projects
 pmdr config ...     # durations, daily goal, sounds
 pmdr serve          # serve the read-only status page on the LAN
