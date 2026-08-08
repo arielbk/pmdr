@@ -31,7 +31,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
     private weak var effectView: FloatingTimerBackgroundView?
     private(set) var isHovered = false
     private var didRefreshProjectPopupDuringHover = false
-    private var currentStatus: Status = .idle
+    private var currentStatus: Status = .idle()
     private var toggleSymbolName = "play.fill"
     private var snapshot = Snapshot(
         phaseLabel: "IDLE",

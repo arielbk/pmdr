@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     private var settingsController: SettingsWindowController?
     private var pollTask: Task<Void, Never>?
     private var redrawTimer: Timer?
-    private var lastStatus: Status = .idle
+    private var lastStatus: Status = .idle()
     private var lastPollAt: Date = .distantPast
     private var stateGeneration: UInt64 = 0
     private var mutationChain: Task<Void, Never>?
@@ -114,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
                     let generationAtStart = await MainActor.run { self.stateGeneration }
                     let events = try await poller.pollOnce()
                     let now = Date()
-                    let status = await poller.currentStatus() ?? .idle
+                    let status = await poller.currentStatus() ?? .idle()
                     await MainActor.run {
                         guard self.stateGeneration == generationAtStart else { return }
                         self.lastStatus = status
@@ -506,7 +506,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         guard let poller else { return }
         let generationAtStart = await MainActor.run { self.stateGeneration }
         let events = try await poller.pollOnce()
-        let status = await poller.currentStatus() ?? .idle
+        let status = await poller.currentStatus() ?? .idle()
         let projects = try await client?.listProjects() ?? []
         let config = try await client?.config() ?? .defaults
         let now = Date()

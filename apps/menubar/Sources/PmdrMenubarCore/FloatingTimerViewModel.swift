@@ -17,13 +17,13 @@ public struct FloatingTimerViewModel: Equatable, Sendable {
 
     public init(status: Status, lastProject: String?, elapsedSincePoll: TimeInterval = 0) {
         switch status {
-        case .idle:
+        case .idle(let todayFocusBlocks):
             time = "--:--"
             phaseLabel = "idle"
             projectName = lastProject ?? ""
             isMuted = true
             phaseColor = .muted
-            completedFocusBlocks = 0
+            completedFocusBlocks = todayFocusBlocks
             pauseActionLabel = "Pause"
         case .running(let active):
             time = Self.format(remainingMs: active.remainingMs - Int(elapsedSincePoll * 1000))

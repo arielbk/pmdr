@@ -8,7 +8,7 @@ public enum Phase: String, Codable, Sendable {
 
 /// Mirror of `StatusResult` from `apps/cli/src/commands/status.ts`.
 public enum Status: Equatable, Sendable {
-    case idle
+    case idle(todayFocusBlocks: Int = 0)
     case running(Active)
     case paused(Active)
 
@@ -345,7 +345,7 @@ public struct PmdrClient: Sendable {
         }
         switch raw.state {
         case "idle":
-            return .idle
+            return .idle(todayFocusBlocks: raw.todayFocusBlocks ?? 0)
         case "running", "paused":
             guard
                 let remaining = raw.remainingMs,

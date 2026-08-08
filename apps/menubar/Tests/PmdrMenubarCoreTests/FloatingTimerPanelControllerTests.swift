@@ -169,7 +169,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         let controller = FloatingTimerPanelController()
 
         controller.update(
-            status: .idle,
+            status: .idle(),
             lastProject: "Writing",
             elapsedSincePoll: 0
         )
@@ -338,7 +338,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         let controller = FloatingTimerPanelController(actions: sink)
         controller.show()
         sink.calls.removeAll()
-        controller.update(status: .idle, lastProject: "Writing", elapsedSincePoll: 0)
+        controller.update(status: .idle(), lastProject: "Writing", elapsedSincePoll: 0)
 
         XCTAssertEqual(controller.toggleButtonTitleForTesting, "Start")
         XCTAssertEqual(controller.toggleButtonSymbolNameForTesting, "play.fill")
@@ -411,7 +411,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         controller.show()
         sink.calls.removeAll()
 
-        controller.update(status: .idle, lastProject: nil, elapsedSincePoll: 0)
+        controller.update(status: .idle(), lastProject: nil, elapsedSincePoll: 0)
         XCTAssertFalse(controller.isStopButtonEnabledForTesting)
 
         controller.update(
@@ -518,7 +518,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
             ProjectRecord(name: "Admin", archived: false, createdAt: "2026-01-02"),
         ]
         let controller = FloatingTimerPanelController(actions: sink)
-        controller.update(status: .idle, lastProject: "Deep Work", elapsedSincePoll: 0)
+        controller.update(status: .idle(), lastProject: "Deep Work", elapsedSincePoll: 0)
 
         controller.show()
 
@@ -578,7 +578,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
             ProjectRecord(name: "Admin", archived: false, createdAt: "2026-01-02"),
         ]
         let controller = FloatingTimerPanelController(actions: sink)
-        controller.update(status: .idle, lastProject: "Writing", elapsedSincePoll: 0)
+        controller.update(status: .idle(), lastProject: "Writing", elapsedSincePoll: 0)
         controller.show()
         controller.setHoveredForTesting(true)
 
@@ -713,6 +713,20 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         )
 
         XCTAssertEqual(controller.dotStringForTesting, "●\u{2009}●  ○\u{2009}○  ○\u{2009}○")
+    }
+
+    func testPanelShowsCompletedDotsWhileIdle() {
+        let controller = FloatingTimerPanelController()
+        controller.show()
+        controller.configureGoal(dailyGoal: 4, longBreakEvery: 4)
+
+        controller.update(
+            status: .idle(todayFocusBlocks: 2),
+            lastProject: "Writing",
+            elapsedSincePoll: 0
+        )
+
+        XCTAssertEqual(controller.dotStringForTesting, "●\u{2009}●\u{2009}○\u{2009}○")
     }
 
     private func makeDefaults() -> UserDefaults {

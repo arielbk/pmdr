@@ -3,7 +3,7 @@ import XCTest
 
 final class FloatingTimerViewModelTests: XCTestCase {
     func test_idle_withLastProject_isMutedAndShowsLastProject() {
-        let viewModel = FloatingTimerViewModel(status: .idle, lastProject: "Writing")
+        let viewModel = FloatingTimerViewModel(status: .idle(), lastProject: "Writing")
 
         XCTAssertEqual(viewModel.time, "--:--")
         XCTAssertEqual(viewModel.phaseLabel, "idle")
@@ -12,7 +12,7 @@ final class FloatingTimerViewModelTests: XCTestCase {
     }
 
     func test_idle_withoutLastProject_hasEmptyProjectName() {
-        let viewModel = FloatingTimerViewModel(status: .idle, lastProject: nil)
+        let viewModel = FloatingTimerViewModel(status: .idle(), lastProject: nil)
 
         XCTAssertEqual(viewModel.time, "--:--")
         XCTAssertEqual(viewModel.phaseLabel, "idle")
@@ -69,7 +69,7 @@ final class FloatingTimerViewModelTests: XCTestCase {
     }
 
     func test_phaseColor_isMutedForIdle() {
-        let vm = FloatingTimerViewModel(status: .idle, lastProject: nil)
+        let vm = FloatingTimerViewModel(status: .idle(), lastProject: nil)
         XCTAssertEqual(vm.phaseColor, .muted)
     }
 
@@ -98,8 +98,16 @@ final class FloatingTimerViewModelTests: XCTestCase {
     }
 
     func test_completedFocusBlocks_isZeroForIdle() {
-        let vm = FloatingTimerViewModel(status: .idle, lastProject: nil)
+        let vm = FloatingTimerViewModel(status: .idle(), lastProject: nil)
         XCTAssertEqual(vm.completedFocusBlocks, 0)
+    }
+
+    func test_completedFocusBlocks_reflectsIdleDailyProgress() {
+        let vm = FloatingTimerViewModel(
+            status: .idle(todayFocusBlocks: 3),
+            lastProject: nil
+        )
+        XCTAssertEqual(vm.completedFocusBlocks, 3)
     }
 
     func test_completedFocusBlocks_reflectsActiveValue() {

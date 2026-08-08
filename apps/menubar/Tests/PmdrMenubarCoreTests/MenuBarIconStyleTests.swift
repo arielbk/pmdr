@@ -25,7 +25,7 @@ final class MenuBarIconStyleTests: XCTestCase {
     }
 
     func test_idle_is_outline() {
-        XCTAssertEqual(MenuBarIconStyle(status: .idle).weight, .outline)
+        XCTAssertEqual(MenuBarIconStyle(status: .idle()).weight, .outline)
     }
 
     func test_pausing_preserves_the_phase_weight() {
@@ -50,7 +50,7 @@ final class MenuBarIconStyleTests: XCTestCase {
     func test_idle_is_not_dimmed() {
         // Idle already reads as inactive by showing no countdown at all, so the
         // mark stays at full strength and remains a crisp click target.
-        XCTAssertFalse(MenuBarIconStyle(status: .idle).isDimmed)
+        XCTAssertFalse(MenuBarIconStyle(status: .idle()).isDimmed)
     }
 
     // MARK: - accessibilityLabel
@@ -74,7 +74,7 @@ final class MenuBarIconStyleTests: XCTestCase {
     }
 
     func test_accessibility_label_idle() {
-        XCTAssertEqual(MenuBarIconStyle(status: .idle).accessibilityLabel, "pmdr — idle")
+        XCTAssertEqual(MenuBarIconStyle(status: .idle()).accessibilityLabel, "pmdr — idle")
     }
 
     // MARK: - all four active states are distinguishable

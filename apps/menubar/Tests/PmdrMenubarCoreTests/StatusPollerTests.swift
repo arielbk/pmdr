@@ -57,13 +57,13 @@ final class StatusPollerTests: XCTestCase {
     }
 
     func test_first_poll_emits_statusChanged() async throws {
-        let poller = StatusPoller(fetcher: StubFetcher([.success(.idle)]))
+        let poller = StatusPoller(fetcher: StubFetcher([.success(.idle())]))
         let events = try await poller.pollOnce()
-        XCTAssertEqual(events, [.statusChanged(.idle)])
+        XCTAssertEqual(events, [.statusChanged(.idle())])
     }
 
     func test_consecutive_identical_polls_emit_no_event_second_time() async throws {
-        let poller = StatusPoller(fetcher: StubFetcher([.success(.idle), .success(.idle)]))
+        let poller = StatusPoller(fetcher: StubFetcher([.success(.idle()), .success(.idle())]))
         _ = try await poller.pollOnce()
         let events = try await poller.pollOnce()
         XCTAssertEqual(events, [])
@@ -72,7 +72,7 @@ final class StatusPollerTests: XCTestCase {
     func test_status_change_idle_to_running_emits_statusChanged() async throws {
         let active = makeActive()
         let poller = StatusPoller(fetcher: StubFetcher([
-            .success(.idle),
+            .success(.idle()),
             .success(.running(active)),
         ]))
         _ = try await poller.pollOnce()
@@ -112,7 +112,7 @@ final class StatusPollerTests: XCTestCase {
         let brk = makeActive(remainingMs: 300_000, durationMs: 300_000, phase: .break)
         let poller = StatusPoller(fetcher: StubFetcher([
             .success(.running(focus)),
-            .success(.idle),
+            .success(.idle()),
             .success(.running(brk)),
         ]))
         _ = try await poller.pollOnce()
@@ -127,12 +127,12 @@ final class StatusPollerTests: XCTestCase {
         let brk = makeActive(remainingMs: 1_000, durationMs: 300_000, phase: .break)
         let poller = StatusPoller(fetcher: StubFetcher([
             .success(.running(brk)),
-            .success(.idle),
+            .success(.idle()),
         ]))
         _ = try await poller.pollOnce()
         let events = try await poller.pollOnce()
         XCTAssertEqual(events, [
-            .statusChanged(.idle),
+            .statusChanged(.idle()),
             .sessionEnded(lastPhase: .break),
         ])
     }
@@ -141,12 +141,12 @@ final class StatusPollerTests: XCTestCase {
         let focus = makeActive(phase: .focus)
         let poller = StatusPoller(fetcher: StubFetcher([
             .success(.running(focus)),
-            .success(.idle),
+            .success(.idle()),
         ]))
         _ = try await poller.pollOnce()
         let events = try await poller.pollOnce()
         XCTAssertEqual(events, [
-            .statusChanged(.idle),
+            .statusChanged(.idle()),
             .sessionEnded(lastPhase: .focus),
         ])
     }
@@ -155,26 +155,26 @@ final class StatusPollerTests: XCTestCase {
         let active = makeActive(phase: .focus)
         let poller = StatusPoller(fetcher: StubFetcher([
             .success(.paused(active)),
-            .success(.idle),
+            .success(.idle()),
         ]))
         _ = try await poller.pollOnce()
         let events = try await poller.pollOnce()
         XCTAssertEqual(events, [
-            .statusChanged(.idle),
+            .statusChanged(.idle()),
             .sessionEnded(lastPhase: .focus),
         ])
     }
 
     func test_first_poll_idle_does_not_emit_sessionEnded() async throws {
-        let poller = StatusPoller(fetcher: StubFetcher([.success(.idle)]))
+        let poller = StatusPoller(fetcher: StubFetcher([.success(.idle())]))
         let events = try await poller.pollOnce()
-        XCTAssertEqual(events, [.statusChanged(.idle)])
+        XCTAssertEqual(events, [.statusChanged(.idle())])
     }
 
     func test_idle_to_idle_emits_no_sessionEnded() async throws {
         let poller = StatusPoller(fetcher: StubFetcher([
-            .success(.idle),
-            .success(.idle),
+            .success(.idle()),
+            .success(.idle()),
         ]))
         _ = try await poller.pollOnce()
         let events = try await poller.pollOnce()
@@ -212,12 +212,12 @@ final class StatusPollerTests: XCTestCase {
     func test_currentStatus_reflects_last_successful_poll() async throws {
         let active = makeActive()
         let poller = StatusPoller(fetcher: StubFetcher([
-            .success(.idle),
+            .success(.idle()),
             .success(.running(active)),
         ]))
         _ = try await poller.pollOnce()
         var current = await poller.currentStatus()
-        XCTAssertEqual(current, .idle)
+        XCTAssertEqual(current, .idle())
         _ = try await poller.pollOnce()
         current = await poller.currentStatus()
         XCTAssertEqual(current, .running(active))
