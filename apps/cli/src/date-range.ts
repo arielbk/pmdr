@@ -70,8 +70,15 @@ export function resolveRange(opts: {
   const from = opts.from ?? toLocalDateKey(opts.earliest ?? opts.now);
   const startMs = parseLocalDate(from);
   const endDay = parseLocalDate(to);
-  if (startMs === null || endDay === null) {
-    throw new Error("invalid date");
+  // Name the offending flag and value: the caller is usually an agent deciding
+  // whether it mistyped a date or genuinely found nothing.
+  if (startMs === null) throw new Error(`Invalid --from date "${from}" — expected YYYY-MM-DD`);
+  if (endDay === null) throw new Error(`Invalid --to date "${to}" — expected YYYY-MM-DD`);
+  // Check inversion after resolution, not just on the explicit pair: an
+  // unbounded endpoint can resolve past an explicit one (a `--to` before the
+  // earliest record on file leaves from > to).
+  if (startMs > endDay) {
+    throw new Error(`Empty range: from ${from} is after to ${to}`);
   }
   return {
     from,

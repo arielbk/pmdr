@@ -166,15 +166,23 @@ export default defineCommand({
   },
   run({ args }) {
     const store = createStateModule(STATE_DIR);
-    const result = buildLog({
-      store,
-      now: Date.now(),
-      // An omitted endpoint is unbounded, so leave it undefined for the resolver
-      // rather than substituting a default here.
-      from: args.from || undefined,
-      to: args.to || undefined,
-      project: args.project,
-    });
+    let result: LogResult;
+    try {
+      result = buildLog({
+        store,
+        now: Date.now(),
+        // An omitted endpoint is unbounded, so leave it undefined for the resolver
+        // rather than substituting a default here.
+        from: args.from || undefined,
+        to: args.to || undefined,
+        project: args.project,
+      });
+    } catch (e) {
+      // A bad range must be distinguishable from an empty one: explain on
+      // stderr, leave stdout untouched, exit non-zero.
+      console.error((e as Error).message);
+      process.exit(1);
+    }
 
     if (args.json) {
       console.log(JSON.stringify(result));
