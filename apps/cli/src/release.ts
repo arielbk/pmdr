@@ -160,6 +160,29 @@ function describeDisagreement(versions: {
 }
 
 /**
+ * A version the menubar app can actually be built to. `MARKETING_VERSION`
+ * becomes `CFBundleShortVersionString`, which macOS defines as dotted digits;
+ * a prerelease tag is either rejected by the build or silently truncated, and
+ * either way the version the CLI compares against stops being the version that
+ * was released. A prerelease is fine for the CLI alone — that is what
+ * `--allow-missing-app` is for.
+ */
+export function assertAppReleasableVersion(version: string): void {
+  if (/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version)) {
+    return;
+  }
+
+  throw new Error(
+    [
+      `Refusing to publish ${packageName} ${version} with the menubar app: prerelease versions cannot be baked into an app bundle.`,
+      "  CFBundleShortVersionString is dotted digits only, so the app would report a different version than the one released.",
+      "  Release a stable X.Y.Z with the app,",
+      "  or pass --allow-missing-app to publish this prerelease as a CLI-only release.",
+    ].join("\n"),
+  );
+}
+
+/**
  * The publish gate: a release that should carry the menubar app must actually
  * carry it. `--allow-missing-app` is the deliberate escape hatch for a
  * CLI-only release; without it, a missing zip fails loudly before anything is
@@ -175,6 +198,7 @@ export function assertBundledApp(options: {
   if (check.ok) {
     // Checked even under --allow-missing-app: that flag permits shipping *no*
     // app, never shipping the wrong one.
+    assertAppReleasableVersion(options.releaseVersion);
     assertVersionsAgree({
       repoRoot: options.repoRoot,
       bundledVersion: check.version,

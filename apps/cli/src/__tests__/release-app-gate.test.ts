@@ -178,6 +178,43 @@ describe("assertBundledApp", () => {
   });
 });
 
+describe("prerelease versions", () => {
+  it("refuses a prerelease release when the app is bundled", () => {
+    const repoRoot = makeRepo();
+    writeBundledApp(repoRoot, {
+      zip: "PK",
+      metadata: '{"version":"0.4.0-beta.1"}',
+    });
+    writeMenubarSources(repoRoot, "0.4.0-beta.1");
+
+    let message = "";
+    try {
+      assertBundledApp({
+        repoRoot,
+        allowMissingApp: false,
+        releaseVersion: "0.4.0-beta.1",
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toContain("0.4.0-beta.1");
+    expect(message).toContain("--allow-missing-app");
+  });
+
+  it("accepts a prerelease for a CLI-only release", () => {
+    const repoRoot = makeRepo();
+
+    expect(() =>
+      assertBundledApp({
+        repoRoot,
+        allowMissingApp: true,
+        releaseVersion: "0.4.0-beta.1",
+      }),
+    ).not.toThrow();
+  });
+});
+
 describe("assertVersionsAgree", () => {
   it("passes when the release, the zip and the sources all carry one version", () => {
     const repoRoot = makeRepo();
