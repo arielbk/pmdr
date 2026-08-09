@@ -54,6 +54,46 @@ describe("README CLI documentation", () => {
     expect(runningCliSection).toContain("never drops an existing install back");
   });
 
+  // Note the terminator: `\z` is a literal "z" in JS regex, so the older
+  // sections above stop at the first word containing one. `\n## ` is the real
+  // "next top-level heading" boundary.
+  const integrations = readme.match(/\n## Integrations\n([\s\S]*?)\n## /)?.[1];
+
+  it("documents the status payload fields an integration renders from", () => {
+    const section = integrations;
+
+    expect(section).toContain("pmdr status --json");
+    expect(section).toContain("endsAt");
+    expect(section).toContain("remainingMs");
+    // The idle payload has no `endsAt` key at all — a consumer that assumes
+    // the field is always present breaks the moment the timer stops.
+    expect(section).toContain('{ "state": "idle" }');
+  });
+
+  it("documents the render rule that keeps a countdown drift-free", () => {
+    expect(integrations).toContain("endsAt - now");
+    expect(integrations).toContain("paused");
+    expect(integrations).toContain("frozen");
+    // The point of the rule: the consumer ticks on its own clock instead of
+    // decrementing the value it was handed at poll time.
+    expect(integrations).toMatch(/do not|never/i);
+  });
+
+  it("documents when to re-poll, including watching the state file", () => {
+    expect(integrations).toContain("state.json");
+    expect(integrations).toContain("fswatch");
+    // A read is what advances an expired phase, so polling is not just for the
+    // consumer's benefit.
+    expect(integrations).toMatch(/advance/i);
+  });
+
+  it("records that a daemon, sockets, and exec hooks are rejected", () => {
+    expect(integrations).toMatch(/no daemon/i);
+    expect(integrations).toContain("socket");
+    expect(integrations).toContain("hooks");
+    expect(integrations).toContain("pull contract");
+  });
+
   it("documents installing the bundled menubar app from the CLI", () => {
     const section = readme.match(
       /## The bundled menubar app([\s\S]*?)(?:\n## |\z)/,

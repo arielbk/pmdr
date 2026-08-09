@@ -117,6 +117,116 @@ for the whole pomodoro. `pmdr start --detach` does the same thing silently.
 `http://<machine-name>.local:<port>` from another device on the same local
 network to view the live status page.
 
+## Integrations
+
+`pmdr status --json` is the whole integration surface. There is no daemon, no
+socket, and no event system — a status bar, prompt, or widget polls the command
+(or watches the state file) and renders from the payload. Everything an
+integration needs to draw a drift-free countdown is in it.
+
+### The payload
+
+Running or paused:
+
+```json
+{
+  "state": "running",
+  "remainingMs": 1289413,
+  "endsAt": 1754750041000,
+  "duration": 1500000,
+  "startedAt": 1754748541000,
+  "phase": "focus",
+  "completedFocusBlocks": 0,
+  "todayFocusBlocks": 2,
+  "longBreakEvery": 4,
+  "project": "pmdr"
+}
+```
+
+| Field                  | Meaning                                                                |
+| ---------------------- | ---------------------------------------------------------------------- |
+| `state`                | `"running"`, `"paused"`, or `"idle"`                                   |
+| `remainingMs`          | Milliseconds left in this phase. Authoritative and frozen while paused |
+| `endsAt`               | Epoch ms when this phase ends — `null` while paused                    |
+| `duration`             | Nominal length of this phase in ms                                     |
+| `startedAt`            | Epoch ms the phase started                                             |
+| `phase`                | `"focus"` or `"break"`                                                 |
+| `completedFocusBlocks` | Focus blocks completed in the current long-break cycle                 |
+| `todayFocusBlocks`     | Focus blocks completed today                                           |
+| `longBreakEvery`       | Focus blocks per long break                                            |
+| `project`              | Assigned project, omitted when there is none                           |
+
+When no session is running the payload is exactly:
+
+```json
+{ "state": "idle" }
+```
+
+No other keys — not even `endsAt`. Branch on `state` before reading anything
+else.
+
+`endsAt` is not something you can compute yourself. `startedAt + duration` is
+wrong for any session that has been paused, because the pause time pushes the
+end out; `endsAt` accounts for it.
+
+### Rendering
+
+```
+running → display  endsAt - now
+paused  → display  remainingMs   (frozen; endsAt is null)
+idle    → display  nothing
+```
+
+That is the whole rule. Tick on your own clock against the absolute `endsAt`
+and the displayed second can never drift, replay, or skip, however long ago you
+last polled. Do not decrement `remainingMs` locally between polls — that is a
+second clock, and the moment it disagrees with the payload the display jumps.
+While paused, `remainingMs` is the frozen truth and there is nothing to tick.
+
+If your consumer runs on a different machine than the CLI, its clock may be
+skewed relative to pmdr's. Derive the offset from the payload once —
+`(endsAt - remainingMs) - <the local time you received it>` — and render
+against the corrected clock, which is both drift-free and skew-immune.
+
+### When to poll
+
+You only need a fresh payload when something you cannot predict has happened.
+Two triggers cover everything:
+
+1. **Local expiry.** You know the exact moment the phase ends — it is `endsAt`.
+   Re-poll then to pick up the next phase. Between now and then, nothing about
+   the countdown needs the CLI.
+2. **`state.json` changed.** Every session lives in
+   `~/.local/state/pmdr/state.json`. A start, pause, resume, stop, or project
+   change rewrites it, and nothing else can change the timer.
+
+A fixed low-frequency poll (say every 5 seconds, tmux's default
+`status-interval` territory) is a fine stand-in for both, and it has a useful
+side effect: pmdr advances an expired phase lazily, on read, so a polling
+consumer also keeps focus→break transitions timely for everyone.
+
+For near-instant reaction without a poll loop, watch the file — `fswatch` on
+macOS, `inotifywait` on Linux — and run `pmdr status --json` on change:
+
+```sh
+fswatch -o ~/.local/state/pmdr/state.json | while read -r _; do
+  pmdr status --json
+done
+```
+
+That gets you push semantics with no daemon on either side.
+
+### No daemon, deliberately
+
+pmdr will not grow a background process, a socket, an event bus, or exec hooks
+to serve integrations. The state file plus a command that reads it is enough:
+`endsAt` makes the countdown predictable without a push channel, and watching
+one file covers the transitions that aren't. A daemon would add a lifecycle to
+supervise, a second source of truth to keep in sync, and a failure mode where
+your status bar is stale because something crashed hours ago. This is settled —
+integrations should build on the pull contract above rather than ask for a push
+one.
+
 ## The bundled menubar app
 
 The npm package ships the built menubar app, so a global CLI install carries both surfaces:
