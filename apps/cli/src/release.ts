@@ -68,8 +68,9 @@ export const APP_ARTIFACT_NAME = "pmdr-app";
 /**
  * The version `apps/menubar` currently builds to — `MARKETING_VERSION` becomes
  * the bundle's `CFBundleShortVersionString`, which is the only number the CLI
- * compares an installed app against. Returns null when the sources are not
- * there to read, so this stays usable from a scratch repo.
+ * compares an installed app against. Returns null when the manifest is absent
+ * or carries no version — a state `assertVersionsAgree` treats as a failure
+ * rather than a reason to skip itself.
  */
 export function readMenubarSourceVersion(repoRoot: string): string | null {
   try {
@@ -102,6 +103,11 @@ export function readMenubarSourceVersion(repoRoot: string): string | null {
  * an app it knows nothing newer than. And a zip that matches its sources but
  * not the released version is the same failure wearing a disguise: it passed
  * the old two-way check while shipping an app a release behind.
+ *
+ * Sources whose `MARKETING_VERSION` cannot be read fail too. A gate that
+ * quietly drops the third number when it can't find it is a gate that reports
+ * "fine" about a release nobody checked; the escape hatch for shipping without
+ * the app is `--allow-missing-app`, which never reaches here.
  */
 export function assertVersionsAgree(options: {
   repoRoot: string;
@@ -109,8 +115,7 @@ export function assertVersionsAgree(options: {
   releaseVersion: string;
 }): void {
   const sourceVersion = readMenubarSourceVersion(options.repoRoot);
-  const sourcesAgree =
-    sourceVersion === null || sourceVersion === options.bundledVersion;
+  const sourcesAgree = sourceVersion === options.bundledVersion;
 
   if (sourcesAgree && options.bundledVersion === options.releaseVersion) {
     return;

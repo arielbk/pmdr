@@ -149,6 +149,33 @@ describe("assertBundledApp", () => {
       }),
     ).toThrow(/Refusing to publish/);
   });
+
+  it("refuses a bundled app whose sources' version cannot be read", () => {
+    const repoRoot = makeRepo();
+    writeBundledApp(repoRoot, { zip: "PK", metadata: '{"version":"0.3.1"}' });
+
+    expect(() =>
+      assertBundledApp({
+        repoRoot,
+        allowMissingApp: false,
+        releaseVersion: "0.3.1",
+      }),
+    ).toThrow(/apps\/menubar builds an unreadable version/);
+  });
+
+  it("tolerates unreadable sources when no app ships", () => {
+    // Nothing to be stale about: --allow-missing-app releases carry no app, so
+    // there is no version for the sources to disagree with.
+    const repoRoot = makeRepo();
+
+    expect(() =>
+      assertBundledApp({
+        repoRoot,
+        allowMissingApp: true,
+        releaseVersion: "0.3.1",
+      }),
+    ).not.toThrow();
+  });
 });
 
 describe("assertVersionsAgree", () => {
@@ -229,6 +256,49 @@ describe("assertVersionsAgree", () => {
     expect(message).toMatch(
       /MARKETING_VERSION 0\.1\.2 is the one that disagrees/,
     );
+    expect(message).toContain("pnpm release:version 0.3.1");
+  });
+
+  it("refuses to publish when the menubar sources are not there to read", () => {
+    // Silently skipping the gate is how a release ships an app nobody checked.
+    const repoRoot = makeRepo();
+
+    let message = "";
+    try {
+      assertVersionsAgree({
+        repoRoot,
+        bundledVersion: "0.3.1",
+        releaseVersion: "0.3.1",
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toContain("Refusing to publish @arielbk/pmdr");
+    expect(message).toContain("apps/menubar builds an unreadable version");
+  });
+
+  it("refuses to publish when the manifest carries no version to read", () => {
+    const repoRoot = makeRepo();
+    mkdirSync(join(repoRoot, "apps/menubar"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "apps/menubar/project.yml"),
+      'targets:\n  pmdr-menubar:\n    settings:\n      base:\n        CURRENT_PROJECT_VERSION: "1"\n',
+    );
+
+    let message = "";
+    try {
+      assertVersionsAgree({
+        repoRoot,
+        bundledVersion: "0.3.1",
+        releaseVersion: "0.3.1",
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toContain("apps/menubar builds an unreadable version");
+    expect(message).toMatch(/MARKETING_VERSION \(unreadable\)/);
     expect(message).toContain("pnpm release:version 0.3.1");
   });
 
