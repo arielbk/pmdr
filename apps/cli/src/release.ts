@@ -91,23 +91,67 @@ export function readMenubarSourceVersion(repoRoot: string): string | null {
  * "up to date" about an app it knows nothing newer than. So a version that
  * disagrees with the sources fails the release, in either direction.
  */
-export function assertBundledAppMatchesSources(options: {
+/**
+ * The single-version invariant: the version being released, the version baked
+ * into the bundled zip, and the version `apps/menubar` currently builds must
+ * all be the same number.
+ *
+ * Any two of them agreeing is not enough. A zip built from older sources leaves
+ * every user's app pinned to a stale version with no command that can move them
+ * off it — `pmdr app install` compares versions and reports "up to date" about
+ * an app it knows nothing newer than. And a zip that matches its sources but
+ * not the released version is the same failure wearing a disguise: it passed
+ * the old two-way check while shipping an app a release behind.
+ */
+export function assertVersionsAgree(options: {
   repoRoot: string;
   bundledVersion: string;
+  releaseVersion: string;
 }): void {
   const sourceVersion = readMenubarSourceVersion(options.repoRoot);
-  if (sourceVersion === null || sourceVersion === options.bundledVersion) {
+  const sourcesAgree =
+    sourceVersion === null || sourceVersion === options.bundledVersion;
+
+  if (sourcesAgree && options.bundledVersion === options.releaseVersion) {
     return;
   }
 
   throw new Error(
     [
-      `Refusing to publish ${packageName} with a stale bundled menubar app.`,
-      `  apps/cli/bundled-app carries ${options.bundledVersion}, but apps/menubar builds ${sourceVersion}`,
-      "  Rebuild it locally:  pnpm menubar:zip",
+      `Refusing to publish ${packageName}: the released version, the bundled menubar app and the menubar sources must all be the same version.`,
+      `  releasing ${options.releaseVersion}`,
+      `  apps/cli/bundled-app carries ${options.bundledVersion}`,
+      `  apps/menubar builds ${sourceVersion ?? "an unreadable version"}`,
+      `  ${describeDisagreement({ ...options, sourceVersion })}`,
+      `  Stamp the version first:  pnpm release:version ${options.releaseVersion}`,
+      "  Then rebuild the app:  pnpm menubar:zip",
       `  Or take the CI-built one:  gh run download --name ${APP_ARTIFACT_NAME} --dir apps/cli/bundled-app`,
     ].join("\n"),
   );
+}
+
+/**
+ * Which of the three is the odd one out. Naming it is the whole point of the
+ * gate: two of these numbers are always "the version we meant", and the
+ * operator needs to know which one to move.
+ */
+function describeDisagreement(versions: {
+  bundledVersion: string;
+  releaseVersion: string;
+  sourceVersion: string | null;
+}): string {
+  const { bundledVersion, releaseVersion, sourceVersion } = versions;
+
+  if (sourceVersion === bundledVersion && sourceVersion !== releaseVersion) {
+    return `The released version ${releaseVersion} is the one that disagrees — the app was never built for it.`;
+  }
+  if (sourceVersion === releaseVersion && bundledVersion !== releaseVersion) {
+    return `The bundled zip's ${bundledVersion} is the one that disagrees — it was built from older sources.`;
+  }
+  if (bundledVersion === releaseVersion && sourceVersion !== releaseVersion) {
+    return `The menubar sources' MARKETING_VERSION ${sourceVersion ?? "(unreadable)"} is the one that disagrees.`;
+  }
+  return "All three disagree.";
 }
 
 /**
@@ -119,15 +163,17 @@ export function assertBundledAppMatchesSources(options: {
 export function assertBundledApp(options: {
   repoRoot: string;
   allowMissingApp: boolean;
+  releaseVersion: string;
 }): BundledAppCheck {
   const check = checkBundledApp(options.repoRoot);
 
   if (check.ok) {
     // Checked even under --allow-missing-app: that flag permits shipping *no*
     // app, never shipping the wrong one.
-    assertBundledAppMatchesSources({
+    assertVersionsAgree({
       repoRoot: options.repoRoot,
       bundledVersion: check.version,
+      releaseVersion: options.releaseVersion,
     });
     return check;
   }
@@ -323,7 +369,11 @@ export function runRelease(options: {
   }
 
   // Gate before stamping: a refused release must not leave a bumped version behind.
-  const app = assertBundledApp({ repoRoot: options.repoRoot, allowMissingApp });
+  const app = assertBundledApp({
+    repoRoot: options.repoRoot,
+    allowMissingApp,
+    releaseVersion: options.nextVersion,
+  });
   process.stdout.write(
     app.ok
       ? `release: bundling menubar app ${app.version}\n`

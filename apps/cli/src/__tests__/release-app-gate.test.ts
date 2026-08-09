@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   assertBundledApp,
-  assertBundledAppMatchesSources,
   assertTarballCarriesApp,
+  assertVersionsAgree,
   checkBundledApp,
   listTarballEntries,
   parseReleaseArgs,
@@ -93,7 +93,11 @@ describe("assertBundledApp", () => {
 
     let message = "";
     try {
-      assertBundledApp({ repoRoot, allowMissingApp: false });
+      assertBundledApp({
+        repoRoot,
+        allowMissingApp: false,
+        releaseVersion: "0.3.1",
+      });
     } catch (error) {
       message = (error as Error).message;
     }
@@ -108,74 +112,137 @@ describe("assertBundledApp", () => {
   it("lets an explicit --allow-missing-app release through", () => {
     const repoRoot = makeRepo();
 
-    expect(assertBundledApp({ repoRoot, allowMissingApp: true }).ok).toBe(
-      false,
-    );
+    expect(
+      assertBundledApp({
+        repoRoot,
+        allowMissingApp: true,
+        releaseVersion: "0.3.1",
+      }).ok,
+    ).toBe(false);
   });
 
-  it("returns the located app when it is present", () => {
+  it("returns the located app when it agrees with the released version", () => {
     const repoRoot = makeRepo();
     writeBundledApp(repoRoot, { zip: "PK", metadata: '{"version":"0.3.1"}' });
+    writeMenubarSources(repoRoot, "0.3.1");
 
-    const check = assertBundledApp({ repoRoot, allowMissingApp: false });
+    const check = assertBundledApp({
+      repoRoot,
+      allowMissingApp: false,
+      releaseVersion: "0.3.1",
+    });
 
     expect(check.ok === true && check.version).toBe("0.3.1");
   });
 
-  it("refuses a zip built from older menubar sources", () => {
-    const repoRoot = makeRepo();
-    writeBundledApp(repoRoot, { zip: "PK", metadata: '{"version":"0.1.1"}' });
-    writeMenubarSources(repoRoot, "0.1.2");
-
-    expect(() => assertBundledApp({ repoRoot, allowMissingApp: false })).toThrow(
-      /carries 0\.1\.1, but apps\/menubar builds 0\.1\.2/,
-    );
-  });
-
-  it("still refuses a stale zip under --allow-missing-app", () => {
+  it("still runs the version gate under --allow-missing-app", () => {
     // That flag permits shipping no app at all, not shipping the wrong one.
     const repoRoot = makeRepo();
     writeBundledApp(repoRoot, { zip: "PK", metadata: '{"version":"0.1.1"}' });
     writeMenubarSources(repoRoot, "0.1.2");
 
-    expect(() => assertBundledApp({ repoRoot, allowMissingApp: true })).toThrow(
-      /stale bundled menubar app/,
-    );
-  });
-
-  it("passes a zip whose version matches the menubar sources", () => {
-    const repoRoot = makeRepo();
-    writeBundledApp(repoRoot, { zip: "PK", metadata: '{"version":"0.1.2"}' });
-    writeMenubarSources(repoRoot, "0.1.2");
-
-    expect(
-      assertBundledApp({ repoRoot, allowMissingApp: false }).ok,
-    ).toBe(true);
+    expect(() =>
+      assertBundledApp({
+        repoRoot,
+        allowMissingApp: true,
+        releaseVersion: "0.3.1",
+      }),
+    ).toThrow(/Refusing to publish/);
   });
 });
 
-describe("assertBundledAppMatchesSources", () => {
-  it("names the rebuild commands when the versions disagree", () => {
+describe("assertVersionsAgree", () => {
+  it("passes when the release, the zip and the sources all carry one version", () => {
     const repoRoot = makeRepo();
-    writeMenubarSources(repoRoot, "0.2.0");
+    writeMenubarSources(repoRoot, "0.3.1");
+
+    expect(() =>
+      assertVersionsAgree({
+        repoRoot,
+        bundledVersion: "0.3.1",
+        releaseVersion: "0.3.1",
+      }),
+    ).not.toThrow();
+  });
+
+  it("refuses a release version the app was never built for", () => {
+    // The motivating case: zip and sources agree with each other, so the old
+    // two-way gate passed while the published app stayed a version behind.
+    const repoRoot = makeRepo();
+    writeMenubarSources(repoRoot, "0.1.2");
 
     let message = "";
     try {
-      assertBundledAppMatchesSources({ repoRoot, bundledVersion: "0.1.9" });
+      assertVersionsAgree({
+        repoRoot,
+        bundledVersion: "0.1.2",
+        releaseVersion: "0.3.0",
+      });
     } catch (error) {
       message = (error as Error).message;
     }
 
+    expect(message).toContain("Refusing to publish @arielbk/pmdr");
+    expect(message).toContain("0.3.0");
+    expect(message).toContain("apps/cli/bundled-app carries 0.1.2");
+    expect(message).toContain("apps/menubar builds 0.1.2");
+    expect(message).toMatch(
+      /released version 0\.3\.0 is the one that disagrees/,
+    );
+  });
+
+  it("names the zip when it was built from older sources", () => {
+    const repoRoot = makeRepo();
+    writeMenubarSources(repoRoot, "0.3.1");
+
+    let message = "";
+    try {
+      assertVersionsAgree({
+        repoRoot,
+        bundledVersion: "0.1.1",
+        releaseVersion: "0.3.1",
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toMatch(/zip's 0\.1\.1 is the one that disagrees/);
     expect(message).toContain("pnpm menubar:zip");
     expect(message).toContain("gh run download --name pmdr-app");
   });
 
-  it("cannot judge a repo with no menubar sources, so it allows the release", () => {
+  it("names the menubar sources when they were never stamped", () => {
     const repoRoot = makeRepo();
+    writeMenubarSources(repoRoot, "0.1.2");
+
+    let message = "";
+    try {
+      assertVersionsAgree({
+        repoRoot,
+        bundledVersion: "0.3.1",
+        releaseVersion: "0.3.1",
+      });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toMatch(
+      /MARKETING_VERSION 0\.1\.2 is the one that disagrees/,
+    );
+    expect(message).toContain("pnpm release:version 0.3.1");
+  });
+
+  it("says so when no two of the three agree", () => {
+    const repoRoot = makeRepo();
+    writeMenubarSources(repoRoot, "0.1.2");
 
     expect(() =>
-      assertBundledAppMatchesSources({ repoRoot, bundledVersion: "9.9.9" }),
-    ).not.toThrow();
+      assertVersionsAgree({
+        repoRoot,
+        bundledVersion: "0.2.0",
+        releaseVersion: "0.3.1",
+      }),
+    ).toThrow(/All three disagree/);
   });
 });
 
