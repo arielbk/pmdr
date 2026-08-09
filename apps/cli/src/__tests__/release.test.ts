@@ -7,7 +7,9 @@ import {
   assertValidVersion,
   createReleaseCommands,
   readCurrentVersion,
+  readMenubarSourceVersion,
   stampReleaseVersion,
+  stampVersion,
 } from "../release.js";
 
 function makeRepoFixture(packageJson: Record<string, unknown>): string {
@@ -18,6 +20,33 @@ function makeRepoFixture(packageJson: Record<string, unknown>): string {
     `${JSON.stringify(packageJson, null, 2)}\n`,
   );
   return repoRoot;
+}
+
+/** A project.yml shaped like the real one: two targets, only one versioned. */
+const menubarProject = (marketingVersion: string) =>
+  [
+    "name: pmdr-menubar",
+    "targets:",
+    "  PmdrMenubarCore:",
+    "    settings:",
+    "      base:",
+    "        PRODUCT_NAME: PmdrMenubarCore",
+    "  pmdr-menubar:",
+    "    settings:",
+    "      base:",
+    `        MARKETING_VERSION: "${marketingVersion}"`,
+    '        CURRENT_PROJECT_VERSION: "1"',
+    "",
+  ].join("\n");
+
+function withMenubarSources(
+  repoRoot: string,
+  marketingVersion: string,
+): string {
+  mkdirSync(join(repoRoot, "apps/menubar"), { recursive: true });
+  const path = join(repoRoot, "apps/menubar/project.yml");
+  writeFileSync(path, menubarProject(marketingVersion));
+  return path;
 }
 
 describe("bumpVersion", () => {
@@ -64,6 +93,69 @@ describe("stampReleaseVersion", () => {
   });
 });
 
+describe("stampVersion", () => {
+  it("writes the version into both the CLI and menubar manifests", () => {
+    const repoRoot = makeRepoFixture({
+      name: "@arielbk/pmdr",
+      version: "0.3.0",
+    });
+    withMenubarSources(repoRoot, "0.1.2");
+
+    stampVersion({ repoRoot, nextVersion: "0.3.1" });
+
+    expect(readCurrentVersion(repoRoot)).toBe("0.3.1");
+    expect(readMenubarSourceVersion(repoRoot)).toBe("0.3.1");
+  });
+
+  it("leaves the rest of the menubar manifest byte-identical", () => {
+    const repoRoot = makeRepoFixture({
+      name: "@arielbk/pmdr",
+      version: "0.3.0",
+    });
+    const projectPath = withMenubarSources(repoRoot, "0.1.2");
+
+    stampVersion({ repoRoot, nextVersion: "0.3.1" });
+
+    expect(readFileSync(projectPath, "utf8")).toBe(menubarProject("0.3.1"));
+  });
+
+  it("is a no-op when the version is already stamped", () => {
+    const repoRoot = makeRepoFixture({
+      name: "@arielbk/pmdr",
+      version: "0.3.0",
+    });
+    const projectPath = withMenubarSources(repoRoot, "0.1.2");
+    const packageJsonPath = join(repoRoot, "apps/cli/package.json");
+
+    stampVersion({ repoRoot, nextVersion: "0.3.1" });
+    const afterFirst = {
+      packageJson: readFileSync(packageJsonPath, "utf8"),
+      project: readFileSync(projectPath, "utf8"),
+    };
+
+    stampVersion({ repoRoot, nextVersion: "0.3.1" });
+
+    expect(readFileSync(packageJsonPath, "utf8")).toBe(afterFirst.packageJson);
+    expect(readFileSync(projectPath, "utf8")).toBe(afterFirst.project);
+  });
+
+  it("refuses a menubar manifest with no MARKETING_VERSION", () => {
+    const repoRoot = makeRepoFixture({
+      name: "@arielbk/pmdr",
+      version: "0.3.0",
+    });
+    mkdirSync(join(repoRoot, "apps/menubar"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "apps/menubar/project.yml"),
+      "name: pmdr-menubar\n",
+    );
+
+    expect(() => stampVersion({ repoRoot, nextVersion: "0.3.1" })).toThrow(
+      /MARKETING_VERSION/,
+    );
+  });
+});
+
 describe("createReleaseCommands", () => {
   it("builds, packs, then publishes from apps/cli", () => {
     const commands = createReleaseCommands({
@@ -90,6 +182,20 @@ describe("createReleaseCommands", () => {
     });
 
     expect(commands[2]?.args).toContain("--dry-run");
+  });
+});
+
+describe("the release:version script", () => {
+  it("is wired up so `pnpm release:version X.Y.Z` stamps both manifests", () => {
+    const rootPackageJson = JSON.parse(
+      readFileSync(join(__dirname, "../../../../package.json"), "utf8"),
+    ) as { scripts?: Record<string, string> };
+
+    // The version gate's error message tells the operator to run this exact
+    // command, so the script has to exist under this exact name.
+    expect(rootPackageJson.scripts?.["release:version"]).toBe(
+      "node apps/cli/src/release.ts --stamp-only --version",
+    );
   });
 });
 

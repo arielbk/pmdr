@@ -338,6 +338,47 @@ export function stampReleaseVersion(options: {
   return packageJsonPath;
 }
 
+/**
+ * Rewrite `MARKETING_VERSION` in place. A regex replacement rather than a YAML
+ * round-trip: `apps/menubar/project.yml` is hand-maintained, and reserialising
+ * it would reflow quoting and comments the maintainer chose, producing a diff
+ * nobody can review.
+ */
+export function stampMenubarSourceVersion(options: {
+  repoRoot: string;
+  nextVersion: string;
+}): string {
+  const projectPath = resolve(options.repoRoot, "apps/menubar/project.yml");
+  const project = readFileSync(projectPath, "utf8");
+  const pattern = /(MARKETING_VERSION:\s*)"?[^"\s]+"?/;
+
+  if (!pattern.test(project)) {
+    throw new Error(`Expected ${projectPath} to declare MARKETING_VERSION`);
+  }
+
+  writeFileSync(
+    projectPath,
+    project.replace(pattern, `$1"${options.nextVersion}"`),
+  );
+
+  return projectPath;
+}
+
+/**
+ * The one command that moves the version. Both manifests are stamped together
+ * so `pnpm menubar:zip` bakes the same number the CLI is about to publish —
+ * the single-version invariant `assertVersionsAgree` enforces at release time
+ * is only satisfiable because this is how the version gets set.
+ */
+export function stampVersion(options: {
+  repoRoot: string;
+  nextVersion: string;
+}): string[] {
+  assertValidVersion(options.nextVersion);
+
+  return [stampReleaseVersion(options), stampMenubarSourceVersion(options)];
+}
+
 export function createReleaseCommands(options: {
   repoRoot: string;
   dryRun: boolean;
@@ -460,10 +501,13 @@ export type ReleaseArgs = {
   nextVersion: string;
   allowMissingApp: boolean;
   appArtifactDir: string | undefined;
+  /** Stamp both manifests and stop — `pnpm release:version`, not a publish. */
+  stampOnly: boolean;
 };
 
 export function parseReleaseArgs(args: string[]): ReleaseArgs {
   let dryRun = false;
+  let stampOnly = false;
   let allowMissingApp = false;
   let appArtifactDir: string | undefined;
   let explicitVersion: string | undefined;
@@ -475,6 +519,8 @@ export function parseReleaseArgs(args: string[]): ReleaseArgs {
       continue;
     } else if (arg === "--dry-run") {
       dryRun = true;
+    } else if (arg === "--stamp-only") {
+      stampOnly = true;
     } else if (arg === "--allow-missing-app") {
       allowMissingApp = true;
     } else if (arg === "--app-artifact") {
@@ -500,6 +546,7 @@ export function parseReleaseArgs(args: string[]): ReleaseArgs {
           "Usage: pnpm release:pmdr -- --dry-run (--version x.y.z | --bump patch|minor|major)",
           "  --app-artifact <dir>   stage a downloaded CI pmdr-app artifact before packing",
           "  --allow-missing-app    publish a CLI-only release without the menubar app",
+          "  --stamp-only           write the version into both manifests and stop (pnpm release:version x.y.z)",
           "",
         ].join("\n"),
       );
@@ -519,6 +566,7 @@ export function parseReleaseArgs(args: string[]): ReleaseArgs {
       nextVersion: explicitVersion,
       allowMissingApp,
       appArtifactDir,
+      stampOnly,
     };
   }
 
@@ -528,6 +576,7 @@ export function parseReleaseArgs(args: string[]): ReleaseArgs {
       nextVersion: bumpVersion(readCurrentVersion(defaultRepoRoot), release),
       allowMissingApp,
       appArtifactDir,
+      stampOnly,
     };
   }
 
@@ -539,6 +588,17 @@ if (process.argv[1] && existsSync(process.argv[1])) {
   if (invokedPath === sourcePath) {
     try {
       const options = parseReleaseArgs(process.argv.slice(2));
+      if (options.stampOnly) {
+        for (const stamped of stampVersion({
+          repoRoot: defaultRepoRoot,
+          nextVersion: options.nextVersion,
+        })) {
+          process.stdout.write(
+            `release: stamped ${options.nextVersion} into ${stamped}\n`,
+          );
+        }
+        process.exit(0);
+      }
       runRelease({
         repoRoot: defaultRepoRoot,
         nextVersion: options.nextVersion,

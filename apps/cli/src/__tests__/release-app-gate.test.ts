@@ -423,6 +423,7 @@ describe("parseReleaseArgs", () => {
       nextVersion: "0.3.1",
       allowMissingApp: false,
       appArtifactDir: undefined,
+      stampOnly: false,
     });
   });
 
@@ -433,6 +434,15 @@ describe("parseReleaseArgs", () => {
     expect(
       parseReleaseArgs(["--version", "0.3.1", "--app-artifact", "/tmp/dl"]),
     ).toMatchObject({ appArtifactDir: "/tmp/dl" });
+  });
+
+  it("recognises --stamp-only as the version-stamping entrypoint", () => {
+    expect(
+      parseReleaseArgs(["--stamp-only", "--version", "0.3.1"]),
+    ).toMatchObject({ stampOnly: true, nextVersion: "0.3.1" });
+    expect(parseReleaseArgs(["--version", "0.3.1"])).toMatchObject({
+      stampOnly: false,
+    });
   });
 
   it("rejects --app-artifact with no directory", () => {
