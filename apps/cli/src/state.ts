@@ -55,6 +55,12 @@ export type DerivedKind = "idle" | "running" | "paused" | "expired";
 export interface DerivedState {
   kind: DerivedKind;
   remainingMs: number;
+  /**
+   * Absolute epoch ms at which the current phase ends — the value a consumer
+   * counts down against on its own clock. `null` while paused (there is no
+   * end moment until the timer resumes) and when idle/expired.
+   */
+  endsAt: number | null;
 }
 
 export interface CompletionRecord {
@@ -96,18 +102,18 @@ export function deriveState({
   file: StateRecord | null;
   now: number;
 }): DerivedState {
-  if (!file) return { kind: "idle", remainingMs: 0 };
+  if (!file) return { kind: "idle", remainingMs: 0, endsAt: null };
 
   const nominalEndMs = file.startedAt + file.durationMs + file.accumulatedPauseMs;
 
   if (file.pausedAt !== null) {
     const remainingMs = Math.max(0, nominalEndMs - file.pausedAt);
-    return { kind: "paused", remainingMs };
+    return { kind: "paused", remainingMs, endsAt: null };
   }
 
   const remainingMs = nominalEndMs - now;
-  if (remainingMs <= 0) return { kind: "expired", remainingMs: 0 };
-  return { kind: "running", remainingMs };
+  if (remainingMs <= 0) return { kind: "expired", remainingMs: 0, endsAt: null };
+  return { kind: "running", remainingMs, endsAt: nominalEndMs };
 }
 
 export function createStateModule(

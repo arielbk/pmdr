@@ -63,6 +63,7 @@ describe("pmdr serve /api/status", () => {
     expect(getStatusJson()).toEqual({
       state: "running",
       remainingMs: 55_000,
+      endsAt: NOW + 55_000,
       duration: 60_000,
       startedAt: NOW - 5_000,
       phase: "focus",
@@ -87,6 +88,7 @@ describe("pmdr serve /api/status", () => {
     expect(getStatusJson()).toMatchObject({
       state: "paused",
       remainingMs: 52_000,
+      endsAt: null,
       project: "deepwork",
     });
   });
