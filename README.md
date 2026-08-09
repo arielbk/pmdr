@@ -136,10 +136,35 @@ set -g status-interval 5
 
 `status-interval` is how often tmux re-runs the command, in seconds; 5 keeps the
 countdown within a second or so of true and keeps expired phases advancing
-promptly. Going to 1 costs you a process per second for no visible gain — tmux
-redraws on its own schedule either way, so the display is never smoother than
-`status-interval`. When the timer is idle the command prints `idle`; use the
-`--json` form below if you would rather show nothing.
+promptly. It is also your reaction time to your own actions: tmux caches the
+command's output between ticks, so a pause or resume does not reach the status
+bar until the next one. Dropping to 1 fixes that at the cost of a process per
+second — but it does not make the countdown itself smoother, since tmux redraws
+on its own schedule and the display is never finer-grained than
+`status-interval`.
+
+To keep a cheap interval and still react instantly, force the redraw yourself
+when you act. `refresh-client -S` re-runs the `#()` command immediately,
+whatever `status-interval` is set to:
+
+```sh
+pmdr() {
+  command pmdr "$@"
+  rc=$?
+  tmux refresh-client -S 2>/dev/null
+  return $rc
+}
+```
+
+Put that in your shell rc. Keep the `return $rc` — `pmdr` exits non-zero to say
+things (`status` on an idle timer, for one), and a wrapper that ends on the
+`tmux` call reports that call's result instead, quietly breaking any script or
+agent branching on it. The countdown keeps ticking on the slow interval,
+where it costs nothing, and start, pause, resume, and stop land on the status
+bar as soon as the command returns.
+
+When the timer is idle the command prints `idle`; use the `--json` form below if
+you would rather show nothing.
 
 For your own format, go through `--json` and `jq`. Quoting this inline in
 `.tmux.conf` is miserable, so put it in a script — `~/.config/tmux/pmdr.sh`:

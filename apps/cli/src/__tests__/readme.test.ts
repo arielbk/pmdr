@@ -100,6 +100,14 @@ describe("README CLI documentation", () => {
     expect(integrations).toContain("status-interval");
   });
 
+  it("warns that status-interval bounds reaction time, and gives the escape hatch", () => {
+    // A pause is invisible until the next tick, because tmux caches the `#()`
+    // output between them. That is the one cost of a slow interval that a
+    // faster countdown does not describe.
+    expect(integrations).toMatch(/refresh-client -S/);
+    expect(integrations).toMatch(/pause/i);
+  });
+
   it("offers tmux users a jq variant for formatting the status themselves", () => {
     expect(integrations).toContain("jq");
     expect(integrations).toContain("pmdr status --json | jq");
