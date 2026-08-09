@@ -41,7 +41,7 @@ final class PmdrClientStalePathTests: XCTestCase {
         )
 
         let status = try await client.status()
-        XCTAssertEqual(status, .idle)
+        XCTAssertEqual(status, .idle())
     }
 
     func test_does_not_refresh_when_the_binary_still_resolves() async throws {

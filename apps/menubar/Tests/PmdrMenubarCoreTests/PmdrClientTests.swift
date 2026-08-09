@@ -4,7 +4,15 @@ import XCTest
 final class PmdrClientDecodingTests: XCTestCase {
     func test_decodes_idle_state() throws {
         let json = Data(#"{"state":"idle"}"#.utf8)
-        XCTAssertEqual(try PmdrClient.decodeStatus(from: json), .idle)
+        XCTAssertEqual(try PmdrClient.decodeStatus(from: json), .idle())
+    }
+
+    func test_decodes_idle_todayFocusBlocks() throws {
+        let json = Data(#"{"state":"idle","todayFocusBlocks":3}"#.utf8)
+        XCTAssertEqual(
+            try PmdrClient.decodeStatus(from: json),
+            .idle(todayFocusBlocks: 3)
+        )
     }
 
     func test_decodes_running_focus_state() throws {
@@ -162,6 +170,12 @@ final class PmdrClientArgvTests: XCTestCase {
         let (client, argvLog) = try makeArgvCapturingClient(stdout: #"{"projects":[]}"#)
         _ = try await client.listProjects()
         XCTAssertEqual(readArgv(argvLog), ["project", "list", "--json"])
+    }
+
+    func test_setProject_invokes_project_set_withName() async throws {
+        let (client, argvLog) = try makeArgvCapturingClient(stdout: "")
+        try await client.setProject("Deep Work")
+        XCTAssertEqual(readArgv(argvLog), ["project", "set", "Deep Work"])
     }
 
     func test_note_invokes_note_with_text() async throws {
@@ -341,7 +355,7 @@ final class PmdrClientIntegrationTests: XCTestCase {
     func test_idle_status_decodes() async throws {
         let client = makeClient()
         let status = try await client.status()
-        XCTAssertEqual(status, .idle)
+        XCTAssertEqual(status, .idle())
     }
 
     func test_running_status_decodes_after_start() async throws {

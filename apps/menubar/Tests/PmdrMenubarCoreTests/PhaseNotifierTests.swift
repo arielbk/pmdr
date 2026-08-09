@@ -67,7 +67,7 @@ final class PhaseNotifierTests: XCTestCase {
         let presenter = RecordingPresenter()
         let notifier = PhaseNotifier(presenter: presenter)
         await notifier.handle([
-            .statusChanged(.idle),
+            .statusChanged(.idle()),
             .sessionEnded(lastPhase: .break),
         ])
         let calls = await presenter.calls
@@ -81,7 +81,7 @@ final class PhaseNotifierTests: XCTestCase {
         let presenter = RecordingPresenter()
         let notifier = PhaseNotifier(presenter: presenter)
         await notifier.handle([
-            .statusChanged(.idle),
+            .statusChanged(.idle()),
             .sessionEnded(lastPhase: .focus),
         ])
         let calls = await presenter.calls
@@ -130,7 +130,7 @@ final class PhaseNotifierTests: XCTestCase {
         ])
         await notifier.handle([])
         await notifier.handle([
-            .statusChanged(.idle),
+            .statusChanged(.idle()),
             .sessionEnded(lastPhase: .break),
         ])
         let calls = await presenter.calls
@@ -157,7 +157,7 @@ final class PhaseNotifierTests: XCTestCase {
         let soundPlayer = RecordingSoundPlayer()
         let notifier = PhaseNotifier(presenter: RecordingPresenter(), soundPlayer: soundPlayer)
         await notifier.handle([
-            .statusChanged(.idle),
+            .statusChanged(.idle()),
             .sessionEnded(lastPhase: .break),
         ])
         let played = soundPlayer.played
@@ -178,7 +178,7 @@ final class PhaseNotifierTests: XCTestCase {
         let soundPlayer = RecordingSoundPlayer()
         let notifier = PhaseNotifier(presenter: RecordingPresenter(), soundPlayer: soundPlayer)
         await notifier.handle([
-            .statusChanged(.idle),
+            .statusChanged(.idle()),
             .sessionEnded(lastPhase: .focus),
         ])
         let played = soundPlayer.played

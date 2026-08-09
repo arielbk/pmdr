@@ -16,6 +16,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
     private static let surface = OverlaySurface.standard
     private static let visualSize = NSSize(width: 240, height: 136)
     private static let panelSize = surface.panelSize(forVisualSize: visualSize)
+    private static let newProjectTitle = "New Project…"
 
     private var panel: NSPanel?
     private var phaseField: NSTextField?
@@ -30,7 +31,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
     private weak var effectView: FloatingTimerBackgroundView?
     private(set) var isHovered = false
     private var didRefreshProjectPopupDuringHover = false
-    private var currentStatus: Status = .idle
+    private var currentStatus: Status = .idle()
     private var toggleSymbolName = "play.fill"
     private var snapshot = Snapshot(
         phaseLabel: "IDLE",
@@ -48,6 +49,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
     private let positionStore: FloatingTimerPosition
     private let screenProvider: () -> NSScreen?
     private weak var actions: FloatingTimerActions?
+    private let requestNewProjectName: @MainActor () -> String?
 
     init(
         positionStore: FloatingTimerPosition = FloatingTimerPosition(),
@@ -57,11 +59,13 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
                 ?? NSScreen.main
                 ?? NSScreen.screens.first
         },
-        actions: FloatingTimerActions? = nil
+        actions: FloatingTimerActions? = nil,
+        requestNewProjectName: @escaping @MainActor () -> String? = FloatingTimerPanelController.promptForNewProjectName
     ) {
         self.positionStore = positionStore
         self.screenProvider = screenProvider
         self.actions = actions
+        self.requestNewProjectName = requestNewProjectName
         super.init()
     }
 
@@ -224,6 +228,10 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         actions?.setProject(project)
     }
 
+    func addProject(_ name: String) {
+        actions?.addProject(name)
+    }
+
     func availableProjects() -> [ProjectRecord] {
         actions?.listProjects() ?? []
     }
@@ -270,14 +278,57 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
     }
 
     private func selectedProjectForStarting() -> String? {
-        if let selected = projectPopup?.titleOfSelectedItem, !selected.isEmpty {
+        if let selected = projectPopup?.titleOfSelectedItem,
+           !selected.isEmpty,
+           selected != Self.newProjectTitle
+        {
             return selected
         }
         return snapshot.projectName.isEmpty ? nil : snapshot.projectName
     }
 
     @objc private func projectPopupSelectionChanged(_ sender: Any?) {
-        selectProject(projectPopup?.titleOfSelectedItem)
+        guard projectPopup?.titleOfSelectedItem == Self.newProjectTitle else {
+            selectProject(projectPopup?.titleOfSelectedItem)
+            return
+        }
+
+        guard let requestedName = requestNewProjectName() else {
+            refreshProjectPopup()
+            return
+        }
+        let name = requestedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            refreshProjectPopup()
+            return
+        }
+
+        if projectPopup?.item(withTitle: name) == nil {
+            projectPopup?.insertItem(
+                withTitle: name,
+                at: max(0, (projectPopup?.numberOfItems ?? 1) - 1)
+            )
+        }
+        projectPopup?.selectItem(withTitle: name)
+        addProject(name)
+    }
+
+    private static func promptForNewProjectName() -> String? {
+        let alert = makeNewProjectAlert()
+        guard let input = alert.accessoryView as? NSTextField else { return nil }
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        return input.stringValue
+    }
+
+    static func makeNewProjectAlert() -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = "New project"
+        alert.informativeText = "Name the project to log time against."
+        alert.addButton(withTitle: "Log")
+        alert.addButton(withTitle: "Cancel")
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        alert.accessoryView = input
+        return alert
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -308,6 +359,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         let projects = availableProjects().filter { !$0.archived }
         projectPopup.removeAllItems()
         projectPopup.addItems(withTitles: projects.map(\.name))
+        projectPopup.addItem(withTitle: Self.newProjectTitle)
         if let selectedTitle, !selectedTitle.isEmpty {
             projectPopup.selectItem(withTitle: selectedTitle)
         }

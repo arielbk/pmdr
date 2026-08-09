@@ -8,5 +8,6 @@ public protocol FloatingTimerActions: AnyObject {
     func resume()
     func stop()
     func setProject(_ project: String?)
+    func addProject(_ name: String)
     func listProjects() -> [ProjectRecord]
 }

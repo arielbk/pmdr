@@ -35,8 +35,8 @@ final class TitleFormatterTests: XCTestCase {
     // MARK: - title(for:elapsedSincePoll:)
 
     func test_title_idle_is_empty() {
-        XCTAssertEqual(TitleFormatter.title(for: .idle), "")
-        XCTAssertEqual(TitleFormatter.title(for: .idle, elapsedSincePoll: 5), "")
+        XCTAssertEqual(TitleFormatter.title(for: .idle()), "")
+        XCTAssertEqual(TitleFormatter.title(for: .idle(), elapsedSincePoll: 5), "")
     }
 
     func test_title_running_uses_remaining() {
