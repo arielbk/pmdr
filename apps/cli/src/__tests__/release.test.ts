@@ -199,6 +199,44 @@ describe("the release:version script", () => {
   });
 });
 
+describe("the documented release procedure", () => {
+  const skillPath = join(
+    __dirname,
+    "../../../../.claude/skills/release/SKILL.md",
+  );
+
+  it("leads with the stamp step, then the app zip, then the release", () => {
+    const skill = readFileSync(skillPath, "utf8");
+
+    const stamp = skill.indexOf("pnpm release:version");
+    const zip = skill.indexOf("pnpm menubar:zip");
+    const release = skill.indexOf("pnpm release:pmdr");
+
+    expect(stamp).toBeGreaterThan(-1);
+    expect(zip).toBeGreaterThan(stamp);
+    expect(release).toBeGreaterThan(zip);
+  });
+
+  it("documents the same stamp-first sequence in the README", () => {
+    const readme = readFileSync(join(__dirname, "../../../../README.md"), "utf8");
+
+    const stamp = readme.indexOf("pnpm release:version");
+    const zip = readme.indexOf("pnpm menubar:zip");
+    const release = readme.indexOf("pnpm release:pmdr");
+
+    expect(stamp).toBeGreaterThan(-1);
+    expect(zip).toBeGreaterThan(stamp);
+    expect(release).toBeGreaterThan(zip);
+  });
+
+  it("states the single-version rule the release gate enforces", () => {
+    const skill = readFileSync(skillPath, "utf8");
+
+    expect(skill).toMatch(/MARKETING_VERSION/);
+    expect(skill).toMatch(/same version|one version|single version/i);
+  });
+});
+
 describe("publishable CLI package", () => {
   it("declares @arielbk/pmdr as a public package with the built bin", () => {
     const packageJson = JSON.parse(

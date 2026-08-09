@@ -86,13 +86,6 @@ export function readMenubarSourceVersion(repoRoot: string): string | null {
 }
 
 /**
- * A zip built from older sources is worse than no zip: `pmdr app install`
- * compares versions, so shipping one leaves every user's app pinned to the
- * stale version with no command that can move them off it — the CLI reports
- * "up to date" about an app it knows nothing newer than. So a version that
- * disagrees with the sources fails the release, in either direction.
- */
-/**
  * The single-version invariant: the version being released, the version baked
  * into the bundled zip, and the version `apps/menubar` currently builds must
  * all be the same number.

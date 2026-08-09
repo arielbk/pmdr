@@ -49,17 +49,22 @@ pnpm build        # rebuild the CLI
 
 ### Releasing
 
+A release is **one version**, decided up front and stamped before anything is built:
+
 ```sh
-gh run download --name pmdr-app --dir apps/cli/bundled-app   # take the CI-built menubar app
-pnpm release:pmdr -- --dry-run --version X.Y.Z               # verify the tarball
-pnpm release:pmdr -- --version X.Y.Z                         # stamp, build, publish to npm
+pnpm release:version X.Y.Z                     # stamp both manifests: CLI package + MARKETING_VERSION
+pnpm menubar:zip                               # build the app zip from the stamped sources
+pnpm release:pmdr -- --dry-run --version X.Y.Z # verify the tarball
+pnpm release:pmdr -- --version X.Y.Z           # build, pack, publish to npm
 ```
 
-The flow lives in `apps/cli/src/release.ts`; it stamps `apps/cli/package.json`, builds, `npm pack`s to `dist/releases/`, and publishes. Tagging and the GitHub release are manual.
+The stamp comes first because the zip bakes in whatever `MARKETING_VERSION` said when it was built — build it before stamping and the release will refuse the stale zip. In place of `pnpm menubar:zip` you can take the CI-built app with `gh run download --name pmdr-app --dir apps/cli/bundled-app`, as long as CI built it from the same stamped commit (`--app-artifact <downloaded-dir>` lets the release stage a downloaded directory for you).
 
-A published release must carry the menubar app: the release refuses to stamp or publish unless `apps/cli/bundled-app/pmdr-app.zip` and its version sidecar are in place, and after packing it checks that the tarball really contains them. Get the zip either from CI (the command above, or `--app-artifact <downloaded-dir>` to let the release stage it for you) or locally with `pnpm menubar:zip`. `--allow-missing-app` publishes a CLI-only release on purpose.
+The flow lives in `apps/cli/src/release.ts`; `release:pmdr` stamps `apps/cli/package.json`, builds, `npm pack`s to `dist/releases/`, and publishes — it never writes `MARKETING_VERSION`, which is `release:version`'s job. Tagging and the GitHub release are manual.
 
-It must also carry the *current* app: the release refuses a zip whose version disagrees with `MARKETING_VERSION` in `apps/menubar/project.yml`. Shipping a zip built from older sources is worse than shipping none — `pmdr app install` only moves you to a newer version than the one installed, so a stale zip pins every user to the old app and leaves `pmdr app status` calling it up to date. `--allow-missing-app` does not waive this; it permits shipping no app, not the wrong one.
+A published release must carry the menubar app: the release refuses to stamp or publish unless `apps/cli/bundled-app/pmdr-app.zip` and its version sidecar are in place, and after packing it checks that the tarball really contains them. `--allow-missing-app` publishes a CLI-only release on purpose.
+
+It must also carry the *current* app: the released version, the bundled zip's version and `MARKETING_VERSION` in `apps/menubar/project.yml` must all be the same number — any two agreeing is not enough. Shipping a zip built from older sources is worse than shipping none — `pmdr app install` only moves you to a newer version than the one installed, so a stale zip pins every user to the old app and leaves `pmdr app status` calling it up to date, and a zip matching its sources but not the released version does exactly that too. `--allow-missing-app` does not waive this; it permits shipping no app, not the wrong one. Prerelease versions are refused whenever a zip is present — a prerelease has to be a CLI-only release.
 
 `.github/workflows/menubar-app.yml` is where the app binary comes from: a macOS runner runs `xcodegen`, builds Release, checks the zip with `scripts/verify-menubar-zip.sh` (signature valid, every Mach-O universal), uploads it as the `pmdr-app` artifact, and then runs the JS tests, lint and typecheck with the zip present so the install integration test actually runs.
 
