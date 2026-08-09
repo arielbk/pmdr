@@ -68,6 +68,8 @@ targets:
       - path: Sources/MainMenu.swift
       - path: Sources/LoginItemMenuItem.swift
       - path: Sources/NotificationWarningMenuItem.swift
+      - path: Sources/InsightsWindowController.swift
+      - path: Sources/InsightsVisualizations.swift
     dependencies:
       - target: PmdrMenubarCore
     settings:

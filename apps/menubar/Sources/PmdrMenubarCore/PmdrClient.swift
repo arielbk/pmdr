@@ -78,6 +78,55 @@ public struct NoteRecord: Equatable, Sendable {
     }
 }
 
+/// Project/day summaries returned by `pmdr log --json`.
+public struct LogTotal: Decodable, Equatable, Sendable {
+    public let pomodoros: Int
+    public let totalMs: Int
+
+    public init(pomodoros: Int, totalMs: Int) {
+        self.pomodoros = pomodoros
+        self.totalMs = totalMs
+    }
+}
+
+public struct LogGroup: Decodable, Equatable, Sendable {
+    public let project: String
+    public let pomodoros: Int
+    public let totalMs: Int
+
+    public init(project: String, pomodoros: Int, totalMs: Int) {
+        self.project = project
+        self.pomodoros = pomodoros
+        self.totalMs = totalMs
+    }
+}
+
+public struct LogDay: Decodable, Equatable, Sendable {
+    public let date: String
+    public let groups: [LogGroup]
+    public let total: LogTotal
+
+    public init(date: String, groups: [LogGroup], total: LogTotal) {
+        self.date = date
+        self.groups = groups
+        self.total = total
+    }
+}
+
+public struct LogResult: Decodable, Equatable, Sendable {
+    public let from: String
+    public let to: String
+    public let days: [LogDay]
+    public let total: LogTotal
+
+    public init(from: String, to: String, days: [LogDay], total: LogTotal) {
+        self.from = from
+        self.to = to
+        self.days = days
+        self.total = total
+    }
+}
+
 public struct PmdrConfig: Equatable, Sendable {
     public static let defaults = PmdrConfig()
 
@@ -221,6 +270,18 @@ public struct PmdrClient: Sendable {
         return try Self.decodeTodayNotes(from: data)
     }
 
+    public func log(from: String? = nil, to: String? = nil) async throws -> LogResult {
+        var arguments = ["log", "--json"]
+        if let from {
+            arguments.append(contentsOf: ["--from", from])
+        }
+        if let to {
+            arguments.append(contentsOf: ["--to", to])
+        }
+        let data = try await run(arguments: arguments)
+        return try Self.decodeLog(from: data)
+    }
+
     public func setProject(_ name: String?) async throws {
         var args = ["project", "set"]
         if let name {
@@ -302,6 +363,12 @@ public struct PmdrClient: Sendable {
         /// Absent in CLI versions that predate note capture — read as no notes
         /// rather than as a decoding failure.
         let notes: [RawNote]?
+        /// `pmdr today` is a single-day alias for `pmdr log` in newer CLIs.
+        let days: [RawTodayDay]?
+    }
+
+    private struct RawTodayDay: Decodable {
+        let notes: [RawNote]?
     }
 
     private struct RawNote: Decodable {
@@ -376,7 +443,8 @@ public struct PmdrClient: Sendable {
     static func decodeTodayNotes(from data: Data) throws -> [NoteRecord] {
         do {
             let raw = try JSONDecoder().decode(RawToday.self, from: data)
-            return (raw.notes ?? []).map {
+            let notes = raw.notes ?? raw.days?.flatMap { $0.notes ?? [] } ?? []
+            return notes.map {
                 NoteRecord(
                     text: $0.text,
                     at: $0.at,
@@ -387,6 +455,14 @@ public struct PmdrClient: Sendable {
             }
         } catch {
             throw PmdrClientError.decodingFailed("invalid today JSON: \(error)")
+        }
+    }
+
+    static func decodeLog(from data: Data) throws -> LogResult {
+        do {
+            return try JSONDecoder().decode(LogResult.self, from: data)
+        } catch {
+            throw PmdrClientError.decodingFailed("invalid log JSON: \(error)")
         }
     }
 
