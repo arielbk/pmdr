@@ -94,6 +94,19 @@ describe("README CLI documentation", () => {
     expect(integrations).toContain("pull contract");
   });
 
+  it("gives tmux users a paste-ready status-right line and a poll cadence", () => {
+    expect(integrations).toContain("status-right");
+    expect(integrations).toContain("#(pmdr status)");
+    expect(integrations).toContain("status-interval");
+  });
+
+  it("offers tmux users a jq variant for formatting the status themselves", () => {
+    expect(integrations).toContain("jq");
+    expect(integrations).toContain("pmdr status --json | jq");
+    // The jq form has to branch on state, same as any other consumer.
+    expect(integrations).toMatch(/idle/);
+  });
+
   it("documents installing the bundled menubar app from the CLI", () => {
     const section = readme.match(
       /## The bundled menubar app([\s\S]*?)(?:\n## |\z)/,

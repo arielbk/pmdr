@@ -124,6 +124,48 @@ socket, and no event system — a status bar, prompt, or widget polls the comman
 (or watches the state file) and renders from the payload. Everything an
 integration needs to draw a drift-free countdown is in it.
 
+### tmux
+
+`pmdr status` already prints a status-bar-ready one-liner, so the whole
+integration is one line in `.tmux.conf`:
+
+```tmux
+set -g status-right '#(pmdr status)'
+set -g status-interval 5
+```
+
+`status-interval` is how often tmux re-runs the command, in seconds; 5 keeps the
+countdown within a second or so of true and keeps expired phases advancing
+promptly. Going to 1 costs you a process per second for no visible gain — tmux
+redraws on its own schedule either way, so the display is never smoother than
+`status-interval`. When the timer is idle the command prints `idle`; use the
+`--json` form below if you would rather show nothing.
+
+For your own format, go through `--json` and `jq`. Quoting this inline in
+`.tmux.conf` is miserable, so put it in a script — `~/.config/tmux/pmdr.sh`:
+
+```sh
+#!/bin/sh
+pmdr status --json | jq -r '
+  if .state == "idle" then ""
+  else
+    (.remainingMs / 1000 | floor) as $s
+    | "\(if .phase == "focus" then "🍅" else "☕" end) "
+      + "\($s / 60 | floor):\("00" + ($s % 60 | tostring) | .[-2:])"
+      + (if .state == "paused" then " ⏸" else "" end)
+  end'
+```
+
+```tmux
+set -g status-right '#(~/.config/tmux/pmdr.sh)'
+```
+
+Note the branch on `.state` — idle has no `phase` or `remainingMs` to read, and
+`endsAt` is `null` while paused. Rendering from `remainingMs` is correct here
+because tmux re-runs the command every `status-interval` seconds rather than
+ticking a clock of its own; a consumer that does tick should use `endsAt` and
+the render rule below.
+
 ### The payload
 
 Running or paused:
