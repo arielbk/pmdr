@@ -106,6 +106,10 @@ describe("README CLI documentation", () => {
     // faster countdown does not describe.
     expect(integrations).toMatch(/refresh-client -S/);
     expect(integrations).toMatch(/pause/i);
+    // The shell wrapper only fires for actions taken through the shell. A
+    // pause from the menubar app writes state.json without it, so a reader who
+    // takes the wrapper as the whole answer is left with the original lag.
+    expect(integrations).toMatch(/menubar/i);
   });
 
   it("offers tmux users a jq variant for formatting the status themselves", () => {

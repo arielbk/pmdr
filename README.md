@@ -159,7 +159,24 @@ pmdr() {
 Put that in your shell rc. Keep the `return $rc` — `pmdr` exits non-zero to say
 things (`status` on an idle timer, for one), and a wrapper that ends on the
 `tmux` call reports that call's result instead, quietly breaking any script or
-agent branching on it. The countdown keeps ticking on the slow interval,
+agent branching on it.
+
+That wrapper only fires for actions you take **through the shell**. The menubar
+app and the `pmdr serve` web page write `state.json` directly, so a pause from
+either leaves the status bar waiting for the next tick as before. If that is how
+you drive the timer, either accept the lag, drop `status-interval` to 1, or
+watch the file and push the redraw from there — the same `fswatch` loop as
+[When to poll](#when-to-poll), with `refresh-client -S` in place of the status
+read:
+
+```sh
+fswatch -o ~/.local/state/pmdr/state.json | while read -r _; do
+  tmux refresh-client -S 2>/dev/null
+done
+```
+
+That covers every writer at once, which the wrapper cannot, at the cost of a
+process to keep alive. The countdown keeps ticking on the slow interval,
 where it costs nothing, and start, pause, resume, and stop land on the status
 bar as soon as the command returns.
 
