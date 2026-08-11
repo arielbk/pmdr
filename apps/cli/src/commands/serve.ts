@@ -148,15 +148,54 @@ const STATUS_PAGE_HTML = `<!doctype html>
 
     let currentStatus = null;
     let statusReceivedAt = 0;
+    // The browser may be on a different device than the CLI, so endsAt is on a
+    // clock we don't share. Derive the skew once per payload from the receipt
+    // time and count down against the corrected clock.
+    let clockOffsetMs = 0;
+    let clockOffsetFor = null;
+
+    function serverNow() {
+      return Date.now() + clockOffsetMs;
+    }
 
     function visibleRemaining(status) {
-      if (status.state !== "running") return status.remainingMs;
-      return Math.max(0, status.remainingMs - (Date.now() - statusReceivedAt));
+      if (status.state !== "running" || typeof status.endsAt !== "number") {
+        return status.remainingMs;
+      }
+      return Math.max(0, status.endsAt - serverNow());
     }
 
     function renderCurrentStatus() {
       if (!currentStatus) return;
       render(currentStatus);
+    }
+
+    let tickTimeoutId = null;
+    let tickIntervalId = null;
+
+    function startTicking() {
+      tickIntervalId = setInterval(renderCurrentStatus, 1000);
+    }
+
+    // Fire the 1s tick on the true second boundary of the countdown rather than
+    // a full second after script eval, so the displayed second never lags.
+    function scheduleTick() {
+      if (tickTimeoutId !== null) clearTimeout(tickTimeoutId);
+      if (tickIntervalId !== null) clearInterval(tickIntervalId);
+      tickTimeoutId = null;
+      tickIntervalId = null;
+
+      if (!currentStatus || currentStatus.state !== "running") {
+        startTicking();
+        return;
+      }
+
+      const untilBoundary = visibleRemaining(currentStatus) % 1000;
+      tickTimeoutId = setTimeout(() => {
+        tickTimeoutId = null;
+        renderCurrentStatus();
+        startTicking();
+      }, (untilBoundary === 0 ? 1000 : untilBoundary) + 1);
     }
 
     function render(status) {
@@ -180,7 +219,19 @@ const STATUS_PAGE_HTML = `<!doctype html>
       .then((status) => {
         currentStatus = status;
         statusReceivedAt = Date.now();
+        // Re-deriving on every poll would fold that poll's network latency
+        // back into the offset and stall the countdown, so only derive once
+        // per phase — endsAt is stable for the life of a phase.
+        if (
+          status.state === "running" &&
+          typeof status.endsAt === "number" &&
+          clockOffsetFor !== status.endsAt
+        ) {
+          clockOffsetMs = status.endsAt - status.remainingMs - statusReceivedAt;
+          clockOffsetFor = status.endsAt;
+        }
         renderCurrentStatus();
+        scheduleTick();
       })
       .catch(() => {
         document.body.dataset.state = "error";
@@ -191,7 +242,7 @@ const STATUS_PAGE_HTML = `<!doctype html>
     }
 
     fetchStatus();
-    setInterval(renderCurrentStatus, 1000);
+    startTicking();
     setInterval(fetchStatus, 5000);
   </script>
 </body>

@@ -11,6 +11,8 @@ export type StatusResult =
   | {
       state: "running" | "paused";
       remainingMs: number;
+      /** Epoch ms when this phase ends; `null` while paused. See README "Integrations". */
+      endsAt: number | null;
       duration: number;
       startedAt: number;
       phase: "focus" | "break";
@@ -43,6 +45,7 @@ export function getStatus(opts: {
   const base = {
     state: derived.kind,
     remainingMs: derived.remainingMs,
+    endsAt: derived.endsAt,
     duration: file!.durationMs,
     startedAt: file!.startedAt,
     phase: file!.phase ?? "focus",

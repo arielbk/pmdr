@@ -54,6 +54,71 @@ describe("README CLI documentation", () => {
     expect(runningCliSection).toContain("never drops an existing install back");
   });
 
+  // Note the terminator: `\z` is a literal "z" in JS regex, so the older
+  // sections above stop at the first word containing one. `\n## ` is the real
+  // "next top-level heading" boundary.
+  const integrations = readme.match(/\n## Integrations\n([\s\S]*?)\n## /)?.[1];
+
+  it("documents the status payload fields an integration renders from", () => {
+    const section = integrations;
+
+    expect(section).toContain("pmdr status --json");
+    expect(section).toContain("endsAt");
+    expect(section).toContain("remainingMs");
+    // The idle payload has no `endsAt` key at all — a consumer that assumes
+    // the field is always present breaks the moment the timer stops.
+    expect(section).toContain('{ "state": "idle" }');
+  });
+
+  it("documents the render rule that keeps a countdown drift-free", () => {
+    expect(integrations).toContain("endsAt - now");
+    expect(integrations).toContain("paused");
+    expect(integrations).toContain("frozen");
+    // The point of the rule: the consumer ticks on its own clock instead of
+    // decrementing the value it was handed at poll time.
+    expect(integrations).toMatch(/do not|never/i);
+  });
+
+  it("documents when to re-poll, including watching the state file", () => {
+    expect(integrations).toContain("state.json");
+    expect(integrations).toContain("fswatch");
+    // A read is what advances an expired phase, so polling is not just for the
+    // consumer's benefit.
+    expect(integrations).toMatch(/advance/i);
+  });
+
+  it("records that a daemon, sockets, and exec hooks are rejected", () => {
+    expect(integrations).toMatch(/no daemon/i);
+    expect(integrations).toContain("socket");
+    expect(integrations).toContain("hooks");
+    expect(integrations).toContain("pull contract");
+  });
+
+  it("gives tmux users a paste-ready status-right line and a poll cadence", () => {
+    expect(integrations).toContain("status-right");
+    expect(integrations).toContain("#(pmdr status)");
+    expect(integrations).toContain("status-interval");
+  });
+
+  it("warns that status-interval bounds reaction time, and gives the escape hatch", () => {
+    // A pause is invisible until the next tick, because tmux caches the `#()`
+    // output between them. That is the one cost of a slow interval that a
+    // faster countdown does not describe.
+    expect(integrations).toMatch(/refresh-client -S/);
+    expect(integrations).toMatch(/pause/i);
+    // The shell wrapper only fires for actions taken through the shell. A
+    // pause from the menubar app writes state.json without it, so a reader who
+    // takes the wrapper as the whole answer is left with the original lag.
+    expect(integrations).toMatch(/menubar/i);
+  });
+
+  it("offers tmux users a jq variant for formatting the status themselves", () => {
+    expect(integrations).toContain("jq");
+    expect(integrations).toContain("pmdr status --json | jq");
+    // The jq form has to branch on state, same as any other consumer.
+    expect(integrations).toMatch(/idle/);
+  });
+
   it("documents installing the bundled menubar app from the CLI", () => {
     const section = readme.match(
       /## The bundled menubar app([\s\S]*?)(?:\n## |\z)/,

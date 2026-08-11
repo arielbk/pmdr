@@ -13,6 +13,7 @@ describe("deriveState", () => {
     expect(deriveState({ file: null, now: 1000 })).toEqual({
       kind: "idle",
       remainingMs: 0,
+      endsAt: null,
     });
   });
 

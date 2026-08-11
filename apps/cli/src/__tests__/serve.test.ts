@@ -66,6 +66,7 @@ describe("pmdr serve /api/status", () => {
     expect(getStatusJson()).toEqual({
       state: "running",
       remainingMs: 55_000,
+      endsAt: NOW + 55_000,
       duration: 60_000,
       startedAt: NOW - 5_000,
       phase: "focus",
@@ -90,6 +91,7 @@ describe("pmdr serve /api/status", () => {
     expect(getStatusJson()).toMatchObject({
       state: "paused",
       remainingMs: 52_000,
+      endsAt: null,
       project: "deepwork",
     });
   });
@@ -185,14 +187,20 @@ describe("pmdr serve status page", () => {
       }),
       setInterval: () => 0,
       clearInterval: () => undefined,
+      setTimeout: () => 0,
+      clearTimeout: () => undefined,
     });
     await new Promise((resolve) => setImmediate(resolve));
 
     return { document, nodes };
   }
 
-  async function renderPageWithTimers(statusOrStatuses: unknown | unknown[]) {
+  async function renderPageWithTimers(
+    statusOrStatuses: unknown | unknown[],
+    options: { clientClockOffsetMs?: number } = {},
+  ) {
     vi.useFakeTimers({ now: NOW });
+    const clientClockOffsetMs = options.clientClockOffsetMs ?? 0;
     const html = getPageHtml();
     const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
     expect(script).toBeTruthy();
@@ -228,9 +236,13 @@ describe("pmdr serve status page", () => {
           json: async () => status,
         };
       },
-      Date,
+      Date: clientClockOffsetMs
+        ? ({ now: () => Date.now() + clientClockOffsetMs } as unknown as Date)
+        : Date,
       setInterval,
       clearInterval,
+      setTimeout,
+      clearTimeout,
     });
     await vi.advanceTimersByTimeAsync(0);
 
@@ -303,14 +315,129 @@ describe("pmdr serve status page", () => {
     try {
       const { nodes } = await renderPageWithTimers({
         state: "running",
-        remainingMs: 55_000,
+        remainingMs: 55_400,
+        endsAt: NOW + 55_400,
         duration: 60_000,
-        startedAt: NOW - 5_000,
+        startedAt: NOW - 4_600,
         phase: "focus",
         completedFocusBlocks: 0,
         todayFocusBlocks: 0,
         project: "deepwork",
       });
+
+      expect(nodes.countdown.textContent).toBe("0:55");
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      expect(nodes.countdown.textContent).toBe("0:54");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("changes the displayed second on the endsAt boundary, not a second after load", async () => {
+    try {
+      const { nodes } = await renderPageWithTimers({
+        state: "running",
+        remainingMs: 55_500,
+        endsAt: NOW + 55_500,
+        duration: 60_000,
+        startedAt: NOW - 4_500,
+        phase: "focus",
+        completedFocusBlocks: 0,
+        todayFocusBlocks: 0,
+        project: "deepwork",
+      });
+
+      expect(nodes.countdown.textContent).toBe("0:55");
+
+      await vi.advanceTimersByTimeAsync(400);
+      expect(nodes.countdown.textContent).toBe("0:55");
+
+      await vi.advanceTimersByTimeAsync(200);
+      expect(nodes.countdown.textContent).toBe("0:54");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the countdown on the real clock when a poll payload arrives late", async () => {
+    try {
+      // Both payloads describe the same phase, so endsAt is identical; the
+      // second one's remainingMs is 300ms stale by the time it is received.
+      const { nodes } = await renderPageWithTimers([
+        {
+          state: "running",
+          remainingMs: 55_500,
+          endsAt: NOW + 55_500,
+          duration: 60_000,
+          startedAt: NOW - 4_500,
+          phase: "focus",
+          completedFocusBlocks: 0,
+          todayFocusBlocks: 0,
+          project: "deepwork",
+        },
+        {
+          state: "running",
+          remainingMs: 50_800,
+          endsAt: NOW + 55_500,
+          duration: 60_000,
+          startedAt: NOW - 4_500,
+          phase: "focus",
+          completedFocusBlocks: 0,
+          todayFocusBlocks: 0,
+          project: "deepwork",
+        },
+      ]);
+
+      await vi.advanceTimersByTimeAsync(5_600);
+
+      expect(nodes.countdown.textContent).toBe("0:49");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("freezes the countdown on remainingMs while paused", async () => {
+    try {
+      const { nodes } = await renderPageWithTimers({
+        state: "paused",
+        remainingMs: 52_000,
+        endsAt: null,
+        duration: 60_000,
+        startedAt: NOW - 10_000,
+        phase: "focus",
+        completedFocusBlocks: 0,
+        todayFocusBlocks: 0,
+        project: "deepwork",
+      });
+
+      expect(nodes.countdown.textContent).toBe("0:52");
+
+      await vi.advanceTimersByTimeAsync(3_500);
+
+      expect(nodes.countdown.textContent).toBe("0:52");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders the countdown against a skewed client clock", async () => {
+    try {
+      const { nodes } = await renderPageWithTimers(
+        {
+          state: "running",
+          remainingMs: 55_400,
+          endsAt: NOW + 55_400,
+          duration: 60_000,
+          startedAt: NOW - 4_600,
+          phase: "focus",
+          completedFocusBlocks: 0,
+          todayFocusBlocks: 0,
+          project: "deepwork",
+        },
+        { clientClockOffsetMs: 30 * 60_000 },
+      );
 
       expect(nodes.countdown.textContent).toBe("0:55");
 

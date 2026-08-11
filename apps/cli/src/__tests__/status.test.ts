@@ -64,6 +64,7 @@ describe("getStatus", () => {
     expect(getStatus({ store, now: NOW })).toEqual({
       state: "running",
       remainingMs: 55_000,
+      endsAt: NOW + 55_000,
       duration: 60_000,
       startedAt: NOW - 5_000,
       phase: "focus",
@@ -71,6 +72,22 @@ describe("getStatus", () => {
       todayFocusBlocks: 0,
       longBreakEvery: 4,
     });
+  });
+
+  it("reports endsAt as the absolute epoch ms when a running phase ends", () => {
+    store.writeState({
+      startedAt: NOW - 5_000,
+      durationMs: 60_000,
+      pausedAt: null,
+      accumulatedPauseMs: 3_000,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+    const result = getStatus({ store, now: NOW });
+    if (result.state === "idle") throw new Error("expected a running phase");
+    expect(result.endsAt).toBe(NOW - 5_000 + 60_000 + 3_000);
+    // the contract consumers rely on: endsAt - now === remainingMs
+    expect(result.endsAt! - NOW).toBe(result.remainingMs);
   });
 
   it("returns paused with frozen remainingMs, duration, startedAt, phase, completedFocusBlocks", () => {
@@ -87,6 +104,7 @@ describe("getStatus", () => {
     expect(getStatus({ store, now: NOW })).toEqual({
       state: "paused",
       remainingMs: 52_000,
+      endsAt: null,
       duration: 60_000,
       startedAt: NOW - 10_000,
       phase: "focus",
@@ -94,6 +112,24 @@ describe("getStatus", () => {
       todayFocusBlocks: 0,
       longBreakEvery: 4,
     });
+  });
+
+  it("keeps endsAt null and remainingMs frozen while paused, however long the pause lasts", () => {
+    store.writeState({
+      startedAt: NOW - 10_000,
+      durationMs: 60_000,
+      pausedAt: NOW - 2_000,
+      accumulatedPauseMs: 0,
+      phase: "focus",
+      completedFocusBlocks: 0,
+    });
+    const early = getStatus({ store, now: NOW });
+    const late = getStatus({ store, now: NOW + 30_000 });
+    if (early.state === "idle" || late.state === "idle")
+      throw new Error("expected a paused phase");
+    expect(early.endsAt).toBeNull();
+    expect(late.endsAt).toBeNull();
+    expect(late.remainingMs).toBe(early.remainingMs);
   });
 
   it("defaults missing phase/completedFocusBlocks to focus/0 for legacy records", () => {
@@ -234,6 +270,7 @@ describe("formatStatus", () => {
       remainingMs: 1_122_000,
       duration: 1_500_000,
       startedAt: 0,
+      endsAt: 1_122_000,
       phase: "focus",
       completedFocusBlocks: 0,
       todayFocusBlocks: 0,
@@ -249,6 +286,7 @@ describe("formatStatus", () => {
       remainingMs: 1_122_000,
       duration: 1_500_000,
       startedAt: 0,
+      endsAt: null,
       phase: "focus",
       completedFocusBlocks: 2,
       todayFocusBlocks: 2,
@@ -263,6 +301,7 @@ describe("formatStatus", () => {
       remainingMs: 270_000, // 4m30s
       duration: 300_000,
       startedAt: 0,
+      endsAt: 270_000,
       phase: "break",
       completedFocusBlocks: 1,
       todayFocusBlocks: 1,
@@ -277,6 +316,7 @@ describe("formatStatus", () => {
       remainingMs: 0,
       duration: 60_000,
       startedAt: 0,
+      endsAt: 0,
       phase: "focus",
       completedFocusBlocks: 0,
       todayFocusBlocks: 0,
@@ -291,6 +331,7 @@ describe("formatStatus", () => {
       remainingMs: 65_000, // 1m5s
       duration: 60_000,
       startedAt: 0,
+      endsAt: 65_000,
       phase: "focus",
       completedFocusBlocks: 0,
       todayFocusBlocks: 0,
@@ -305,6 +346,7 @@ describe("formatStatus", () => {
       remainingMs: 1_122_000,
       duration: 1_500_000,
       startedAt: 0,
+      endsAt: 1_122_000,
       phase: "focus",
       completedFocusBlocks: 0,
       todayFocusBlocks: 0,
@@ -321,6 +363,7 @@ describe("formatStatus", () => {
       remainingMs: 60_000,
       duration: 1_500_000,
       startedAt: 0,
+      endsAt: 60_000,
       phase: "focus",
       completedFocusBlocks: 0,
       todayFocusBlocks: 5,
@@ -336,6 +379,7 @@ describe("formatStatus", () => {
       remainingMs: 270_000, // 4m30s
       duration: 300_000,
       startedAt: 0,
+      endsAt: 270_000,
       phase: "break",
       completedFocusBlocks: 1,
       todayFocusBlocks: 3,
