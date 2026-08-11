@@ -4,7 +4,7 @@ import PmdrMenubarCore
 
 /// Modeless window listing every project with archive/unarchive controls.
 /// Reuses the existing `PmdrClient` so all mutations route through the CLI.
-final class ManageProjectsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
+final class ManageProjectsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     private let client: PmdrClient
     private let onProjectsChanged: ([ProjectRecord]) -> Void
     private var projects: [ProjectRecord] = []
@@ -12,6 +12,7 @@ final class ManageProjectsWindowController: NSWindowController, NSTableViewDataS
     private var tableView: NSTableView!
     private var showArchivedCheckbox: NSButton!
     private var emptyLabel: NSTextField!
+    private var editingProject: ProjectRecord?
 
     init(client: PmdrClient, onProjectsChanged: @escaping ([ProjectRecord]) -> Void = { _ in }) {
         self.client = client
@@ -68,6 +69,8 @@ final class ManageProjectsWindowController: NSWindowController, NSTableViewDataS
         table.allowsColumnReordering = false
         table.allowsColumnResizing = true
         table.headerView = NSTableHeaderView()
+        table.target = self
+        table.doubleAction = #selector(beginRenaming(_:))
 
         let nameColumn = NSTableColumn(identifier: .init("name"))
         nameColumn.title = "Project"
@@ -132,6 +135,14 @@ final class ManageProjectsWindowController: NSWindowController, NSTableViewDataS
         }
     }
 
+    @objc private func beginRenaming(_ sender: NSTableView) {
+        let row = sender.clickedRow
+        let column = sender.clickedColumn
+        guard row >= 0, row < projects.count, column == 0 else { return }
+        editingProject = projects[row]
+        sender.editColumn(column, row: row, with: nil, select: true)
+    }
+
     private func projectForButton(_ button: NSButton) -> ProjectRecord? {
         let row = tableView.row(for: button)
         guard row >= 0, row < projects.count else { return nil }
@@ -179,16 +190,18 @@ final class ManageProjectsWindowController: NSWindowController, NSTableViewDataS
                 ?? nameCell(identifier: identifier)
             cell.textField?.stringValue = project.name
             cell.textField?.textColor = project.archived ? .tertiaryLabelColor : .labelColor
+            cell.textField?.delegate = self
+            cell.textField?.isEnabled = true
             return cell
         case "action":
             let identifier = NSUserInterfaceItemIdentifier("actionCell")
             let container = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
                 ?? actionCell(identifier: identifier)
-            if let button = container.subviews.compactMap({ $0 as? NSButton }).first {
-                button.title = project.archived ? "Unarchive" : "Archive"
-                button.target = self
-                button.action = #selector(archiveAction(_:))
-                button.isEnabled = true
+            if let archive = container.subviews.compactMap({ $0 as? NSButton }).first {
+                archive.title = project.archived ? "Unarchive" : "Archive"
+                archive.target = self
+                archive.action = #selector(archiveAction(_:))
+                archive.isEnabled = true
             }
             return container
         default:
@@ -199,15 +212,21 @@ final class ManageProjectsWindowController: NSWindowController, NSTableViewDataS
     private func nameCell(identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
         let cell = NSTableCellView()
         cell.identifier = identifier
-        let label = NSTextField(labelWithString: "")
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.lineBreakMode = .byTruncatingTail
-        cell.addSubview(label)
-        cell.textField = label
+        let field = NSTextField()
+        field.isEditable = true
+        field.isSelectable = true
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.lineBreakMode = .byTruncatingTail
+        field.toolTip = "Double-click to rename"
+        field.translatesAutoresizingMaskIntoConstraints = false
+        cell.addSubview(field)
+        cell.textField = field
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
-            label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
-            label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            field.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
+            field.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
+            field.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
         ])
         return cell
     }
@@ -215,15 +234,49 @@ final class ManageProjectsWindowController: NSWindowController, NSTableViewDataS
     private func actionCell(identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
         let cell = NSTableCellView()
         cell.identifier = identifier
-        let button = NSButton(title: "Archive", target: nil, action: nil)
-        button.bezelStyle = .rounded
-        button.controlSize = .small
-        button.translatesAutoresizingMaskIntoConstraints = false
-        cell.addSubview(button)
+        let archive = NSButton(title: "Archive", target: nil, action: nil)
+        archive.bezelStyle = .rounded
+        archive.controlSize = .small
+        archive.translatesAutoresizingMaskIntoConstraints = false
+        cell.addSubview(archive)
         NSLayoutConstraint.activate([
-            button.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
-            button.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            archive.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
+            archive.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
         ])
         return cell
+    }
+
+    // MARK: - NSTextFieldDelegate
+
+    func controlTextDidBeginEditing(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else { return }
+        let row = tableView.row(for: field)
+        guard row >= 0, row < projects.count else { return }
+        editingProject = projects[row]
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard
+            let field = notification.object as? NSTextField,
+            let project = editingProject
+        else { return }
+        editingProject = nil
+
+        let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != project.name else {
+            tableView.reloadData()
+            return
+        }
+
+        field.isEnabled = false
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await client.renameProject(project.name, to: name)
+            } catch {
+                await MainActor.run { self.surface(error: error) }
+            }
+            await MainActor.run { self.refresh() }
+        }
     }
 }

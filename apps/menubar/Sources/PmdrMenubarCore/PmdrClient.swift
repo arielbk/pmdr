@@ -345,6 +345,10 @@ public struct PmdrClient: Sendable {
         _ = try await run(arguments: ["project", "archive", name])
     }
 
+    public func renameProject(_ oldName: String, to newName: String) async throws {
+        _ = try await run(arguments: ["project", "rename", oldName, newName])
+    }
+
     public func unarchiveProject(_ name: String) async throws {
         _ = try await run(arguments: ["project", "unarchive", name])
     }
