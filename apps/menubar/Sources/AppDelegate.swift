@@ -16,9 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     private var insightsController: InsightsWindowController?
     private var settingsController: SettingsWindowController?
     private var pollTask: Task<Void, Never>?
-    private var redrawTimer: Timer?
+    private var redrawScheduler: CountdownTickScheduler?
     private var lastStatus: Status = .idle()
-    private var lastPollAt: Date = .distantPast
     private var stateGeneration: UInt64 = 0
     private var mutationChain: Task<Void, Never>?
     private var projects: [ProjectRecord] = []
@@ -73,8 +72,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         rebuildMenu()
         registerHotkey()
 
+        startRedrawScheduler()
         startPolling()
-        startRedrawTimer()
         Task { [weak self] in
             try? await self?.refreshFromCLI()
         }
@@ -103,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     func applicationWillTerminate(_ notification: Notification) {
         floatingTimerPanelController?.saveCurrentPosition()
         pollTask?.cancel()
-        redrawTimer?.invalidate()
+        redrawScheduler?.stop()
     }
 
     private func startPolling() {
@@ -114,16 +113,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
                 do {
                     let generationAtStart = await MainActor.run { self.stateGeneration }
                     let events = try await poller.pollOnce()
-                    let now = Date()
                     let status = await poller.currentStatus() ?? .idle()
                     await MainActor.run {
                         guard self.stateGeneration == generationAtStart else { return }
                         self.lastStatus = status
-                        self.lastPollAt = now
                         self.updateIcon(for: status)
                         self.rebuildMenu()
-                        self.redrawTitle()
-                        self.redrawFloatingTimer()
+                        self.redrawCountdownSurfaces()
+                        self.redrawScheduler?.reschedule(for: status)
                     }
                     if let notifier = self.notifier {
                         await notifier.handle(events)
@@ -140,19 +137,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         }
     }
 
-    private func startRedrawTimer() {
-        let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.redrawTitle()
-            self?.redrawFloatingTimer()
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        redrawTimer = timer
+    private func startRedrawScheduler() {
+        let scheduler = CountdownTickScheduler(
+            schedule: { delay, action in
+                let timer = Timer(timeInterval: delay, repeats: false) { _ in action() }
+                RunLoop.main.add(timer, forMode: .common)
+                return { timer.invalidate() }
+            },
+            redraw: { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.redrawCountdownSurfaces()
+                }
+            }
+        )
+        redrawScheduler = scheduler
+        scheduler.reschedule(for: lastStatus)
     }
 
-    private func redrawTitle() {
-        let elapsed = max(0, Date().timeIntervalSince(lastPollAt))
+    @MainActor
+    private func redrawCountdownSurfaces(at date: Date = Date()) {
+        redrawTitle(at: date)
+        redrawFloatingTimer(at: date)
+    }
+
+    @MainActor
+    private func redrawTitle(at date: Date = Date()) {
         statusItem?.button?.attributedTitle = BrandIcon.menuBarTitle(
-            TitleFormatter.title(for: lastStatus, elapsedSincePoll: elapsed)
+            TitleFormatter.title(for: lastStatus, at: date)
         )
     }
 
@@ -472,21 +483,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     private func applyOptimisticStatus(_ status: Status) {
         self.stateGeneration &+= 1
         self.lastStatus = status
-        self.lastPollAt = Date()
         self.updateIcon(for: status)
         self.rebuildMenu()
-        self.redrawTitle()
-        self.redrawFloatingTimer()
+        self.redrawCountdownSurfaces()
+        self.redrawScheduler?.reschedule(for: status)
     }
 
     private func optimisticPause() -> Status? {
-        let elapsedMs = Int(Date().timeIntervalSince(lastPollAt) * 1000)
-        return OptimisticTimerStatus.pausing(lastStatus, elapsedMs: elapsedMs)
+        let nowMs = Int(Date().timeIntervalSince1970 * 1000)
+        return OptimisticTimerStatus.pausing(lastStatus, nowMs: nowMs)
     }
 
     private func optimisticResume() -> Status? {
-        guard case .paused(let active) = lastStatus else { return nil }
-        return .running(active)
+        let nowMs = Int(Date().timeIntervalSince1970 * 1000)
+        return OptimisticTimerStatus.resuming(lastStatus, nowMs: nowMs)
     }
 
     private func optimisticStop() -> Status? {
@@ -495,16 +505,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
 
     private func optimisticStart(project: String?) -> Status {
         let duration = currentConfig.focusMinutes * 60 * 1_000
-        let active = Status.Active(
-            remainingMs: duration,
+        return OptimisticTimerStatus.starting(
             durationMs: duration,
-            startedAt: Int(Date().timeIntervalSince1970 * 1000),
-            phase: .focus,
-            completedFocusBlocks: 0,
-            todayFocusBlocks: 0,
+            nowMs: Int(Date().timeIntervalSince1970 * 1000),
             project: project
         )
-        return .running(active)
     }
 
     private func refreshFromCLI() async throws {
@@ -514,20 +519,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         let status = await poller.currentStatus() ?? .idle()
         let projects = try await client?.listProjects() ?? []
         let config = try await client?.config() ?? .defaults
-        let now = Date()
         let applied = await MainActor.run { () -> Bool in
             guard self.stateGeneration == generationAtStart else { return false }
             self.stateGeneration &+= 1
             self.lastStatus = status
-            self.lastPollAt = now
             self.projects = projects
             self.currentConfig = config
             self.floatingTimerPanelController?.configureGoal(dailyGoal: config.dailyGoal, longBreakEvery: config.longBreakEvery)
             self.notifier = self.notifier?.withConfig(config)
             self.updateIcon(for: status)
             self.rebuildMenu()
-            self.redrawTitle()
-            self.redrawFloatingTimer()
+            self.redrawCountdownSurfaces()
+            self.redrawScheduler?.reschedule(for: status)
             return true
         }
         if applied {
@@ -604,12 +607,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     }
 
     @MainActor
-    private func redrawFloatingTimer() {
-        let elapsed = max(0, Date().timeIntervalSince(lastPollAt))
+    private func redrawFloatingTimer(at date: Date = Date()) {
         floatingTimerPanelController?.update(
             status: lastStatus,
             lastProject: lastUsedProject(),
-            elapsedSincePoll: elapsed
+            at: date
         )
     }
 

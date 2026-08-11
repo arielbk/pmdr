@@ -14,6 +14,7 @@ public enum Status: Equatable, Sendable {
 
     public struct Active: Equatable, Sendable {
         public let remainingMs: Int
+        public let endsAt: Int?
         public let durationMs: Int
         public let startedAt: Int
         public let phase: Phase
@@ -23,6 +24,7 @@ public enum Status: Equatable, Sendable {
 
         public init(
             remainingMs: Int,
+            endsAt: Int? = nil,
             durationMs: Int,
             startedAt: Int,
             phase: Phase,
@@ -31,6 +33,7 @@ public enum Status: Equatable, Sendable {
             project: String? = nil
         ) {
             self.remainingMs = remainingMs
+            self.endsAt = endsAt
             self.durationMs = durationMs
             self.startedAt = startedAt
             self.phase = phase
@@ -351,6 +354,7 @@ public struct PmdrClient: Sendable {
     private struct RawStatus: Decodable {
         let state: String
         let remainingMs: Int?
+        let endsAt: Int?
         let duration: Int?
         let startedAt: Int?
         let phase: Phase?
@@ -425,8 +429,14 @@ public struct PmdrClient: Sendable {
                     "missing fields for state=\(raw.state)"
                 )
             }
+            if raw.state == "running", raw.endsAt == nil {
+                throw PmdrClientError.decodingFailed(
+                    "missing fields for state=\(raw.state)"
+                )
+            }
             let active = Status.Active(
                 remainingMs: remaining,
+                endsAt: raw.endsAt,
                 durationMs: duration,
                 startedAt: startedAt,
                 phase: phase,

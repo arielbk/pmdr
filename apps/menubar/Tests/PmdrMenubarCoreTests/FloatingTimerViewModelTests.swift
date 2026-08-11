@@ -22,8 +22,14 @@ final class FloatingTimerViewModelTests: XCTestCase {
 
     func test_runningFocus_showsCountdownPhaseAndActiveProject() {
         let viewModel = FloatingTimerViewModel(
-            status: .running(active(remainingMs: 1_499_000, phase: .focus, project: "Deep Work")),
-            lastProject: "Admin"
+            status: .running(active(
+                remainingMs: 999_000,
+                endsAt: 1_599_000,
+                phase: .focus,
+                project: "Deep Work"
+            )),
+            lastProject: "Admin",
+            at: Date(timeIntervalSince1970: 100)
         )
 
         XCTAssertEqual(viewModel.time, "24:59")
@@ -34,8 +40,14 @@ final class FloatingTimerViewModelTests: XCTestCase {
 
     func test_runningBreak_showsCountdownPhaseAndActiveProject() {
         let viewModel = FloatingTimerViewModel(
-            status: .running(active(remainingMs: 300_000, phase: .break, project: "Deep Work")),
-            lastProject: nil
+            status: .running(active(
+                remainingMs: 999_000,
+                endsAt: 400_000,
+                phase: .break,
+                project: "Deep Work"
+            )),
+            lastProject: nil,
+            at: Date(timeIntervalSince1970: 100)
         )
 
         XCTAssertEqual(viewModel.time, "05:00")
@@ -47,13 +59,41 @@ final class FloatingTimerViewModelTests: XCTestCase {
     func test_pausedFocus_showsFrozenCountdownPhaseAndActiveProject() {
         let viewModel = FloatingTimerViewModel(
             status: .paused(active(remainingMs: 600_000, phase: .focus, project: "Planning")),
-            lastProject: nil
+            lastProject: nil,
+            at: Date(timeIntervalSince1970: 10_000)
         )
 
         XCTAssertEqual(viewModel.time, "10:00")
         XCTAssertEqual(viewModel.phaseLabel, "focus")
         XCTAssertEqual(viewModel.projectName, "Planning")
         XCTAssertFalse(viewModel.isMuted)
+    }
+
+    func test_runningSameEndsAtCannotShiftWhenLatePayloadArrives() {
+        let now = Date(timeIntervalSince1970: 103)
+        let early = FloatingTimerViewModel(
+            status: .running(active(
+                remainingMs: 10_000,
+                endsAt: 110_000,
+                phase: .focus,
+                project: nil
+            )),
+            lastProject: nil,
+            at: now
+        )
+        let late = FloatingTimerViewModel(
+            status: .running(active(
+                remainingMs: 9_400,
+                endsAt: 110_000,
+                phase: .focus,
+                project: nil
+            )),
+            lastProject: nil,
+            at: now
+        )
+
+        XCTAssertEqual(early.time, "00:07")
+        XCTAssertEqual(late.time, early.time)
     }
 
     func test_pausedBreak_showsFrozenCountdownPhaseAndActiveProject() {
@@ -136,6 +176,7 @@ final class FloatingTimerViewModelTests: XCTestCase {
 
     private func active(
         remainingMs: Int,
+        endsAt: Int? = nil,
         phase: Phase,
         project: String?,
         completedFocusBlocks: Int = 0,
@@ -143,6 +184,7 @@ final class FloatingTimerViewModelTests: XCTestCase {
     ) -> Status.Active {
         Status.Active(
             remainingMs: remainingMs,
+            endsAt: endsAt,
             durationMs: 1_500_000,
             startedAt: 0,
             phase: phase,

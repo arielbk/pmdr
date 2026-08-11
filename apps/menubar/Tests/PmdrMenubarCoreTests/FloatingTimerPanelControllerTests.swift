@@ -115,9 +115,15 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         controller.show()
 
         controller.update(
-            status: .running(active(remainingMs: 1_499_000, phase: .focus, project: "Deep Work", todayFocusBlocks: 2)),
+            status: .running(active(
+                remainingMs: 999_000,
+                endsAt: 1_599_000,
+                phase: .focus,
+                project: "Deep Work",
+                todayFocusBlocks: 2
+            )),
             lastProject: "Admin",
-            elapsedSincePoll: 0
+            at: Date(timeIntervalSince1970: 100)
         )
 
         let snapshot = controller.snapshotForTesting
@@ -135,8 +141,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
 
         controller.update(
             status: .running(active(remainingMs: 300_000, phase: .break, project: "Deep Work")),
-            lastProject: nil,
-            elapsedSincePoll: 0
+            lastProject: nil
         )
 
         let snapshot = controller.snapshotForTesting
@@ -144,21 +149,39 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertEqual(snapshot.phaseColor, .systemGreen)
     }
 
-    func testUpdateTicksRunningTimerButLeavesPausedTimerFrozen() {
+    func testUpdateUsesWallClockAcrossLatePollAndLeavesPausedTimerFrozen() {
         let controller = FloatingTimerPanelController()
         controller.show()
+        let now = Date(timeIntervalSince1970: 103)
 
         controller.update(
-            status: .running(active(remainingMs: 10_000, phase: .focus, project: "Deep Work")),
+            status: .running(active(
+                remainingMs: 10_000,
+                endsAt: 110_000,
+                phase: .focus,
+                project: "Deep Work"
+            )),
             lastProject: nil,
-            elapsedSincePoll: 3
+            at: now
+        )
+        XCTAssertEqual(controller.snapshotForTesting.time, "00:07")
+
+        controller.update(
+            status: .running(active(
+                remainingMs: 9_400,
+                endsAt: 110_000,
+                phase: .focus,
+                project: "Deep Work"
+            )),
+            lastProject: nil,
+            at: now
         )
         XCTAssertEqual(controller.snapshotForTesting.time, "00:07")
 
         controller.update(
             status: .paused(active(remainingMs: 10_000, phase: .focus, project: "Deep Work")),
             lastProject: nil,
-            elapsedSincePoll: 3
+            at: Date(timeIntervalSince1970: 1_000)
         )
         let paused = controller.snapshotForTesting
         XCTAssertEqual(paused.time, "00:10")
@@ -170,8 +193,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
 
         controller.update(
             status: .idle(),
-            lastProject: "Writing",
-            elapsedSincePoll: 0
+            lastProject: "Writing"
         )
         controller.show()
 
@@ -338,7 +360,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         let controller = FloatingTimerPanelController(actions: sink)
         controller.show()
         sink.calls.removeAll()
-        controller.update(status: .idle(), lastProject: "Writing", elapsedSincePoll: 0)
+        controller.update(status: .idle(), lastProject: "Writing")
 
         XCTAssertEqual(controller.toggleButtonTitleForTesting, "Start")
         XCTAssertEqual(controller.toggleButtonSymbolNameForTesting, "play.fill")
@@ -355,8 +377,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         sink.calls.removeAll()
         controller.update(
             status: .running(active(remainingMs: 60_000, phase: .focus, project: "Deep Work")),
-            lastProject: nil,
-            elapsedSincePoll: 0
+            lastProject: nil
         )
 
         XCTAssertEqual(controller.toggleButtonTitleForTesting, "Pause")
@@ -374,8 +395,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         sink.calls.removeAll()
         controller.update(
             status: .running(active(remainingMs: 60_000, phase: .break, project: "Deep Work")),
-            lastProject: nil,
-            elapsedSincePoll: 0
+            lastProject: nil
         )
 
         XCTAssertEqual(controller.toggleButtonTitleForTesting, "Skip")
@@ -393,8 +413,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         sink.calls.removeAll()
         controller.update(
             status: .paused(active(remainingMs: 60_000, phase: .break, project: "Break")),
-            lastProject: nil,
-            elapsedSincePoll: 0
+            lastProject: nil
         )
 
         XCTAssertEqual(controller.toggleButtonTitleForTesting, "Resume")
@@ -411,21 +430,19 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         controller.show()
         sink.calls.removeAll()
 
-        controller.update(status: .idle(), lastProject: nil, elapsedSincePoll: 0)
+        controller.update(status: .idle(), lastProject: nil)
         XCTAssertFalse(controller.isStopButtonEnabledForTesting)
 
         controller.update(
             status: .running(active(remainingMs: 60_000, phase: .focus, project: "Deep Work")),
-            lastProject: nil,
-            elapsedSincePoll: 0
+            lastProject: nil
         )
         XCTAssertTrue(controller.isStopButtonEnabledForTesting)
         controller.clickStopButtonForTesting()
 
         controller.update(
             status: .paused(active(remainingMs: 60_000, phase: .focus, project: "Deep Work")),
-            lastProject: nil,
-            elapsedSincePoll: 0
+            lastProject: nil
         )
         XCTAssertTrue(controller.isStopButtonEnabledForTesting)
 
@@ -502,8 +519,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         let controller = FloatingTimerPanelController(actions: sink)
         controller.update(
             status: .running(active(remainingMs: 60_000, phase: .focus, project: "Admin")),
-            lastProject: nil,
-            elapsedSincePoll: 0
+            lastProject: nil
         )
 
         controller.show()
@@ -518,7 +534,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
             ProjectRecord(name: "Admin", archived: false, createdAt: "2026-01-02"),
         ]
         let controller = FloatingTimerPanelController(actions: sink)
-        controller.update(status: .idle(), lastProject: "Deep Work", elapsedSincePoll: 0)
+        controller.update(status: .idle(), lastProject: "Deep Work")
 
         controller.show()
 
@@ -578,7 +594,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
             ProjectRecord(name: "Admin", archived: false, createdAt: "2026-01-02"),
         ]
         let controller = FloatingTimerPanelController(actions: sink)
-        controller.update(status: .idle(), lastProject: "Writing", elapsedSincePoll: 0)
+        controller.update(status: .idle(), lastProject: "Writing")
         controller.show()
         controller.setHoveredForTesting(true)
 
@@ -647,6 +663,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
 
     private func active(
         remainingMs: Int,
+        endsAt: Int? = nil,
         phase: Phase,
         project: String?,
         completedFocusBlocks: Int = 0,
@@ -654,6 +671,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
     ) -> Status.Active {
         Status.Active(
             remainingMs: remainingMs,
+            endsAt: endsAt,
             durationMs: 1_500_000,
             startedAt: 0,
             phase: phase,
@@ -708,8 +726,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
 
         controller.update(
             status: .running(active(remainingMs: 60_000, phase: .focus, project: "Work", todayFocusBlocks: 2)),
-            lastProject: nil,
-            elapsedSincePoll: 0
+            lastProject: nil
         )
 
         XCTAssertEqual(controller.dotStringForTesting, "●\u{2009}●  ○\u{2009}○  ○\u{2009}○")
@@ -722,8 +739,7 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
 
         controller.update(
             status: .idle(todayFocusBlocks: 2),
-            lastProject: "Writing",
-            elapsedSincePoll: 0
+            lastProject: "Writing"
         )
 
         XCTAssertEqual(controller.dotStringForTesting, "●\u{2009}●\u{2009}○\u{2009}○")
