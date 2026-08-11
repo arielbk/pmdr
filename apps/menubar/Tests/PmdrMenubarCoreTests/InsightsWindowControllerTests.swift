@@ -16,6 +16,7 @@ final class InsightsWindowControllerTests: XCTestCase {
         )
         XCTAssertEqual(controller.rangeControlForTesting.selectedSegment, 0)
         XCTAssertTrue(controller.customRangeControlsAreHiddenForTesting)
+        XCTAssertFalse(controller.windowForTesting.styleMask.contains(.resizable))
     }
 
     func test_reload_requestsLatestSevenDays_andRendersSummaryAndProjects() async throws {
@@ -77,6 +78,17 @@ final class InsightsWindowControllerTests: XCTestCase {
             "Deep Work|1h 15m|75%",
             "Admin|25m|25%",
         ])
+
+        controller.selectProjectForTesting("Admin")
+
+        XCTAssertEqual(
+            controller.chartColorForTesting(project: "Admin"),
+            InsightsColors.color(at: 1)
+        )
+        XCTAssertNotEqual(
+            controller.chartColorForTesting(project: "Admin"),
+            InsightsColors.color(at: 0)
+        )
     }
 
     func test_switchingPreset_requestsThirtyDayRange() async throws {

@@ -11,6 +11,10 @@ enum InsightsColors {
     static func color(at index: Int) -> NSColor {
         palette[index % palette.count]
     }
+
+    static func color(for project: String, order: [String]) -> NSColor {
+        color(at: order.firstIndex(of: project) ?? 0)
+    }
 }
 
 final class InsightsDonutChartView: NSView {
@@ -101,6 +105,9 @@ final class InsightsDonutChartView: NSView {
 }
 
 final class InsightsChartView: NSView {
+    var projectOrder: [String] = [] {
+        didSet { needsDisplay = true }
+    }
     var report: InsightsReport? {
         didSet {
             setAccessibilityValue(accessibilitySummary)
@@ -146,14 +153,12 @@ final class InsightsChartView: NSView {
         let maximum = max(1, report.days.map(\.totalMs).max() ?? 1)
         let slotWidth = plot.width / CGFloat(report.days.count)
         let barWidth = min(28, max(3, slotWidth * 0.64))
-        let projectOrder = report.projects.map(\.project)
-
         for (dayIndex, day) in report.days.enumerated() {
             let x = plot.minX + CGFloat(dayIndex) * slotWidth + (slotWidth - barWidth) / 2
             var y = plot.minY
             for group in day.groups {
                 let height = plot.height * CGFloat(group.totalMs) / CGFloat(maximum)
-                color(for: group.project, order: projectOrder).setFill()
+                InsightsColors.color(for: group.project, order: projectOrder).setFill()
                 NSBezierPath(
                     roundedRect: NSRect(x: x, y: y, width: barWidth, height: max(1, height)),
                     xRadius: 2,
@@ -164,11 +169,6 @@ final class InsightsChartView: NSView {
         }
 
         drawDateLabels(report.days, plot: plot, slotWidth: slotWidth)
-    }
-
-    private func color(for project: String, order: [String]) -> NSColor {
-        let index = order.firstIndex(of: project) ?? 0
-        return InsightsColors.color(at: index)
     }
 
     private func drawDateLabels(_ days: [InsightsDay], plot: NSRect, slotWidth: CGFloat) {
