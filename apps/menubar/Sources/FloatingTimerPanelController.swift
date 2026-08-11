@@ -242,12 +242,12 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         render()
     }
 
-    func update(status: Status, lastProject: String?, elapsedSincePoll: TimeInterval) {
+    func update(status: Status, lastProject: String?, at date: Date = Date()) {
         currentStatus = status
         let viewModel = FloatingTimerViewModel(
             status: status,
             lastProject: lastProject,
-            elapsedSincePoll: elapsedSincePoll
+            at: date
         )
         snapshot = Snapshot(
             phaseLabel: viewModel.phaseLabel.uppercased(),

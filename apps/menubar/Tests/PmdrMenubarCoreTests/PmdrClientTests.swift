@@ -17,10 +17,11 @@ final class PmdrClientDecodingTests: XCTestCase {
 
     func test_decodes_running_focus_state() throws {
         let json = Data(#"""
-        {"state":"running","remainingMs":1500000,"duration":1500000,"startedAt":1700000000000,"phase":"focus","completedFocusBlocks":0}
+        {"state":"running","remainingMs":1500000,"endsAt":1700001500000,"duration":1500000,"startedAt":1700000000000,"phase":"focus","completedFocusBlocks":0}
         """#.utf8)
         let expected = Status.running(.init(
             remainingMs: 1500000,
+            endsAt: 1700001500000,
             durationMs: 1500000,
             startedAt: 1700000000000,
             phase: .focus,
@@ -31,7 +32,7 @@ final class PmdrClientDecodingTests: XCTestCase {
 
     func test_decodes_paused_break_state() throws {
         let json = Data(#"""
-        {"state":"paused","remainingMs":120000,"duration":300000,"startedAt":1700000000000,"phase":"break","completedFocusBlocks":2}
+        {"state":"paused","remainingMs":120000,"endsAt":null,"duration":300000,"startedAt":1700000000000,"phase":"break","completedFocusBlocks":2}
         """#.utf8)
         let expected = Status.paused(.init(
             remainingMs: 120000,
@@ -43,9 +44,21 @@ final class PmdrClientDecodingTests: XCTestCase {
         XCTAssertEqual(try PmdrClient.decodeStatus(from: json), expected)
     }
 
+    func test_throws_decoding_failed_when_running_endsAt_is_missing() {
+        let json = Data(#"""
+        {"state":"running","remainingMs":1500000,"duration":1500000,"startedAt":1700000000000,"phase":"focus","completedFocusBlocks":0}
+        """#.utf8)
+
+        XCTAssertThrowsError(try PmdrClient.decodeStatus(from: json)) { error in
+            guard case PmdrClientError.decodingFailed = error else {
+                return XCTFail("expected decodingFailed, got \(error)")
+            }
+        }
+    }
+
     func test_decodes_project_when_present() throws {
         let json = Data(#"""
-        {"state":"running","remainingMs":1500000,"duration":1500000,"startedAt":1700000000000,"phase":"focus","completedFocusBlocks":0,"project":"deepwork"}
+        {"state":"running","remainingMs":1500000,"endsAt":1700001500000,"duration":1500000,"startedAt":1700000000000,"phase":"focus","completedFocusBlocks":0,"project":"deepwork"}
         """#.utf8)
         let status = try PmdrClient.decodeStatus(from: json)
         guard case .running(let active) = status else {

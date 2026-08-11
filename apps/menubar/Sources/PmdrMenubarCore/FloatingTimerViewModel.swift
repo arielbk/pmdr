@@ -15,7 +15,7 @@ public struct FloatingTimerViewModel: Equatable, Sendable {
     public let completedFocusBlocks: Int
     public let pauseActionLabel: String
 
-    public init(status: Status, lastProject: String?, elapsedSincePoll: TimeInterval = 0) {
+    public init(status: Status, lastProject: String?, at date: Date = Date()) {
         switch status {
         case .idle(let todayFocusBlocks):
             time = "--:--"
@@ -26,7 +26,8 @@ public struct FloatingTimerViewModel: Equatable, Sendable {
             completedFocusBlocks = todayFocusBlocks
             pauseActionLabel = "Pause"
         case .running(let active):
-            time = Self.format(remainingMs: active.remainingMs - Int(elapsedSincePoll * 1000))
+            let nowMs = Int(date.timeIntervalSince1970 * 1000)
+            time = Self.format(remainingMs: (active.endsAt ?? nowMs) - nowMs)
             phaseLabel = active.phase.rawValue
             projectName = active.project ?? ""
             isMuted = false
