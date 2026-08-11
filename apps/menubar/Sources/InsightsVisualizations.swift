@@ -152,7 +152,7 @@ final class InsightsChartView: NSView {
 
         let maximum = max(1, report.days.map(\.totalMs).max() ?? 1)
         let slotWidth = plot.width / CGFloat(report.days.count)
-        let barWidth = min(28, max(3, slotWidth * 0.64))
+        let barWidth = Self.barWidth(forDayCount: report.days.count, in: plot.width)
         for (dayIndex, day) in report.days.enumerated() {
             let x = plot.minX + CGFloat(dayIndex) * slotWidth + (slotWidth - barWidth) / 2
             var y = plot.minY
@@ -169,6 +169,13 @@ final class InsightsChartView: NSView {
         }
 
         drawDateLabels(report.days, plot: plot, slotWidth: slotWidth)
+    }
+
+    static func barWidth(forDayCount dayCount: Int, in plotWidth: CGFloat) -> CGFloat {
+        guard dayCount > 0 else { return 0 }
+        let slotWidth = plotWidth / CGFloat(dayCount)
+        let maximumWidth: CGFloat = dayCount <= 7 ? 48 : 28
+        return min(maximumWidth, max(3, slotWidth * 0.64))
     }
 
     private func drawDateLabels(_ days: [InsightsDay], plot: NSRect, slotWidth: CGFloat) {

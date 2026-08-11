@@ -83,7 +83,7 @@ final class InsightsWindowController: NSWindowController {
         let content = NSView(frame: window.contentLayoutRect)
         content.autoresizingMask = [.width, .height]
 
-        rangeControl.selectedSegment = 0
+        rangeControl.selectedSegment = 1
         rangeControl.target = self
         rangeControl.action = #selector(rangeChanged(_:))
         rangeControl.translatesAutoresizingMaskIntoConstraints = false

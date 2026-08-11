@@ -14,7 +14,7 @@ final class InsightsWindowControllerTests: XCTestCase {
             (0..<4).map { controller.rangeControlForTesting.label(forSegment: $0) ?? "" },
             ["7 days", "30 days", "90 days", "Custom"]
         )
-        XCTAssertEqual(controller.rangeControlForTesting.selectedSegment, 0)
+        XCTAssertEqual(controller.rangeControlForTesting.selectedSegment, 1)
         XCTAssertTrue(controller.customRangeControlsAreHiddenForTesting)
         XCTAssertFalse(controller.windowForTesting.styleMask.contains(.resizable))
     }
@@ -50,7 +50,7 @@ final class InsightsWindowControllerTests: XCTestCase {
         )
         let controller = InsightsWindowController(loadLog: { _ in log }, now: { now }, calendar: calendar)
 
-        await controller.reloadForTesting()
+        await controller.selectRangeForTesting(segment: 0)
 
         XCTAssertEqual(
             controller.lastRequestedRangeForTesting,
@@ -110,6 +110,38 @@ final class InsightsWindowControllerTests: XCTestCase {
             InsightsDateRange(from: "2026-07-10", to: "2026-08-08")
         )
         XCTAssertTrue(controller.customRangeControlsAreHiddenForTesting)
+    }
+
+    func test_defaultReload_requestsThirtyDayRange() async throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026,
+            month: 8,
+            day: 8,
+            hour: 12
+        )))
+        let controller = InsightsWindowController(
+            loadLog: { _ in makeEmptyLog() },
+            now: { now },
+            calendar: calendar
+        )
+
+        await controller.reloadForTesting()
+
+        XCTAssertEqual(
+            controller.lastRequestedRangeForTesting,
+            InsightsDateRange(from: "2026-07-10", to: "2026-08-08")
+        )
+    }
+
+    func test_sevenDayBarsUseMoreOfTheirAvailableSlots() {
+        XCTAssertEqual(InsightsChartView.barWidth(forDayCount: 7, in: 688), 48)
+        XCTAssertEqual(
+            InsightsChartView.barWidth(forDayCount: 30, in: 688),
+            688 / 30 * 0.64,
+            accuracy: 0.001
+        )
     }
 
     func test_projectMix_exposesTheWholeCompositionAsOneAccessibleGraphic() async {
@@ -213,14 +245,14 @@ final class InsightsWindowControllerTests: XCTestCase {
             day: 8,
             hour: 12
         )))
-        let sevenDays = InsightsDateRange(from: "2026-08-02", to: "2026-08-08")
-        let slowLog = makeLog(range: sevenDays, pomodoros: 1)
+        let thirtyDays = InsightsDateRange(from: "2026-07-10", to: "2026-08-08")
+        let slowLog = makeLog(range: thirtyDays, pomodoros: 1)
         let fastLog = makeLog(
-            range: InsightsDateRange(from: "2026-07-10", to: "2026-08-08"),
+            range: InsightsDateRange(from: "2026-08-02", to: "2026-08-08"),
             pomodoros: 2
         )
         let controller = InsightsWindowController(loadLog: { range in
-            if range == sevenDays {
+            if range == thirtyDays {
                 try await Task.sleep(nanoseconds: 100_000_000)
                 return slowLog
             }
@@ -229,7 +261,7 @@ final class InsightsWindowControllerTests: XCTestCase {
 
         let initialReload = Task { await controller.reloadForTesting() }
         await Task.yield()
-        await controller.selectRangeForTesting(segment: 1)
+        await controller.selectRangeForTesting(segment: 0)
         await initialReload.value
 
         XCTAssertEqual(controller.summaryTextForTesting, ["50m", "2", "1"])
