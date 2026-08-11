@@ -1,8 +1,246 @@
+import AppKit
 import Carbon
 import Foundation
 
 enum HotkeyManagerError: Error {
     case registrationFailed(OSStatus)
+}
+
+struct HotkeyShortcut: Codable, Equatable, Hashable {
+    let keyCode: UInt32
+    let modifiers: UInt32
+    let keyLabel: String
+
+    var displayString: String {
+        var value = ""
+        if modifiers & UInt32(controlKey) != 0 { value += "⌃" }
+        if modifiers & UInt32(optionKey) != 0 { value += "⌥" }
+        if modifiers & UInt32(shiftKey) != 0 { value += "⇧" }
+        if modifiers & UInt32(cmdKey) != 0 { value += "⌘" }
+        return value + keyLabel
+    }
+
+    static func from(event: NSEvent) -> HotkeyShortcut? {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        var modifiers: UInt32 = 0
+        if flags.contains(.control) { modifiers |= UInt32(controlKey) }
+        if flags.contains(.option) { modifiers |= UInt32(optionKey) }
+        if flags.contains(.shift) { modifiers |= UInt32(shiftKey) }
+        if flags.contains(.command) { modifiers |= UInt32(cmdKey) }
+        guard modifiers != 0, let keyLabel = keyLabel(for: event) else { return nil }
+        return HotkeyShortcut(
+            keyCode: UInt32(event.keyCode),
+            modifiers: modifiers,
+            keyLabel: keyLabel
+        )
+    }
+
+    static func modifierDisplayString(for flags: NSEvent.ModifierFlags) -> String {
+        let flags = flags.intersection(.deviceIndependentFlagsMask)
+        var value = ""
+        if flags.contains(.control) { value += "⌃" }
+        if flags.contains(.option) { value += "⌥" }
+        if flags.contains(.shift) { value += "⇧" }
+        if flags.contains(.command) { value += "⌘" }
+        return value
+    }
+
+    private static func keyLabel(for event: NSEvent) -> String? {
+        switch Int(event.keyCode) {
+        case kVK_Return: return "↩"
+        case kVK_Tab: return "⇥"
+        case kVK_Space: return "Space"
+        case kVK_Delete: return "⌫"
+        case kVK_ForwardDelete: return "⌦"
+        case kVK_LeftArrow: return "←"
+        case kVK_RightArrow: return "→"
+        case kVK_UpArrow: return "↑"
+        case kVK_DownArrow: return "↓"
+        case kVK_Home: return "Home"
+        case kVK_End: return "End"
+        case kVK_PageUp: return "Page Up"
+        case kVK_PageDown: return "Page Down"
+        case kVK_F1: return "F1"
+        case kVK_F2: return "F2"
+        case kVK_F3: return "F3"
+        case kVK_F4: return "F4"
+        case kVK_F5: return "F5"
+        case kVK_F6: return "F6"
+        case kVK_F7: return "F7"
+        case kVK_F8: return "F8"
+        case kVK_F9: return "F9"
+        case kVK_F10: return "F10"
+        case kVK_F11: return "F11"
+        case kVK_F12: return "F12"
+        default:
+            let value = event.charactersIgnoringModifiers?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+            return value?.isEmpty == false ? value : nil
+        }
+    }
+}
+
+struct HotkeySettings: Codable, Equatable {
+    var timer: HotkeyShortcut
+    var floatingTimer: HotkeyShortcut
+    var captureNote: HotkeyShortcut
+
+    static let defaults = HotkeySettings(
+        timer: HotkeyShortcut(
+            keyCode: UInt32(kVK_Return),
+            modifiers: UInt32(optionKey | cmdKey),
+            keyLabel: "↩"
+        ),
+        floatingTimer: HotkeyShortcut(
+            keyCode: UInt32(kVK_ANSI_P),
+            modifiers: UInt32(controlKey | optionKey | cmdKey),
+            keyLabel: "P"
+        ),
+        captureNote: HotkeyShortcut(
+            keyCode: UInt32(kVK_ANSI_N),
+            modifiers: UInt32(controlKey | optionKey | cmdKey),
+            keyLabel: "N"
+        )
+    )
+
+    var all: [HotkeyShortcut] { [timer, floatingTimer, captureNote] }
+}
+
+final class HotkeySettingsStore {
+    private static let key = "globalHotkeySettings"
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func load() -> HotkeySettings {
+        guard
+            let data = defaults.data(forKey: Self.key),
+            let settings = try? JSONDecoder().decode(HotkeySettings.self, from: data)
+        else {
+            return .defaults
+        }
+        return settings
+    }
+
+    func save(_ settings: HotkeySettings) {
+        guard let data = try? JSONEncoder().encode(settings) else { return }
+        defaults.set(data, forKey: Self.key)
+    }
+}
+
+final class ShortcutRecorderButton: NSButton {
+    private(set) var shortcut: HotkeyShortcut {
+        didSet { updateTitle() }
+    }
+    var onRecordingChanged: ((Bool) -> Void)?
+    private var isRecording = false
+
+    init(shortcut: HotkeyShortcut) {
+        self.shortcut = shortcut
+        super.init(frame: .zero)
+        bezelStyle = .rounded
+        target = self
+        action = #selector(toggleRecording(_:))
+        setContentHuggingPriority(.required, for: .horizontal)
+        updateTitle()
+        toolTip = "Click, then press a shortcut that includes a modifier key."
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    func setShortcut(_ shortcut: HotkeyShortcut) {
+        self.shortcut = shortcut
+    }
+
+    func beginRecording() {
+        setRecording(true)
+        window?.makeFirstResponder(self)
+    }
+
+    @objc private func toggleRecording(_ sender: NSButton) {
+        if isRecording {
+            setRecording(false)
+            window?.makeFirstResponder(nil)
+        } else {
+            beginRecording()
+        }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard isRecording else {
+            super.keyDown(with: event)
+            return
+        }
+        record(event)
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        guard isRecording else {
+            super.flagsChanged(with: event)
+            return
+        }
+        let modifiers = HotkeyShortcut.modifierDisplayString(for: event.modifierFlags)
+        title = modifiers.isEmpty ? "Type shortcut…" : modifiers + "…"
+        setAccessibilityLabel("Recording shortcut \(modifiers)")
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard isRecording else { return super.performKeyEquivalent(with: event) }
+        record(event)
+        return true
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned {
+            setRecording(false)
+        }
+        return resigned
+    }
+
+    private func record(_ event: NSEvent) {
+        if Int(event.keyCode) == kVK_Escape {
+            finishRecording()
+            return
+        }
+        guard let recorded = HotkeyShortcut.from(event: event) else {
+            NSSound.beep()
+            return
+        }
+        shortcut = recorded
+        finishRecording()
+    }
+
+    private func finishRecording() {
+        setRecording(false)
+        window?.makeFirstResponder(nil)
+    }
+
+    private func setRecording(_ recording: Bool) {
+        guard recording != isRecording else { return }
+        isRecording = recording
+        if recording {
+            title = "Type shortcut…"
+            setAccessibilityLabel("Recording shortcut")
+        } else {
+            updateTitle()
+        }
+        onRecordingChanged?(recording)
+    }
+
+    private func updateTitle() {
+        guard !isRecording else { return }
+        title = shortcut.displayString
+        setAccessibilityLabel("Shortcut \(shortcut.displayString)")
+    }
 }
 
 struct HotkeyBinding {
@@ -58,10 +296,11 @@ final class HotkeyManager {
     }
 
     func register() throws {
-        var handlersByID: [UInt32: @MainActor () -> Void] = [:]
-        for (index, binding) in bindings.enumerated() {
-            handlersByID[UInt32(index + 1)] = binding.handler
-        }
+        let handlersByID: [UInt32: @MainActor () -> Void] = Dictionary(
+            uniqueKeysWithValues: bindings.enumerated().map { index, binding in
+                (UInt32(index + 1), binding.handler)
+            }
+        )
 
         eventHandlerToken = try backend.installEventHandler(signature: Self.signature) { id in
             guard let handler = handlersByID[id] else { return }

@@ -44,7 +44,7 @@ The app is configured with `LSUIElement = true`, so it appears only in the menub
 | Escape | capture panel | Dismiss without saving |
 | ⌘Q | menubar menu | Quit |
 
-The global bindings live in `AppDelegate.registerHotkey()`; the panel-local ⌘/ is the disclosure control's key equivalent in `CapturePanelController`.
+The three global bindings can be changed in **Settings**. Their defaults and persistence live in `HotkeyManager.swift`; the panel-local ⌘/ is the disclosure control's key equivalent in `CapturePanelController`.
 
 ## Layout
 
@@ -56,8 +56,8 @@ apps/menubar/
 ├── Sources/
 │   ├── main.swift               # app entry point, installs AppDelegate
 │   ├── AppDelegate.swift        # NSStatusItem + menu, drives the poller + tick timer
-│   ├── HotkeyManager.swift      # global Ctrl+Option+Command+P registration
-│   ├── LoginItemMenuItem.swift  # "Launch at login" menu item (checkmark mirrors the CLI)
+│   ├── HotkeyManager.swift      # configurable global shortcut registration + persistence
+│   ├── LoginItemSetting.swift   # shared "Launch at login" settings label
 │   ├── NotificationWarningMenuItem.swift # menu item shown when notification permission is missing
 │   ├── CapturePanelController.swift    # quick-note capture overlay
 │   ├── NoteHistoryListView.swift # scrollable "Today · N" note history views

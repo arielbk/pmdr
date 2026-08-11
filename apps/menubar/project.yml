@@ -66,7 +66,7 @@ targets:
       - path: Sources/NoteHistoryListView.swift
       - path: Sources/BrandIcon.swift
       - path: Sources/MainMenu.swift
-      - path: Sources/LoginItemMenuItem.swift
+      - path: Sources/LoginItemSetting.swift
       - path: Sources/NotificationWarningMenuItem.swift
       - path: Sources/InsightsWindowController.swift
       - path: Sources/InsightsVisualizations.swift
