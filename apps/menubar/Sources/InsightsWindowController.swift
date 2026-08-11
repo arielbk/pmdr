@@ -55,12 +55,11 @@ final class InsightsWindowController: NSWindowController {
         self.calendar = calendar
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 640),
-            styleMask: [.titled, .closable, .resizable],
+            styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.title = "Insights"
-        window.minSize = NSSize(width: 680, height: 600)
         window.isReleasedWhenClosed = false
         super.init(window: window)
         buildContentView()
@@ -84,7 +83,7 @@ final class InsightsWindowController: NSWindowController {
         let content = NSView(frame: window.contentLayoutRect)
         content.autoresizingMask = [.width, .height]
 
-        rangeControl.selectedSegment = 0
+        rangeControl.selectedSegment = 1
         rangeControl.target = self
         rangeControl.action = #selector(rangeChanged(_:))
         rangeControl.translatesAutoresizingMaskIntoConstraints = false
@@ -171,6 +170,11 @@ final class InsightsWindowController: NSWindowController {
         allocationScrollView.translatesAutoresizingMaskIntoConstraints = false
         projectMixCard.addSubview(allocationScrollView)
 
+        let allocationViewportHeight = allocationDocument.heightAnchor.constraint(
+            equalTo: allocationScrollView.contentView.heightAnchor
+        )
+        allocationViewportHeight.priority = .defaultHigh
+
         NSLayoutConstraint.activate([
             rangeControl.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
             rangeControl.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
@@ -210,10 +214,16 @@ final class InsightsWindowController: NSWindowController {
             allocationDocument.trailingAnchor.constraint(equalTo: allocationScrollView.contentView.trailingAnchor),
             allocationDocument.topAnchor.constraint(equalTo: allocationScrollView.contentView.topAnchor),
             allocationDocument.widthAnchor.constraint(equalTo: allocationScrollView.contentView.widthAnchor),
+            allocationDocument.heightAnchor.constraint(
+                greaterThanOrEqualTo: allocationScrollView.contentView.heightAnchor
+            ),
+            allocationDocument.heightAnchor.constraint(greaterThanOrEqualTo: allocationStack.heightAnchor),
+            allocationViewportHeight,
             allocationStack.leadingAnchor.constraint(equalTo: allocationDocument.leadingAnchor),
             allocationStack.trailingAnchor.constraint(equalTo: allocationDocument.trailingAnchor),
-            allocationStack.topAnchor.constraint(equalTo: allocationDocument.topAnchor),
-            allocationStack.bottomAnchor.constraint(equalTo: allocationDocument.bottomAnchor),
+            allocationStack.topAnchor.constraint(greaterThanOrEqualTo: allocationDocument.topAnchor),
+            allocationStack.bottomAnchor.constraint(lessThanOrEqualTo: allocationDocument.bottomAnchor),
+            allocationStack.centerYAnchor.constraint(equalTo: allocationDocument.centerYAnchor),
         ])
 
         window.contentView = content
@@ -299,6 +309,7 @@ final class InsightsWindowController: NSWindowController {
         projectPopup.removeAllItems()
         projectPopup.addItem(withTitle: "All projects")
         projectPopup.addItems(withTitles: allProjects.projects.map(\.project))
+        chartView.projectOrder = allProjects.projects.map(\.project)
         renderAllocations(allProjects.projects)
         render(InsightsReport(log: log, selectedProject: nil))
     }
@@ -384,6 +395,9 @@ final class InsightsWindowController: NSWindowController {
     var projectTitlesForTesting: [String] { projectPopup.itemTitles }
     var chartProjectStacksForTesting: [[String]] {
         chartView.report?.days.map { $0.groups.map(\.project) } ?? []
+    }
+    func chartColorForTesting(project: String) -> NSColor {
+        InsightsColors.color(for: project, order: chartView.projectOrder)
     }
     var allocationRowsForTesting: [String] { allocationRows }
     var projectMixAccessibilityForTesting: String? {

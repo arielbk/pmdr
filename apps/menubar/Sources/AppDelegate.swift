@@ -1,5 +1,4 @@
 import AppKit
-import Carbon
 import Foundation
 import os.log
 import PmdrMenubarCore
@@ -10,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     private var poller: StatusPoller?
     private var notifier: PhaseNotifier?
     private var hotkeyManager: HotkeyManager?
+    private let hotkeySettingsStore = HotkeySettingsStore()
+    private var hotkeySettings = HotkeySettings.defaults
     private var floatingTimerPanelController: FloatingTimerPanelController?
     private var capturePanelController: CapturePanelController?
     private var manageProjectsController: ManageProjectsWindowController?
@@ -70,7 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
             notesProvider: { try? await client.todayNotes() }
         )
         rebuildMenu()
-        registerHotkey()
+        hotkeySettings = hotkeySettingsStore.load()
+        registerHotkeys(hotkeySettings)
 
         startRedrawScheduler()
         startPolling()
@@ -80,14 +82,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         Task { [weak self] in
             await self?.refreshLoginItem()
         }
+
     }
 
-    /// Re-read the LaunchAgent state the CLI owns, then redraw the menu so the
-    /// checkmark reflects the plist rather than a stale local guess.
+    /// Re-read the LaunchAgent state the CLI owns so Settings reflects the
+    /// plist rather than a stale local guess.
     @MainActor
     private func refreshLoginItem() async {
         await loginItemToggle?.refresh()
-        rebuildMenu()
     }
 
     @MainActor
@@ -220,15 +222,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         menu.addItem(InsightsMenuItem.make(target: self, action: #selector(openInsights(_:))))
         menu.addItem(actionItem("Settings…", #selector(openSettings(_:)), keyEquivalent: ","))
         menu.addItem(actionItem("Manage projects…", #selector(openManageProjects(_:))))
-        // rebuildMenu only ever runs on the main thread; the toggle's cache is
-        // MainActor-isolated, so read it through the same assumption the
-        // optimistic-update path uses.
-        let loginEnabled = MainActor.assumeIsolated { loginItemToggle?.isEnabled ?? false }
-        menu.addItem(LoginItemMenuItem.make(
-            enabled: loginEnabled,
-            target: self,
-            action: #selector(toggleLoginItemFromMenu(_:))
-        ))
         if let warning = NotificationWarningMenuItem.make(
             for: notificationAuthorization,
             target: self,
@@ -385,35 +378,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
     @objc @MainActor private func openSettings(_ sender: NSMenuItem) {
         guard let client else { return }
         if settingsController == nil {
-            settingsController = SettingsWindowController(client: client) { [weak self] in
-                Task { try? await self?.refreshFromCLI() }
+            settingsController = SettingsWindowController(client: client) { [weak self] shortcuts in
+                guard let self else { return }
+                self.applyHotkeySettings(shortcuts)
+                Task {
+                    try? await self.refreshFromCLI()
+                    await self.refreshLoginItem()
+                }
             }
         }
         let fallback = currentConfig
         Task { [weak self] in
+            await self?.loginItemToggle?.refresh()
             let config = (try? await client.config()) ?? fallback
             await MainActor.run {
-                self?.currentConfig = config
-                self?.settingsController?.show(config: config)
+                guard let self else { return }
+                self.currentConfig = config
+                self.settingsController?.show(
+                    config: config,
+                    loginItemEnabled: self.loginItemToggle?.isEnabled ?? false,
+                    hotkeySettings: self.hotkeySettings
+                )
             }
         }
-    }
-
-    @objc private func toggleLoginItemFromMenu(_ sender: NSMenuItem) {
-        Task { [weak self] in
-            await self?.performLoginItemToggle()
-        }
-    }
-
-    @MainActor
-    private func performLoginItemToggle() async {
-        guard let toggle = loginItemToggle else { return }
-        let outcome = await toggle.toggle()
-        if case .failed(let message) = outcome {
-            os_log("Failed to toggle launch at login: %{public}@", log: log, type: .error, message)
-            showLoginItemAlert(message)
-        }
-        rebuildMenu()
     }
 
     @objc private func openNotificationSettings(_ sender: NSMenuItem) {
@@ -538,33 +525,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         }
     }
 
-    private func registerHotkey() {
+    private func makeHotkeyManager(_ settings: HotkeySettings) -> HotkeyManager {
         let manager = HotkeyManager(bindings: [
             HotkeyBinding(
-                keyCode: UInt32(kVK_Return),
-                modifiers: UInt32(optionKey | cmdKey),
+                keyCode: settings.timer.keyCode,
+                modifiers: settings.timer.modifiers,
                 handler: { [weak self] in self?.handleTimerHotkey() }
             ),
             HotkeyBinding(
-                keyCode: UInt32(kVK_ANSI_P),
-                modifiers: UInt32(controlKey | optionKey | cmdKey),
+                keyCode: settings.floatingTimer.keyCode,
+                modifiers: settings.floatingTimer.modifiers,
                 handler: { [weak self] in
                     self?.redrawFloatingTimer()
                     self?.floatingTimerPanelController?.toggle()
                 }
             ),
             HotkeyBinding(
-                keyCode: UInt32(kVK_ANSI_N),
-                modifiers: UInt32(controlKey | optionKey | cmdKey),
+                keyCode: settings.captureNote.keyCode,
+                modifiers: settings.captureNote.modifiers,
                 handler: { [weak self] in self?.capturePanelController?.toggle() }
             )
         ])
+        return manager
+    }
+
+    @discardableResult
+    private func registerHotkeys(_ settings: HotkeySettings, surfaceFailure: Bool = true) -> Bool {
+        let manager = makeHotkeyManager(settings)
         do {
             try manager.register()
             hotkeyManager = manager
+            return true
         } catch {
             os_log("Failed to register global pmdr hotkey: %{public}@", log: log, type: .error, String(describing: error))
-            showHotkeyAlertIfNeeded()
+            if surfaceFailure { showHotkeyAlertIfNeeded() }
+            return false
+        }
+    }
+
+    private func applyHotkeySettings(_ settings: HotkeySettings) {
+        guard settings != hotkeySettings else { return }
+        let previous = hotkeySettings
+        hotkeyManager = nil
+        if registerHotkeys(settings) {
+            hotkeySettings = settings
+            hotkeySettingsStore.save(settings)
+            didShowHotkeyAlert = false
+        } else {
+            _ = registerHotkeys(previous, surfaceFailure: false)
         }
     }
 
@@ -632,25 +640,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         alert.runModal()
     }
 
-    /// The toggle shells out to `pmdr app login`, which fails loudly (for
-    /// instance when the app isn't installed in ~/Applications). Show its own
-    /// message rather than leaving a checkmark that silently didn't move.
-    private func showLoginItemAlert(_ message: String) {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Could not change launch at login"
-        alert.informativeText = message
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
-    }
-
     private func showHotkeyAlertIfNeeded() {
         guard !didShowHotkeyAlert else { return }
         didShowHotkeyAlert = true
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Hotkey unavailable"
-        alert.informativeText = "Another app is already using Option-Command-Return."
+        alert.informativeText = "One of the configured shortcuts is already used by another app. Choose a different shortcut in Settings."
         alert.addButton(withTitle: "OK")
         alert.runModal()
     }
@@ -698,8 +694,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         Task { [weak self] in
             try? await self?.refreshFromCLI()
         }
-        // The plist can change from outside the app (`pmdr app login`), so the
-        // checkmark is re-read every time the menu is shown.
+        // The plist can change from outside the app (`pmdr app login`), so keep
+        // the Settings cache fresh whenever the menu is shown.
         Task { [weak self] in
             await self?.refreshLoginItem()
         }
@@ -730,7 +726,7 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
     ]
 
     private let client: PmdrClient
-    private let onSaved: () -> Void
+    private let onSaved: (HotkeySettings) -> Void
     private let window: NSWindow
     private let focusField = NSTextField()
     private let focusStepper = NSStepper()
@@ -744,11 +740,22 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
     private let dailyGoalStepper = NSStepper()
     private let focusSoundPopup = NSPopUpButton()
     private let breakSoundPopup = NSPopUpButton()
+    private let launchAtLoginCheckbox = NSButton(
+        checkboxWithTitle: LoginItemSetting.title,
+        target: nil,
+        action: nil
+    )
+    private let timerShortcutButton = ShortcutRecorderButton(shortcut: HotkeySettings.defaults.timer)
+    private let floatingTimerShortcutButton = ShortcutRecorderButton(shortcut: HotkeySettings.defaults.floatingTimer)
+    private let captureNoteShortcutButton = ShortcutRecorderButton(shortcut: HotkeySettings.defaults.captureNote)
+    private let restoreDefaultShortcutsButton = NSButton(title: "Restore Defaults", target: nil, action: nil)
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
     private var representedConfig = PmdrConfig.defaults
+    private var representedLoginItemEnabled = false
+    private var representedHotkeySettings = HotkeySettings.defaults
 
-    init(client: PmdrClient, onSaved: @escaping () -> Void) {
+    init(client: PmdrClient, onSaved: @escaping (HotkeySettings) -> Void) {
         self.client = client
         self.onSaved = onSaved
         self.window = NSWindow(
@@ -761,9 +768,16 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         buildWindow()
     }
 
-    func show(config: PmdrConfig) {
+    func show(
+        config: PmdrConfig,
+        loginItemEnabled: Bool,
+        hotkeySettings: HotkeySettings
+    ) {
         representedConfig = config
+        representedLoginItemEnabled = loginItemEnabled
+        representedHotkeySettings = hotkeySettings
         apply(config)
+        apply(loginItemEnabled: loginItemEnabled, hotkeySettings: hotkeySettings)
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -792,7 +806,9 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
 
         configureSoundPopup(focusSoundPopup)
         configureSoundPopup(breakSoundPopup)
+        configureShortcutRecorders()
 
+        content.addArrangedSubview(sectionHeader("Timer"))
         content.addArrangedSubview(row(label: "Focus minutes", control: numericControl(focusField, focusStepper)))
         content.addArrangedSubview(row(label: "Short break minutes", control: numericControl(shortBreakField, shortBreakStepper)))
         content.addArrangedSubview(row(label: "Long break minutes", control: numericControl(longBreakField, longBreakStepper)))
@@ -800,6 +816,14 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         content.addArrangedSubview(row(label: "Daily goal", control: numericControl(dailyGoalField, dailyGoalStepper)))
         content.addArrangedSubview(row(label: "Focus end sound", control: focusSoundPopup))
         content.addArrangedSubview(row(label: "Break end sound", control: breakSoundPopup))
+        content.addArrangedSubview(sectionDivider())
+        content.addArrangedSubview(sectionHeader("General"))
+        content.addArrangedSubview(launchAtLoginCheckbox)
+        content.addArrangedSubview(sectionDivider())
+        content.addArrangedSubview(shortcutSectionHeader())
+        content.addArrangedSubview(row(label: "Timer", control: timerShortcutButton))
+        content.addArrangedSubview(row(label: "Floating timer", control: floatingTimerShortcutButton))
+        content.addArrangedSubview(row(label: "Capture note", control: captureNoteShortcutButton))
         content.addArrangedSubview(buttonRow())
 
         // Use the stack's natural (fitting) size to drive the window height so
@@ -891,6 +915,15 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         popup.widthAnchor.constraint(equalToConstant: 180).isActive = true
     }
 
+    private func configureShortcutRecorders() {
+        for recorder in [timerShortcutButton, floatingTimerShortcutButton, captureNoteShortcutButton] {
+            recorder.onRecordingChanged = { [weak self] isRecording in
+                self?.saveButton.keyEquivalent = isRecording ? "" : "\r"
+            }
+            recorder.widthAnchor.constraint(greaterThanOrEqualToConstant: 92).isActive = true
+        }
+    }
+
     private func row(label: String, control: NSView) -> NSStackView {
         let labelView = NSTextField(labelWithString: label)
         labelView.alignment = .right
@@ -902,6 +935,43 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         stack.alignment = .centerY
         stack.spacing = 20
         return stack
+    }
+
+    private func sectionDivider() -> NSBox {
+        let divider = NSBox()
+        divider.boxType = .separator
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        divider.widthAnchor.constraint(equalToConstant: 372).isActive = true
+        return divider
+    }
+
+    private func sectionHeader(_ title: String) -> NSTextField {
+        let header = NSTextField(labelWithString: title)
+        header.font = .systemFont(ofSize: 13, weight: .semibold)
+        return header
+    }
+
+    private func shortcutSectionHeader() -> NSStackView {
+        restoreDefaultShortcutsButton.target = self
+        restoreDefaultShortcutsButton.action = #selector(restoreDefaultShortcuts(_:))
+        restoreDefaultShortcutsButton.controlSize = .small
+        restoreDefaultShortcutsButton.bezelStyle = .rounded
+
+        let title = sectionHeader("Keyboard Shortcuts")
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        let stack = NSStackView(views: [title, spacer, restoreDefaultShortcutsButton])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.widthAnchor.constraint(equalToConstant: 372).isActive = true
+        return stack
+    }
+
+    @objc private func restoreDefaultShortcuts(_ sender: NSButton) {
+        let defaults = HotkeySettings.defaults
+        timerShortcutButton.setShortcut(defaults.timer)
+        floatingTimerShortcutButton.setShortcut(defaults.floatingTimer)
+        captureNoteShortcutButton.setShortcut(defaults.captureNote)
     }
 
     private func buttonRow() -> NSStackView {
@@ -937,6 +1007,13 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         dailyGoalStepper.integerValue = config.dailyGoal
         selectSound(config.focusEndSound, in: focusSoundPopup)
         selectSound(config.breakEndSound, in: breakSoundPopup)
+    }
+
+    private func apply(loginItemEnabled: Bool, hotkeySettings: HotkeySettings) {
+        launchAtLoginCheckbox.state = loginItemEnabled ? .on : .off
+        timerShortcutButton.setShortcut(hotkeySettings.timer)
+        floatingTimerShortcutButton.setShortcut(hotkeySettings.floatingTimer)
+        captureNoteShortcutButton.setShortcut(hotkeySettings.captureNote)
     }
 
     func controlTextDidChange(_ obj: Notification) {
@@ -997,6 +1074,10 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
 
     @objc private func cancel(_ sender: NSButton) {
         apply(representedConfig)
+        apply(
+            loginItemEnabled: representedLoginItemEnabled,
+            hotkeySettings: representedHotkeySettings
+        )
         window.close()
     }
 
@@ -1014,6 +1095,17 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
             return
         }
 
+        let shortcuts = HotkeySettings(
+            timer: timerShortcutButton.shortcut,
+            floatingTimer: floatingTimerShortcutButton.shortcut,
+            captureNote: captureNoteShortcutButton.shortcut
+        )
+        let shortcutIdentities = shortcuts.all.map { "\($0.keyCode):\($0.modifiers)" }
+        guard Set(shortcutIdentities).count == shortcutIdentities.count else {
+            showShortcutValidationAlert()
+            return
+        }
+
         saveButton.isEnabled = false
         let updates = [
             ("focusMinutes", "\(focusField.integerValue)"),
@@ -1024,16 +1116,21 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
             ("focusEndSound", focusSound),
             ("breakEndSound", breakSound),
         ]
+        let loginItemEnabled = launchAtLoginCheckbox.state == .on
+        let loginItemChanged = representedLoginItemEnabled != loginItemEnabled
 
         Task { [client, onSaved, weak self] in
             do {
                 for update in updates {
                     try await client.setConfigValue(key: update.0, value: update.1)
                 }
+                if loginItemChanged {
+                    try await client.setAppLoginItem(enabled: loginItemEnabled)
+                }
                 await MainActor.run {
                     self?.saveButton.isEnabled = true
                     self?.window.close()
-                    onSaved()
+                    onSaved(shortcuts)
                 }
             } catch {
                 await MainActor.run {
@@ -1049,6 +1146,15 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         alert.alertStyle = .warning
         alert.messageText = "Invalid settings"
         alert.informativeText = "Durations and cadence must be positive whole numbers."
+        alert.addButton(withTitle: "OK")
+        alert.beginSheetModal(for: window)
+    }
+
+    private func showShortcutValidationAlert() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Shortcuts must be unique"
+        alert.informativeText = "Choose a different shortcut for each action."
         alert.addButton(withTitle: "OK")
         alert.beginSheetModal(for: window)
     }

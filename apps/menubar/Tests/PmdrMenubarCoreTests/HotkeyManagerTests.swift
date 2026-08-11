@@ -2,6 +2,77 @@ import Carbon
 import XCTest
 
 final class HotkeyManagerTests: XCTestCase {
+    func testDefaultSettingsMatchTheDocumentedShortcuts() {
+        XCTAssertEqual(HotkeySettings.defaults.timer.displayString, "⌥⌘↩")
+        XCTAssertEqual(HotkeySettings.defaults.floatingTimer.displayString, "⌃⌥⌘P")
+        XCTAssertEqual(HotkeySettings.defaults.captureNote.displayString, "⌃⌥⌘N")
+    }
+
+    @MainActor
+    func testRecorderCapturesOptionCommandReturnInsteadOfPassingItToTheDefaultButton() throws {
+        let initial = HotkeyShortcut(keyCode: UInt32(kVK_ANSI_M), modifiers: UInt32(cmdKey), keyLabel: "M")
+        let recorder = ShortcutRecorderButton(shortcut: initial)
+        recorder.beginRecording()
+        let event = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [.option, .command],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "\r",
+            charactersIgnoringModifiers: "\r",
+            isARepeat: false,
+            keyCode: UInt16(kVK_Return)
+        ))
+
+        XCTAssertTrue(recorder.performKeyEquivalent(with: event))
+        XCTAssertEqual(recorder.shortcut, HotkeySettings.defaults.timer)
+    }
+
+    @MainActor
+    func testRecorderShowsPressedModifiersBeforeTheFinalKey() throws {
+        let recorder = ShortcutRecorderButton(shortcut: HotkeySettings.defaults.timer)
+        recorder.beginRecording()
+        let event = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [.control, .option, .command],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "",
+            charactersIgnoringModifiers: "",
+            isARepeat: false,
+            keyCode: UInt16(kVK_Command)
+        ))
+
+        recorder.flagsChanged(with: event)
+
+        XCTAssertEqual(recorder.title, "⌃⌥⌘…")
+    }
+
+    func testSettingsStoreRoundTripsCustomizedShortcuts() throws {
+        let suite = "HotkeyManagerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = HotkeySettingsStore(defaults: defaults)
+        var settings = HotkeySettings.defaults
+        settings.timer = HotkeyShortcut(keyCode: 1, modifiers: UInt32(cmdKey), keyLabel: "S")
+
+        store.save(settings)
+
+        XCTAssertEqual(store.load(), settings)
+    }
+
+    func testSettingsStoreFallsBackToDefaultsWhenNothingWasSaved() throws {
+        let suite = "HotkeyManagerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertEqual(HotkeySettingsStore(defaults: defaults).load(), .defaults)
+    }
+
     func testTwoDistinctRegistrationsRouteToTheirOwnCallbacks() async throws {
         let backend = RecordingHotkeyBackend()
         let calls = CallRecorder()

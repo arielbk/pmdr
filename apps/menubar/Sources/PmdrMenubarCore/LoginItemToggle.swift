@@ -30,10 +30,10 @@ public enum LoginItemToggleOutcome: Equatable {
     case failed(String)
 }
 
-/// Cached login-item state for the menu, kept honest by re-reading the CLI.
+/// Cached login-item state for Settings, kept honest by re-reading the CLI.
 ///
-/// The menu is rebuilt synchronously, so it needs a value it can read without
-/// awaiting; `isEnabled` is that cache. Every mutation goes through the CLI and
+/// Settings needs a value it can read synchronously after refresh;
+/// `isEnabled` is that cache. Every mutation goes through the CLI and
 /// is then confirmed by a fresh read, so the plist stays the single source of
 /// truth even if a write half-succeeds.
 @MainActor

@@ -238,6 +238,12 @@ final class PmdrClientArgvTests: XCTestCase {
         XCTAssertEqual(readArgv(argvLog), ["project", "archive", "alpha"])
     }
 
+    func test_renameProject_invokes_rename_subcommand() async throws {
+        let (client, argvLog) = try makeArgvCapturingClient(stdout: "")
+        try await client.renameProject("alpha", to: "beta")
+        XCTAssertEqual(readArgv(argvLog), ["project", "rename", "alpha", "beta"])
+    }
+
     func test_unarchiveProject_invokes_unarchive_subcommand() async throws {
         let (client, argvLog) = try makeArgvCapturingClient(stdout: "")
         try await client.unarchiveProject("alpha")
