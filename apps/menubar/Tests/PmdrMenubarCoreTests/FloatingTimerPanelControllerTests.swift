@@ -15,6 +15,44 @@ final class FloatingTimerPanelControllerTests: XCTestCase {
         XCTAssertEqual(controller.panelForTesting?.frame.origin, NSPoint(x: 123, y: 456))
     }
 
+    /// The status item disappears behind the notch on a crowded menu bar, which
+    /// leaves the overlay — reachable by global hotkey — as the only way in.
+    func testOverlayMenuButtonAppearsOnHoverAndOffersTheAppDestinations() {
+        let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let controller = FloatingTimerPanelController(
+            positionStore: FloatingTimerPosition(defaults: makeDefaults()),
+            screenProvider: { screen }
+        )
+        controller.show()
+
+        XCTAssertEqual(controller.menuButtonForTesting?.isHidden, true)
+
+        controller.setHoveredForTesting(true)
+
+        XCTAssertEqual(controller.menuButtonForTesting?.isHidden, false)
+        XCTAssertEqual(controller.menuButtonAlphaForTesting, 1)
+        XCTAssertEqual(
+            controller.overlayMenuItemTitlesForTesting,
+            ["Settings…", "Insights…", "Manage projects…", "", "Quit pmdr"]
+        )
+    }
+
+    func testOverlayMenuRoutesSettingsToTheActionSink() {
+        let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        let sink = RecordingActionSink()
+        let controller = FloatingTimerPanelController(
+            positionStore: FloatingTimerPosition(defaults: makeDefaults()),
+            screenProvider: { screen },
+            actions: sink
+        )
+        controller.show()
+        sink.calls.removeAll()
+
+        controller.invokeOverlayMenuItemForTesting(title: "Settings…")
+
+        XCTAssertEqual(sink.calls, [.openSettings])
+    }
+
     func testHideRecordsCurrentPositionForPanelDisplay() {
         let screen = TestScreen(displayID: 100, frame: NSRect(x: 0, y: 0, width: 1440, height: 900))
         let store = FloatingTimerPosition(defaults: makeDefaults())
@@ -763,6 +801,10 @@ private final class RecordingActionSink: FloatingTimerActions {
         case setProject(String?)
         case addProject(String)
         case listProjects
+        case openSettings
+        case openInsights
+        case openManageProjects
+        case quit
     }
 
     var calls: [Call] = []
@@ -778,6 +820,11 @@ private final class RecordingActionSink: FloatingTimerActions {
         calls.append(.listProjects)
         return stubbedProjects
     }
+
+    func openSettings() { calls.append(.openSettings) }
+    func openInsights() { calls.append(.openInsights) }
+    func openManageProjects() { calls.append(.openManageProjects) }
+    func quit() { calls.append(.quit) }
 }
 
 private final class TestScreen: NSScreen {
