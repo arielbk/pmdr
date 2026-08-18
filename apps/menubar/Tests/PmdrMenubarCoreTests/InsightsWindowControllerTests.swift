@@ -19,6 +19,30 @@ final class InsightsWindowControllerTests: XCTestCase {
         XCTAssertFalse(controller.windowForTesting.styleMask.contains(.resizable))
     }
 
+    func test_insightsCardBackgroundFollowsEffectiveAppearance() throws {
+        let card = AppearanceAwareBackgroundView(cornerRadius: 10)
+        let lightAppearance = try XCTUnwrap(NSAppearance(named: .aqua))
+        let darkAppearance = try XCTUnwrap(NSAppearance(named: .darkAqua))
+
+        card.appearance = lightAppearance
+        let lightBackground = try XCTUnwrap(card.layer?.backgroundColor)
+        var expectedLightBackground: CGColor?
+        lightAppearance.performAsCurrentDrawingAppearance {
+            expectedLightBackground = NSColor.controlBackgroundColor.cgColor
+        }
+
+        card.appearance = darkAppearance
+        let darkBackground = try XCTUnwrap(card.layer?.backgroundColor)
+        var expectedDarkBackground: CGColor?
+        darkAppearance.performAsCurrentDrawingAppearance {
+            expectedDarkBackground = NSColor.controlBackgroundColor.cgColor
+        }
+
+        XCTAssertEqual(lightBackground, try XCTUnwrap(expectedLightBackground))
+        XCTAssertEqual(darkBackground, try XCTUnwrap(expectedDarkBackground))
+        XCTAssertNotEqual(lightBackground, darkBackground)
+    }
+
     func test_reload_requestsLatestSevenDays_andRendersSummaryAndProjects() async throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))

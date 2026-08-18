@@ -2,6 +2,42 @@ import AppKit
 import Foundation
 import PmdrMenubarCore
 
+/// A layer-backed surface whose semantic AppKit color follows the view's
+/// effective appearance. Converting a dynamic `NSColor` to `CGColor` outside
+/// the view's drawing appearance freezes whichever light/dark variant happened
+/// to be current at construction time.
+class AppearanceAwareBackgroundView: NSView {
+    private let semanticBackgroundColor: NSColor
+
+    init(
+        frame frameRect: NSRect = .zero,
+        backgroundColor: NSColor = .controlBackgroundColor,
+        cornerRadius: CGFloat = 0
+    ) {
+        semanticBackgroundColor = backgroundColor
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = cornerRadius
+        refreshBackgroundColor()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshBackgroundColor()
+    }
+
+    private func refreshBackgroundColor() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = semanticBackgroundColor.cgColor
+        }
+    }
+}
+
 enum InsightsColors {
     private static let palette: [NSColor] = [
         .systemBlue, .systemPurple, .systemTeal, .systemOrange,
@@ -104,7 +140,7 @@ final class InsightsDonutChartView: NSView {
     }
 }
 
-final class InsightsChartView: NSView {
+final class InsightsChartView: AppearanceAwareBackgroundView {
     var projectOrder: [String] = [] {
         didSet { needsDisplay = true }
     }
@@ -115,11 +151,8 @@ final class InsightsChartView: NSView {
         }
     }
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.cornerRadius = 10
-        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+    init(frame frameRect: NSRect) {
+        super.init(frame: frameRect, cornerRadius: 10)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Daily focus")
