@@ -775,11 +775,7 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
     private let dailyGoalStepper = NSStepper()
     private let focusSoundPopup = NSPopUpButton()
     private let breakSoundPopup = NSPopUpButton()
-    private let launchAtLoginCheckbox = NSButton(
-        checkboxWithTitle: LoginItemSetting.title,
-        target: nil,
-        action: nil
-    )
+    private let launchAtLoginSwitch = NSSwitch()
     private let timerShortcutButton = ShortcutRecorderButton(shortcut: HotkeySettings.defaults.timer)
     private let floatingTimerShortcutButton = ShortcutRecorderButton(shortcut: HotkeySettings.defaults.floatingTimer)
     private let captureNoteShortcutButton = ShortcutRecorderButton(shortcut: HotkeySettings.defaults.captureNote)
@@ -849,7 +845,8 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         configureShortcutRecorders()
 
         content.addArrangedSubview(sectionHeader("General"))
-        content.addArrangedSubview(launchAtLoginCheckbox)
+        let launchAtLoginRow = row(label: LoginItemSetting.title, control: launchAtLoginSwitch)
+        content.addArrangedSubview(launchAtLoginRow)
         content.addArrangedSubview(sectionHeader("Timer"))
         content.addArrangedSubview(row(label: "Focus minutes", control: numericControl(focusField, focusStepper)))
         content.addArrangedSubview(row(label: "Short break minutes", control: numericControl(shortBreakField, shortBreakStepper)))
@@ -871,7 +868,7 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         // crowd a window this dense. The footer gets a wider gap still, so it
         // reads as window-wide rather than part of Keyboard Shortcuts.
         let sectionGap: CGFloat = 24
-        content.setCustomSpacing(sectionGap, after: launchAtLoginCheckbox)
+        content.setCustomSpacing(sectionGap, after: launchAtLoginRow)
         content.setCustomSpacing(sectionGap, after: breakSoundRow)
         content.setCustomSpacing(36, after: lastShortcutRow)
 
@@ -1042,7 +1039,7 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
     }
 
     private func apply(loginItemEnabled: Bool, hotkeySettings: HotkeySettings) {
-        launchAtLoginCheckbox.state = loginItemEnabled ? .on : .off
+        launchAtLoginSwitch.state = loginItemEnabled ? .on : .off
         timerShortcutButton.setShortcut(hotkeySettings.timer)
         floatingTimerShortcutButton.setShortcut(hotkeySettings.floatingTimer)
         captureNoteShortcutButton.setShortcut(hotkeySettings.captureNote)
@@ -1148,7 +1145,7 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
             ("focusEndSound", focusSound),
             ("breakEndSound", breakSound),
         ]
-        let loginItemEnabled = launchAtLoginCheckbox.state == .on
+        let loginItemEnabled = launchAtLoginSwitch.state == .on
         let loginItemChanged = representedLoginItemEnabled != loginItemEnabled
 
         Task { [client, onSaved, weak self] in
