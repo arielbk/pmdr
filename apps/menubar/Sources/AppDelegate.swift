@@ -850,7 +850,6 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
 
         content.addArrangedSubview(sectionHeader("General"))
         content.addArrangedSubview(launchAtLoginCheckbox)
-        content.addArrangedSubview(sectionDivider())
         content.addArrangedSubview(sectionHeader("Timer"))
         content.addArrangedSubview(row(label: "Focus minutes", control: numericControl(focusField, focusStepper)))
         content.addArrangedSubview(row(label: "Short break minutes", control: numericControl(shortBreakField, shortBreakStepper)))
@@ -858,21 +857,23 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         content.addArrangedSubview(row(label: "Long break cadence", control: numericControl(longBreakEveryField, longBreakEveryStepper)))
         content.addArrangedSubview(row(label: "Daily goal", control: numericControl(dailyGoalField, dailyGoalStepper)))
         content.addArrangedSubview(row(label: "Focus end sound", control: focusSoundPopup))
-        content.addArrangedSubview(row(label: "Break end sound", control: breakSoundPopup))
-        content.addArrangedSubview(sectionDivider())
+        let breakSoundRow = row(label: "Break end sound", control: breakSoundPopup)
+        content.addArrangedSubview(breakSoundRow)
         content.addArrangedSubview(sectionHeader("Keyboard Shortcuts"))
         content.addArrangedSubview(row(label: "Timer", control: timerShortcutButton))
         content.addArrangedSubview(row(label: "Floating timer", control: floatingTimerShortcutButton))
         let lastShortcutRow = row(label: "Capture note", control: captureNoteShortcutButton)
         content.addArrangedSubview(lastShortcutRow)
 
-        // The footer applies to the whole window, so it gets its own rule and
-        // breathing room rather than reading as part of Keyboard Shortcuts.
-        let footerDivider = sectionDivider()
-        content.addArrangedSubview(footerDivider)
         content.addArrangedSubview(footerRow())
-        content.setCustomSpacing(20, after: lastShortcutRow)
-        content.setCustomSpacing(16, after: footerDivider)
+
+        // Sections are separated by whitespace alone — rules between every group
+        // crowd a window this dense. The footer gets a wider gap still, so it
+        // reads as window-wide rather than part of Keyboard Shortcuts.
+        let sectionGap: CGFloat = 24
+        content.setCustomSpacing(sectionGap, after: launchAtLoginCheckbox)
+        content.setCustomSpacing(sectionGap, after: breakSoundRow)
+        content.setCustomSpacing(36, after: lastShortcutRow)
 
         // Use the stack's natural (fitting) size to drive the window height so
         // there is no dead space below the button row.
@@ -984,14 +985,6 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         stack.alignment = .centerY
         stack.spacing = 20
         return stack
-    }
-
-    private func sectionDivider() -> NSBox {
-        let divider = NSBox()
-        divider.boxType = .separator
-        divider.translatesAutoresizingMaskIntoConstraints = false
-        divider.widthAnchor.constraint(equalToConstant: 372).isActive = true
-        return divider
     }
 
     private func sectionHeader(_ title: String) -> NSTextField {
