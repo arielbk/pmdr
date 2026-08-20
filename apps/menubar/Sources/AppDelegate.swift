@@ -338,7 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         performClientAction { try await $0.setProject(nil) }
     }
 
-    @objc private func openManageProjects(_ sender: NSMenuItem) {
+    @objc private func openManageProjects(_ sender: Any?) {
         guard let client else { return }
         if manageProjectsController == nil {
             manageProjectsController = ManageProjectsWindowController(client: client) { [weak self] projects in
@@ -350,7 +350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         manageProjectsController?.show()
     }
 
-    @objc @MainActor private func openInsights(_ sender: NSMenuItem) {
+    @objc @MainActor private func openInsights(_ sender: Any?) {
         guard let client else { return }
         if insightsController == nil {
             insightsController = InsightsWindowController { range in
@@ -375,17 +375,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         }
     }
 
-    @objc @MainActor private func openSettings(_ sender: NSMenuItem) {
+    @objc @MainActor private func openSettings(_ sender: Any?) {
         guard let client else { return }
         if settingsController == nil {
-            settingsController = SettingsWindowController(client: client) { [weak self] shortcuts in
-                guard let self else { return }
-                self.applyHotkeySettings(shortcuts)
-                Task {
-                    try? await self.refreshFromCLI()
-                    await self.refreshLoginItem()
+            settingsController = SettingsWindowController(
+                client: client,
+                onSaved: { [weak self] shortcuts in
+                    guard let self else { return }
+                    self.applyHotkeySettings(shortcuts)
+                    Task {
+                        try? await self.refreshFromCLI()
+                        await self.refreshLoginItem()
+                    }
+                },
+                onShortcutRecordingChanged: { [weak self] isRecording in
+                    self?.setHotkeysSuspended(isRecording)
                 }
-            }
+            )
         }
         let fallback = currentConfig
         Task { [weak self] in
@@ -563,6 +569,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         }
     }
 
+    /// Global hotkeys are torn down while a recorder is armed: Carbon eats its
+    /// key combination before AppKit sees it, so the currently-bound shortcut
+    /// (⌥⌘↩ by default) would fire the timer instead of being recorded.
+    @MainActor
+    private func setHotkeysSuspended(_ suspended: Bool) {
+        if suspended {
+            hotkeyManager?.unregisterAll()
+        } else {
+            _ = registerHotkeys(hotkeySettings, surfaceFailure: false)
+        }
+    }
+
     private func applyHotkeySettings(_ settings: HotkeySettings) {
         guard settings != hotkeySettings else { return }
         let previous = hotkeySettings
@@ -687,6 +705,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, Floati
         projects.filter { !$0.archived }
     }
 
+    func openSettings() {
+        MainActor.assumeIsolated { openSettings(nil) }
+    }
+
+    func openInsights() {
+        MainActor.assumeIsolated { openInsights(nil) }
+    }
+
+    func openManageProjects() {
+        MainActor.assumeIsolated { openManageProjects(nil) }
+    }
+
+    func quit() {
+        NSApp.terminate(nil)
+    }
+
     // MARK: NSMenuDelegate
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -727,6 +761,7 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
 
     private let client: PmdrClient
     private let onSaved: (HotkeySettings) -> Void
+    private let onShortcutRecordingChanged: (Bool) -> Void
     private let window: NSWindow
     private let focusField = NSTextField()
     private let focusStepper = NSStepper()
@@ -740,24 +775,25 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
     private let dailyGoalStepper = NSStepper()
     private let focusSoundPopup = NSPopUpButton()
     private let breakSoundPopup = NSPopUpButton()
-    private let launchAtLoginCheckbox = NSButton(
-        checkboxWithTitle: LoginItemSetting.title,
-        target: nil,
-        action: nil
-    )
+    private let launchAtLoginSwitch = NSSwitch()
     private let timerShortcutButton = ShortcutRecorderButton(shortcut: HotkeySettings.defaults.timer)
     private let floatingTimerShortcutButton = ShortcutRecorderButton(shortcut: HotkeySettings.defaults.floatingTimer)
     private let captureNoteShortcutButton = ShortcutRecorderButton(shortcut: HotkeySettings.defaults.captureNote)
-    private let restoreDefaultShortcutsButton = NSButton(title: "Restore Defaults", target: nil, action: nil)
+    private let restoreDefaultsButton = NSButton(title: "Restore Defaults", target: nil, action: nil)
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
     private var representedConfig = PmdrConfig.defaults
     private var representedLoginItemEnabled = false
     private var representedHotkeySettings = HotkeySettings.defaults
 
-    init(client: PmdrClient, onSaved: @escaping (HotkeySettings) -> Void) {
+    init(
+        client: PmdrClient,
+        onSaved: @escaping (HotkeySettings) -> Void,
+        onShortcutRecordingChanged: @escaping (Bool) -> Void
+    ) {
         self.client = client
         self.onSaved = onSaved
+        self.onShortcutRecordingChanged = onShortcutRecordingChanged
         self.window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 350),
             styleMask: [.titled, .closable],
@@ -808,6 +844,9 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         configureSoundPopup(breakSoundPopup)
         configureShortcutRecorders()
 
+        content.addArrangedSubview(sectionHeader("General"))
+        let launchAtLoginRow = row(label: LoginItemSetting.title, control: launchAtLoginSwitch)
+        content.addArrangedSubview(launchAtLoginRow)
         content.addArrangedSubview(sectionHeader("Timer"))
         content.addArrangedSubview(row(label: "Focus minutes", control: numericControl(focusField, focusStepper)))
         content.addArrangedSubview(row(label: "Short break minutes", control: numericControl(shortBreakField, shortBreakStepper)))
@@ -815,16 +854,23 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         content.addArrangedSubview(row(label: "Long break cadence", control: numericControl(longBreakEveryField, longBreakEveryStepper)))
         content.addArrangedSubview(row(label: "Daily goal", control: numericControl(dailyGoalField, dailyGoalStepper)))
         content.addArrangedSubview(row(label: "Focus end sound", control: focusSoundPopup))
-        content.addArrangedSubview(row(label: "Break end sound", control: breakSoundPopup))
-        content.addArrangedSubview(sectionDivider())
-        content.addArrangedSubview(sectionHeader("General"))
-        content.addArrangedSubview(launchAtLoginCheckbox)
-        content.addArrangedSubview(sectionDivider())
-        content.addArrangedSubview(shortcutSectionHeader())
+        let breakSoundRow = row(label: "Break end sound", control: breakSoundPopup)
+        content.addArrangedSubview(breakSoundRow)
+        content.addArrangedSubview(sectionHeader("Keyboard Shortcuts"))
         content.addArrangedSubview(row(label: "Timer", control: timerShortcutButton))
         content.addArrangedSubview(row(label: "Floating timer", control: floatingTimerShortcutButton))
-        content.addArrangedSubview(row(label: "Capture note", control: captureNoteShortcutButton))
-        content.addArrangedSubview(buttonRow())
+        let lastShortcutRow = row(label: "Capture note", control: captureNoteShortcutButton)
+        content.addArrangedSubview(lastShortcutRow)
+
+        content.addArrangedSubview(footerRow())
+
+        // Sections are separated by whitespace alone — rules between every group
+        // crowd a window this dense. The footer gets a wider gap still, so it
+        // reads as window-wide rather than part of Keyboard Shortcuts.
+        let sectionGap: CGFloat = 24
+        content.setCustomSpacing(sectionGap, after: launchAtLoginRow)
+        content.setCustomSpacing(sectionGap, after: breakSoundRow)
+        content.setCustomSpacing(36, after: lastShortcutRow)
 
         // Use the stack's natural (fitting) size to drive the window height so
         // there is no dead space below the button row.
@@ -919,6 +965,7 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         for recorder in [timerShortcutButton, floatingTimerShortcutButton, captureNoteShortcutButton] {
             recorder.onRecordingChanged = { [weak self] isRecording in
                 self?.saveButton.keyEquivalent = isRecording ? "" : "\r"
+                self?.onShortcutRecordingChanged(isRecording)
             }
             recorder.widthAnchor.constraint(greaterThanOrEqualToConstant: 92).isActive = true
         }
@@ -937,44 +984,26 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         return stack
     }
 
-    private func sectionDivider() -> NSBox {
-        let divider = NSBox()
-        divider.boxType = .separator
-        divider.translatesAutoresizingMaskIntoConstraints = false
-        divider.widthAnchor.constraint(equalToConstant: 372).isActive = true
-        return divider
-    }
-
     private func sectionHeader(_ title: String) -> NSTextField {
         let header = NSTextField(labelWithString: title)
         header.font = .systemFont(ofSize: 13, weight: .semibold)
         return header
     }
 
-    private func shortcutSectionHeader() -> NSStackView {
-        restoreDefaultShortcutsButton.target = self
-        restoreDefaultShortcutsButton.action = #selector(restoreDefaultShortcuts(_:))
-        restoreDefaultShortcutsButton.controlSize = .small
-        restoreDefaultShortcutsButton.bezelStyle = .rounded
-
-        let title = sectionHeader("Keyboard Shortcuts")
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let stack = NSStackView(views: [title, spacer, restoreDefaultShortcutsButton])
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.widthAnchor.constraint(equalToConstant: 372).isActive = true
-        return stack
+    /// Resets every section, not just the shortcuts — the button sits in the
+    /// window-wide footer, so it restores the window-wide defaults. Nothing is
+    /// written until Save.
+    @objc private func restoreDefaults(_ sender: NSButton) {
+        apply(PmdrConfig.defaults)
+        apply(loginItemEnabled: false, hotkeySettings: .defaults)
     }
 
-    @objc private func restoreDefaultShortcuts(_ sender: NSButton) {
-        let defaults = HotkeySettings.defaults
-        timerShortcutButton.setShortcut(defaults.timer)
-        floatingTimerShortcutButton.setShortcut(defaults.floatingTimer)
-        captureNoteShortcutButton.setShortcut(defaults.captureNote)
-    }
+    private func footerRow() -> NSStackView {
+        restoreDefaultsButton.target = self
+        restoreDefaultsButton.action = #selector(restoreDefaults(_:))
+        restoreDefaultsButton.bezelStyle = .rounded
+        restoreDefaultsButton.toolTip = "Reset every setting in this window to its default."
 
-    private func buttonRow() -> NSStackView {
         saveButton.target = self
         saveButton.action = #selector(save(_:))
         saveButton.keyEquivalent = "\r"
@@ -985,7 +1014,7 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
         let spacer = NSView()
         spacer.translatesAutoresizingMaskIntoConstraints = false
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let stack = NSStackView(views: [spacer, cancelButton, saveButton])
+        let stack = NSStackView(views: [restoreDefaultsButton, spacer, cancelButton, saveButton])
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.spacing = 8
@@ -1010,7 +1039,7 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
     }
 
     private func apply(loginItemEnabled: Bool, hotkeySettings: HotkeySettings) {
-        launchAtLoginCheckbox.state = loginItemEnabled ? .on : .off
+        launchAtLoginSwitch.state = loginItemEnabled ? .on : .off
         timerShortcutButton.setShortcut(hotkeySettings.timer)
         floatingTimerShortcutButton.setShortcut(hotkeySettings.floatingTimer)
         captureNoteShortcutButton.setShortcut(hotkeySettings.captureNote)
@@ -1116,7 +1145,7 @@ private final class SettingsWindowController: NSObject, NSTextFieldDelegate {
             ("focusEndSound", focusSound),
             ("breakEndSound", breakSound),
         ]
-        let loginItemEnabled = launchAtLoginCheckbox.state == .on
+        let loginItemEnabled = launchAtLoginSwitch.state == .on
         let loginItemChanged = representedLoginItemEnabled != loginItemEnabled
 
         Task { [client, onSaved, weak self] in
