@@ -33,9 +33,9 @@ final class InsightsWindowController: NSWindowController {
     private let sessionCaption = NSTextField(labelWithString: "Sessions")
     private let activeDayCaption = NSTextField(labelWithString: "Active days")
     private let projectPopup = NSPopUpButton()
-    private let chartView = InsightsChartView()
+    private let chartView = InsightsChartView(frame: .zero)
     private let statusLabel = NSTextField(labelWithString: "")
-    private let projectMixCard = NSView()
+    private let projectMixCard = AppearanceAwareBackgroundView(cornerRadius: 12)
     private let projectMixChart = InsightsDonutChartView()
     private let projectMixScopeLabel = NSTextField(labelWithString: "All projects in selected range")
     private let allocationStack = NSStackView()
@@ -147,9 +147,6 @@ final class InsightsWindowController: NSWindowController {
         projectMixScopeLabel.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(projectMixScopeLabel)
 
-        projectMixCard.wantsLayer = true
-        projectMixCard.layer?.cornerRadius = 12
-        projectMixCard.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
         projectMixCard.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(projectMixCard)
 
@@ -237,10 +234,17 @@ final class InsightsWindowController: NSWindowController {
         stack.alignment = .leading
         stack.spacing = 2
         stack.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 10, right: 14)
-        stack.wantsLayer = true
-        stack.layer?.cornerRadius = 10
-        stack.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        return stack
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        let card = AppearanceAwareBackgroundView(cornerRadius: 10)
+        card.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: card.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+        ])
+        return card
     }
 
     private func sectionTitle(_ title: String) -> NSTextField {
@@ -428,16 +432,8 @@ private final class FlippedView: NSView {
     override var isFlipped: Bool { true }
 }
 
-private final class ProjectColorSwatch: NSView {
+private final class ProjectColorSwatch: AppearanceAwareBackgroundView {
     init(color: NSColor) {
-        super.init(frame: .zero)
-        wantsLayer = true
-        layer?.backgroundColor = color.cgColor
-        layer?.cornerRadius = 5
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not supported")
+        super.init(backgroundColor: color, cornerRadius: 5)
     }
 }
