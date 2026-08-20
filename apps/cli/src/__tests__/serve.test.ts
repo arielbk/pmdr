@@ -185,6 +185,7 @@ describe("pmdr serve status page", () => {
       fetch: async () => ({
         json: async () => status,
       }),
+      Date: { now: () => NOW },
       setInterval: () => 0,
       clearInterval: () => undefined,
       setTimeout: () => 0,

@@ -64,7 +64,7 @@ The flow lives in `apps/cli/src/release.ts`; `release:pmdr` stamps `apps/cli/pac
 
 A published release must carry the menubar app: the release refuses to stamp or publish unless `apps/cli/bundled-app/pmdr-app.zip` and its version sidecar are in place, and after packing it checks that the tarball really contains them. `--allow-missing-app` publishes a CLI-only release on purpose.
 
-It must also carry the *current* app: the released version, the bundled zip's version and `MARKETING_VERSION` in `apps/menubar/project.yml` must all be the same number — any two agreeing is not enough. Shipping a zip built from older sources is worse than shipping none — `pmdr app install` only moves you to a newer version than the one installed, so a stale zip pins every user to the old app and leaves `pmdr app status` calling it up to date, and a zip matching its sources but not the released version does exactly that too. `--allow-missing-app` does not waive this; it permits shipping no app, not the wrong one. Prerelease versions are refused whenever a zip is present — a prerelease has to be a CLI-only release.
+It must also carry the _current_ app: the released version, the bundled zip's version and `MARKETING_VERSION` in `apps/menubar/project.yml` must all be the same number — any two agreeing is not enough. Shipping a zip built from older sources is worse than shipping none — `pmdr app install` only moves you to a newer version than the one installed, so a stale zip pins every user to the old app and leaves `pmdr app status` calling it up to date, and a zip matching its sources but not the released version does exactly that too. `--allow-missing-app` does not waive this; it permits shipping no app, not the wrong one. Prerelease versions are refused whenever a zip is present — a prerelease has to be a CLI-only release.
 
 `.github/workflows/menubar-app.yml` is where the app binary comes from: a macOS runner runs `xcodegen`, builds Release, checks the zip with `scripts/verify-menubar-zip.sh` (signature valid, every Mach-O universal), uploads it as the `pmdr-app` artifact, and then runs the JS tests, lint and typecheck with the zip present so the install integration test actually runs.
 
@@ -72,7 +72,7 @@ It must also carry the *current* app: the released version, the bundled zip's ve
 
 ```sh
 pmdr                # setup, attach, or start — see below
-pmdr setup          # install the menubar app
+pmdr setup          # install the menubar app and the agent skill
 pmdr start          # start a focus session
 pmdr status         # current session, human-readable
 pmdr status --json  # current session, for scripts / the menubar / agents
@@ -101,11 +101,16 @@ order:
 session you have run before — so an upgrade never drops an existing install back
 into onboarding.
 
-`pmdr setup` has one job: getting the menubar app installed, and launching it at
-login. Nothing else is worth a question — every setting already has a good
+`pmdr setup` only ever installs things: the menubar app and its launch-at-login,
+and the [agent skill](#coding-agents) where there is already an agent on the
+machine to use it. No setting is worth a question — every one already has a good
 default and a one-liner (`pmdr config set …`, `pmdr project add …`) for changing
 it, so onboarding stays one screen rather than something people quit halfway
 through.
+
+Neither install is offered where it could not be acted on, so the number of
+prompts tracks what the machine can actually use: two on a Mac with a coding
+agent, none at all on a Linux box without one.
 
 It is also the only command that needs an interactive terminal: without one it
 exits `1` with a single line naming the commands (`pmdr app install`, `pmdr app
@@ -129,6 +134,34 @@ network to view the live status page.
 socket, and no event system — a status bar, prompt, or widget polls the command
 (or watches the state file) and renders from the payload. Everything an
 integration needs to draw a drift-free countdown is in it.
+
+### Coding agents
+
+This repo ships an [agent skill](https://github.com/vercel-labs/skills) at
+[`skills/pmdr-cli/`](skills/pmdr-cli/SKILL.md) that teaches Claude Code (and any
+other agent that reads `SKILL.md` files) to drive the timer for you — "start a
+pomodoro on the billing bug", "what did I get done last week".
+
+```sh
+npx skills add arielbk/pmdr
+```
+
+It documents the non-interactive contract an agent needs and would otherwise get
+wrong: `--json` on every read command, `--project NAME --no-interactive` on
+`start`, the inclusive date semantics of `pmdr log`, and how to back-date a
+session someone started before they thought to time it.
+
+`pmdr setup` offers to install it for you, but only when there is already an
+agent directory on the machine to install it into.
+
+**Keep it in step with the CLI.** The skill is pinned to the commit it was
+fetched from, so upgrading `@arielbk/pmdr` does not update it — and a stale
+skill will confidently tell an agent about commands that no longer exist. After
+a CLI upgrade:
+
+```sh
+npx skills update pmdr-cli
+```
 
 ### tmux
 
