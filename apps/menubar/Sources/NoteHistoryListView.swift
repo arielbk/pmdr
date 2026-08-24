@@ -2,14 +2,14 @@ import AppKit
 import PmdrMenubarCore
 
 /// One note in the daily history: a system-localized capture time and the note
-/// text, clamped to two visual lines.
+/// text, wrapped across up to six visual lines.
 final class NoteHistoryRowView: NSView {
     static let horizontalInset: CGFloat = 12
     static let verticalInset: CGFloat = 7
     static let timeWidth: CGFloat = 58
     static let timeGap: CGFloat = 10
     static let textFont: NSFont = .systemFont(ofSize: 13, weight: .regular)
-    static let maximumLines = 2
+    static let maximumLines = 6
 
     let timeLabel: NSTextField
     let textLabel: NSTextField
@@ -31,7 +31,7 @@ final class NoteHistoryRowView: NSView {
         )
         textLabel.stringValue = note.text
         textLabel.maximumNumberOfLines = NoteHistoryRowView.maximumLines
-        textLabel.lineBreakMode = .byTruncatingTail
+        textLabel.lineBreakMode = .byWordWrapping
 
         let textWidth = NoteHistoryRowView.textWidth(forRowWidth: width)
         textLabel.preferredMaxLayoutWidth = textWidth
@@ -82,8 +82,8 @@ final class NoteHistoryRowView: NSView {
     }
 
     /// The rendered height of the note, never more than `maximumLines` lines.
-    /// The text is measured wrapped at `width`; the clamp is what turns anything
-    /// longer into a two-line, tail-truncated row.
+    /// The text is measured wrapped at `width`; the clamp keeps a single note
+    /// from taking over the history while the list itself remains scrollable.
     static func textHeight(for text: String, width: CGFloat) -> CGFloat {
         let wrapped = (text as NSString).boundingRect(
             with: NSSize(width: width, height: .greatestFiniteMagnitude),

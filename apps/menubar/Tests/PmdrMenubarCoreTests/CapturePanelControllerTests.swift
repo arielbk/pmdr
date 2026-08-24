@@ -396,7 +396,7 @@ final class CapturePanelControllerTests: XCTestCase {
         XCTAssertEqual(controller.historyPlaceholderForTesting?.stringValue, "Notes unavailable")
     }
 
-    func testALongNoteIsClampedToTwoLines() async {
+    func testALongNoteWrapsUpToSixLines() async {
         let long = String(repeating: "a scannable fragment of a very long note ", count: 12)
         let controller = CapturePanelController(
             onSubmit: { _ in },
@@ -418,16 +418,17 @@ final class CapturePanelControllerTests: XCTestCase {
             XCTFail("Expected two history rows")
             return
         }
-        XCTAssertEqual(longRow.textLabel.maximumNumberOfLines, 2)
-        XCTAssertEqual(longRow.textLabel.lineBreakMode, .byTruncatingTail)
-        XCTAssertGreaterThan(
-            longRow.frame.height, shortRow.frame.height,
-            "a long note should use its second line"
+        XCTAssertEqual(longRow.textLabel.maximumNumberOfLines, 6)
+        XCTAssertEqual(longRow.textLabel.lineBreakMode, .byWordWrapping)
+        let maximumRowHeight =
+            NoteHistoryRowView.lineHeight * CGFloat(NoteHistoryRowView.maximumLines)
+                + NoteHistoryRowView.verticalInset * 2
+        XCTAssertEqual(
+            longRow.frame.height,
+            maximumRowHeight,
+            "a long note should be allowed to use all six lines, then stop growing"
         )
-        XCTAssertLessThan(
-            longRow.frame.height, shortRow.frame.height * 2.5,
-            "one note must not dominate the history"
-        )
+        XCTAssertGreaterThan(longRow.frame.height, shortRow.frame.height)
     }
 
     func testManyNotesCapTheHistoryHeightAndScroll() async {
