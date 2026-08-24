@@ -52,6 +52,56 @@ final class HotkeyManagerTests: XCTestCase {
         XCTAssertEqual(recorder.title, "⌃⌥⌘…")
     }
 
+    func testKeypadEnterRecordsAsItsOwnGlyphRatherThanAnUnprintableCharacter() throws {
+        let event = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [.option, .command],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "\u{3}",
+            charactersIgnoringModifiers: "\u{3}",
+            isARepeat: false,
+            keyCode: UInt16(kVK_ANSI_KeypadEnter)
+        ))
+
+        XCTAssertEqual(HotkeyShortcut.from(event: event)?.displayString, "⌥⌘⌤")
+    }
+
+    func testUnregisterAllReleasesEveryCarbonRegistration() throws {
+        let backend = RecordingHotkeyBackend()
+        let manager = HotkeyManager(
+            bindings: [
+                HotkeyBinding(keyCode: 36, modifiers: 1 << 11, handler: {}),
+                HotkeyBinding(keyCode: 35, modifiers: 1 << 12, handler: {})
+            ],
+            backend: backend
+        )
+        try manager.register()
+        XCTAssertTrue(manager.isRegistered)
+
+        manager.unregisterAll()
+
+        XCTAssertFalse(manager.isRegistered)
+        XCTAssertEqual(backend.unregisteredCount, 2)
+        XCTAssertEqual(backend.removedHandlerCount, 1)
+    }
+
+    func testRegisteringTwiceDoesNotLeaveTheFirstRegistrationBehind() throws {
+        let backend = RecordingHotkeyBackend()
+        let manager = HotkeyManager(
+            bindings: [HotkeyBinding(keyCode: 36, modifiers: 1 << 11, handler: {})],
+            backend: backend
+        )
+
+        try manager.register()
+        try manager.register()
+
+        XCTAssertEqual(backend.registrations.count, 2)
+        XCTAssertEqual(backend.unregisteredCount, 1)
+    }
+
     func testSettingsStoreRoundTripsCustomizedShortcuts() throws {
         let suite = "HotkeyManagerTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -129,6 +179,8 @@ private final class RecordingHotkeyBackend: HotkeyBackend {
     }
 
     private(set) var registrations: [Registration] = []
+    private(set) var unregisteredCount = 0
+    private(set) var removedHandlerCount = 0
     private var handler: (@Sendable (UInt32) -> Void)?
 
     func installEventHandler(
@@ -136,7 +188,7 @@ private final class RecordingHotkeyBackend: HotkeyBackend {
         handler: @escaping @Sendable (UInt32) -> Void
     ) throws -> HotkeyEventHandlerToken {
         self.handler = handler
-        return HotkeyEventHandlerToken(remove: {})
+        return HotkeyEventHandlerToken(remove: { [weak self] in self?.removedHandlerCount += 1 })
     }
 
     func registerHotkey(
@@ -146,7 +198,7 @@ private final class RecordingHotkeyBackend: HotkeyBackend {
         id: UInt32
     ) throws -> HotkeyToken {
         registrations.append(Registration(keyCode: keyCode, modifiers: modifiers, id: id))
-        return HotkeyToken(unregister: {})
+        return HotkeyToken(unregister: { [weak self] in self?.unregisteredCount += 1 })
     }
 
     func trigger(id: UInt32) {

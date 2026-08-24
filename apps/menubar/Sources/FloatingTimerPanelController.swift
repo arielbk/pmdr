@@ -28,6 +28,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
     private var toggleButton: NSButton?
     private var stopButton: NSButton?
     private var closeButton: NSButton?
+    private var menuButton: NSButton?
     private weak var effectView: FloatingTimerBackgroundView?
     private(set) var isHovered = false
     private var didRefreshProjectPopupDuringHover = false
@@ -73,6 +74,51 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         hide()
     }
 
+    @objc private func menuButtonClicked(_ sender: NSButton) {
+        let menu = makeOverlayMenu()
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(x: sender.bounds.minX, y: sender.bounds.minY - 4),
+            in: sender
+        )
+    }
+
+    /// The app menu, minus the timer controls the overlay already shows. This is
+    /// the only route to Settings when the status item is hidden by the notch.
+    private func makeOverlayMenu() -> NSMenu {
+        let menu = NSMenu()
+        for (title, action) in [
+            ("Settings…", #selector(openSettingsFromOverlay(_:))),
+            ("Insights…", #selector(openInsightsFromOverlay(_:))),
+            ("Manage projects…", #selector(openManageProjectsFromOverlay(_:))),
+        ] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        let quit = NSMenuItem(title: "Quit pmdr", action: #selector(quitFromOverlay(_:)), keyEquivalent: "")
+        quit.target = self
+        menu.addItem(quit)
+        return menu
+    }
+
+    @objc private func openSettingsFromOverlay(_ sender: Any?) {
+        actions?.openSettings()
+    }
+
+    @objc private func openInsightsFromOverlay(_ sender: Any?) {
+        actions?.openInsights()
+    }
+
+    @objc private func openManageProjectsFromOverlay(_ sender: Any?) {
+        actions?.openManageProjects()
+    }
+
+    @objc private func quitFromOverlay(_ sender: Any?) {
+        actions?.quit()
+    }
+
     var panelForTesting: NSPanel? {
         panel
     }
@@ -107,6 +153,25 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
 
     var closeButtonForTesting: NSButton? {
         closeButton
+    }
+
+    var menuButtonForTesting: NSButton? {
+        menuButton
+    }
+
+    var menuButtonAlphaForTesting: CGFloat {
+        menuButton?.alphaValue ?? 0
+    }
+
+    var overlayMenuItemTitlesForTesting: [String] {
+        makeOverlayMenu().items.map(\.title)
+    }
+
+    func invokeOverlayMenuItemForTesting(title: String) {
+        guard let item = makeOverlayMenu().items.first(where: { $0.title == title }),
+              let action = item.action
+        else { return }
+        _ = item.target?.perform(action, with: item)
     }
 
     var projectLabelAlphaForTesting: CGFloat {
@@ -393,11 +458,13 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         fadeAlpha(of: projectField, to: dotsAlpha)
         fadeAlpha(of: projectPopup, to: controlsAlpha)
         fadeAlpha(of: closeButton, to: controlsAlpha)
+        fadeAlpha(of: menuButton, to: controlsAlpha)
         controlsRow?.isHidden = !isHovered
         dotsField?.isHidden = isHovered
         projectPopup?.isHidden = !isHovered
         projectField?.isHidden = isHovered
         closeButton?.isHidden = !isHovered
+        menuButton?.isHidden = !isHovered
     }
 
     private func fadeAlpha(of view: NSView?, to target: CGFloat) {
@@ -581,13 +648,22 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         close.alphaValue = 0
         close.isHidden = true
 
+        let menu = Self.makeMenuButton(target: self, action: #selector(menuButtonClicked(_:)))
+        menu.alphaValue = 0
+        menu.isHidden = true
+
         effect.addSubview(stack)
         effect.addSubview(close)
+        effect.addSubview(menu)
         NSLayoutConstraint.activate([
             close.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: 8),
             close.topAnchor.constraint(equalTo: effect.topAnchor, constant: 8),
             close.widthAnchor.constraint(equalToConstant: 14),
-            close.heightAnchor.constraint(equalToConstant: 14)
+            close.heightAnchor.constraint(equalToConstant: 14),
+            menu.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: -8),
+            menu.topAnchor.constraint(equalTo: effect.topAnchor, constant: 8),
+            menu.widthAnchor.constraint(equalToConstant: 14),
+            menu.heightAnchor.constraint(equalToConstant: 14)
         ])
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
@@ -621,6 +697,7 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         toggleButton = toggle
         stopButton = stop
         closeButton = close
+        menuButton = menu
         effectView = effect
 
         renderControls()
@@ -644,6 +721,24 @@ final class FloatingTimerPanelController: NSObject, NSMenuDelegate {
         button.target = target
         button.action = action
         button.toolTip = "Hide timer"
+        return button
+    }
+
+    private static func makeMenuButton(target: AnyObject, action: Selector) -> NSButton {
+        let button = NSButton()
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.bezelStyle = .regularSquare
+        button.isBordered = false
+        button.title = ""
+        if let image = NSImage(systemSymbolName: "ellipsis.circle.fill", accessibilityDescription: "Menu") {
+            let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+            button.image = image.withSymbolConfiguration(config)
+        }
+        button.imagePosition = .imageOnly
+        button.contentTintColor = .tertiaryLabelColor
+        button.target = target
+        button.action = action
+        button.toolTip = "Settings, insights and projects"
         return button
     }
 

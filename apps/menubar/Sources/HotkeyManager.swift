@@ -48,6 +48,7 @@ struct HotkeyShortcut: Codable, Equatable, Hashable {
     private static func keyLabel(for event: NSEvent) -> String? {
         switch Int(event.keyCode) {
         case kVK_Return: return "↩"
+        case kVK_ANSI_KeypadEnter: return "⌤"
         case kVK_Tab: return "⇥"
         case kVK_Space: return "Space"
         case kVK_Delete: return "⌫"
@@ -137,6 +138,7 @@ final class ShortcutRecorderButton: NSButton {
     }
     var onRecordingChanged: ((Bool) -> Void)?
     private var isRecording = false
+    private var eventMonitor: Any?
 
     init(shortcut: HotkeyShortcut) {
         self.shortcut = shortcut
@@ -152,6 +154,12 @@ final class ShortcutRecorderButton: NSButton {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
+    }
+
+    deinit {
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+        }
     }
 
     override var acceptsFirstResponder: Bool { true }
@@ -224,9 +232,36 @@ final class ShortcutRecorderButton: NSButton {
         window?.makeFirstResponder(nil)
     }
 
+    /// Local monitors see key events before AppKit's key-equivalent dispatch, so
+    /// the window's default button (Return) and any menu equivalent can no longer
+    /// swallow a combination the user is trying to record.
+    private func startEventMonitor() {
+        guard eventMonitor == nil else { return }
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+            guard let self, self.isRecording, self.window != nil else { return event }
+            if event.type == .flagsChanged {
+                self.flagsChanged(with: event)
+            } else {
+                self.record(event)
+            }
+            return nil
+        }
+    }
+
+    private func stopEventMonitor() {
+        guard let eventMonitor else { return }
+        NSEvent.removeMonitor(eventMonitor)
+        self.eventMonitor = nil
+    }
+
     private func setRecording(_ recording: Bool) {
         guard recording != isRecording else { return }
         isRecording = recording
+        if recording {
+            startEventMonitor()
+        } else {
+            stopEventMonitor()
+        }
         if recording {
             title = "Type shortcut…"
             setAccessibilityLabel("Recording shortcut")
@@ -295,7 +330,21 @@ final class HotkeyManager {
         eventHandlerToken?.remove()
     }
 
+    var isRegistered: Bool { eventHandlerToken != nil }
+
+    /// Releases the Carbon registrations. Carbon hotkeys consume their key
+    /// combination system-wide before AppKit ever sees it, so an already-bound
+    /// combination is impossible to re-record until the binding is torn down.
+    func unregisterAll() {
+        hotKeyTokens.forEach { $0.unregister() }
+        hotKeyTokens = []
+        eventHandlerToken?.remove()
+        eventHandlerToken = nil
+    }
+
     func register() throws {
+        unregisterAll()
+
         let handlersByID: [UInt32: @MainActor () -> Void] = Dictionary(
             uniqueKeysWithValues: bindings.enumerated().map { index, binding in
                 (UInt32(index + 1), binding.handler)
