@@ -123,6 +123,19 @@ describe("createAgentSkill state", () => {
     expect(skill.state()).toMatchObject({ install: "installable" });
   });
 
+  it("offers a first skill install on a Codex-only machine", () => {
+    // Codex reads universal skills from ~/.agents, but that directory may not
+    // exist until the first skill is installed. ~/.codex is the presence probe;
+    // `skills add` will create the canonical ~/.agents/skills destination.
+    const skill = createAgentSkill({
+      home: HOME,
+      path: PATH_WITH_NPX,
+      exists: fs("/Users/x/.codex", "/opt/homebrew/bin/npx"),
+    });
+
+    expect(skill.state()).toMatchObject({ install: "installable" });
+  });
+
   it("is unavailable on a machine with no agent directory at all", () => {
     const skill = createAgentSkill({
       home: HOME,

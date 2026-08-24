@@ -12,7 +12,7 @@ import type { SkillInstallState } from "../agent-skill.js";
 import { cliVersion } from "../version.js";
 
 export const NOT_A_TTY_MESSAGE =
-  "pmdr setup: onboarding needs an interactive terminal — install the menubar app with `pmdr app install`, and launch it at login with `pmdr app login --enable`.";
+  "pmdr setup: onboarding needs an interactive terminal — install the menubar app with `pmdr app install`, launch it at login with `pmdr app login --enable`, and add the agent skill with `npx skills add arielbk/pmdr`.";
 
 export const CANCELLED_MESSAGE =
   "Setup cancelled. Run `pmdr setup` when you're ready.";
@@ -78,9 +78,10 @@ export type SetupResult =
  * front would only be a question standing between someone and their first
  * pomodoro.
  *
- * Neither install step asks a question it could not act on, so the number of
- * prompts tracks what this machine can actually use: two on a Mac with a coding
- * agent, none at all on a Linux box without one.
+ * Neither install step asks a question it could not act on, so the prompts
+ * track what this machine can actually use: app install and launch-at-login on
+ * a Mac, plus the skill where a coding agent is present, and none at all on a
+ * Linux box without one.
  *
  * Every prompt can be cancelled, and a cancelled setup writes no marker: the
  * next bare `pmdr` should offer to onboard again rather than silently deciding
@@ -246,7 +247,7 @@ export function summaryLines(result: {
 
 export default defineCommand({
   meta: {
-    description: "Set up pmdr: install the menubar app",
+    description: "Set up pmdr: install the menubar app and agent skill",
   },
   async run() {
     if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {

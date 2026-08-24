@@ -79,13 +79,12 @@ export function deriveSkillState(probe: SkillProbeResult): SkillInstallState {
 }
 
 /**
- * Agent directories worth looking in. `.claude` is Claude Code's; `.agents` is
- * where the `skills` installer keeps the real folders that every agent's
- * directory then symlinks into, so it is the one that answers "installed for
- * *some* agent" even when it was not Claude Code that asked.
+ * Agent directories worth looking in. `.claude` and `.codex` tell us those
+ * agents exist before they have any skills; `.agents` is the universal skills
+ * directory and the canonical global install location used by `skills add`.
  */
 export function agentDirs(home: string): string[] {
-  return [join(home, ".claude"), join(home, ".agents")];
+  return [join(home, ".claude"), join(home, ".codex"), join(home, ".agents")];
 }
 
 export function skillDirs(home: string): string[] {

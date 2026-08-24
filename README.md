@@ -108,15 +108,16 @@ default and a one-liner (`pmdr config set …`, `pmdr project add …`) for chan
 it, so onboarding stays one screen rather than something people quit halfway
 through.
 
-Neither install is offered where it could not be acted on, so the number of
-prompts tracks what the machine can actually use: two on a Mac with a coding
-agent, none at all on a Linux box without one.
+Neither install is offered where it could not be acted on, so the prompts track
+what the machine can actually use: app install and launch-at-login on a Mac,
+plus the skill where a coding agent is present, and none at all on a Linux box
+without one.
 
 It is also the only command that needs an interactive terminal: without one it
 exits `1` with a single line naming the commands (`pmdr app install`, `pmdr app
-login --enable`) that do the same work non-interactively. Bare `pmdr` never
-onboards without a TTY — it goes straight to the timer, because a prompt would
-hang the script that ran it.
+login --enable`, `npx skills add arielbk/pmdr`) that do the same work
+non-interactively. Bare `pmdr` never onboards without a TTY — it goes straight
+to the timer, because a prompt would hang the script that ran it.
 
 Every command is safe to script. Where stdout is not a TTY, `pmdr` and `pmdr
 start` still start the session but skip the repainting countdown — they print one

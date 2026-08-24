@@ -141,5 +141,6 @@ describe("plain `pmdr` with non-interactive streams", () => {
     expect(result.stderr.trim().split("\n")).toHaveLength(1);
     expect(result.stderr).toContain("interactive terminal");
     expect(result.stderr).toContain("pmdr app install");
+    expect(result.stderr).toContain("npx skills add arielbk/pmdr");
   });
 });
